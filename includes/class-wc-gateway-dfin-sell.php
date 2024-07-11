@@ -4,7 +4,7 @@ if (!defined('ABSPATH')) {
 }
 
 define('DFPG_MODULE_VERSION', '1.0.0');
-define('SIP_HOST', 'https://sell-dev.dfin.ai');
+define('SIP_HOST', 'https://sell.dfin.ai');
 
 class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
 {
