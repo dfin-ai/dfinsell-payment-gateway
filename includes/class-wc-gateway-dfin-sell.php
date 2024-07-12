@@ -287,8 +287,17 @@ class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
         // Prepare data for the API request
         $data = $this->prepare_payment_data($order);
 
+        $sipHost = SIP_HOST;
+        $apiPath = '/api/request-payment';
+
+        // Concatenate the base URL and path
+        $url = $sipHost . $apiPath;
+
+        // Remove any double slashes in the URL except for the 'http://' or 'https://'
+        $cleanUrl = preg_replace('#(?<!:)//+#', '/', $url);
+
         // Send the data to the API
-        $response = wp_remote_post(SIP_HOST . '/api/request-payment', array(
+        $response = wp_remote_post($cleanUrl, array(
             'method'    => 'POST',
             'timeout'   => 30,
             'body'      => $data,
@@ -389,6 +398,7 @@ class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
             'redirect_url' => $redirect_url,
             'redirect_time' => 3,
             'ip_address' => $ip_address,
+            'source' => 'wordpress',
             'meta_data' => $meta_data,
             'remarks' => 'Order #' . $order->get_order_number()
         );
