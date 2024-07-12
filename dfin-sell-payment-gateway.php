@@ -125,6 +125,12 @@ class WC_Gateway_DFinSell_Loader
     public function handle_custom_api_request($request)
     {
         // Check nonce or authentication if needed for security
+        // $nonce = $request->get_header('X-WP-Nonce');
+
+        // // Verify the nonce
+        // if (!wp_verify_nonce($nonce, 'dfinsell_process_payment_nonce')) {
+        //     return new WP_REST_Response(['error' => 'Invalid nonce'], 403);
+        // }
 
         // Get order ID and status from the AJAX request
         $parameters = $request->get_json_params();
