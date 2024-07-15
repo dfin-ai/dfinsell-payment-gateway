@@ -8,6 +8,7 @@ define('SIP_HOST', 'https://sell.dfin.ai');
 
 class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
 {
+
     const ID = 'dfinsell';
 
     /**
@@ -25,6 +26,11 @@ class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
      */
     public function __construct()
     {
+        // Check if WooCommerce is active
+        if (!class_exists('WC_Payment_Gateway_CC')) {
+            add_action('admin_notices', array($this, 'woocommerce_not_active_notice'));
+            return;
+        }
 
         // Add CORS handling
         add_action('init', array($this, 'dfinsell_handle_cors'));
@@ -74,6 +80,18 @@ class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
 
         // Add JS for handling the redirect in a new tab
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
+    }
+
+
+    /**
+     * Display an admin notice if WooCommerce is not active.
+     */
+    public function woocommerce_not_active_notice()
+    {
+        $class = 'notice notice-error';
+        $message = __('DFin Sell Payment Gateway requires WooCommerce to be activated. Please activate WooCommerce to use this plugin.', 'woocommerce-gateway-dfin-sell');
+
+        printf('<div class="%1$s"><p>%2$s</p></div>', esc_attr($class), esc_html($message));
     }
 
     /**
@@ -322,9 +340,6 @@ class WC_Gateway_DfinSell extends WC_Payment_Gateway_CC
 
             // Mark order as pending payment
             $order->update_status('pending', __('Awaiting payment', 'woocommerce'));
-
-            // Remove cart
-            WC()->cart->empty_cart();
 
             // Return a success result without redirecting
             return array(
