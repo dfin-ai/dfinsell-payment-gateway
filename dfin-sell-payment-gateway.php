@@ -64,6 +64,10 @@ class WC_Gateway_DFinSell_Loader
         add_action('admin_init', [$this, 'check_environment']);
         add_action('admin_notices', [$this, 'admin_notices'], 15);
         add_action('plugins_loaded', [$this, 'init']);
+
+        add_action('wp_ajax_check_payment_status', array($this, 'check_payment_status'));
+        add_action('wp_ajax_nopriv_check_payment_status', array($this, 'check_payment_status'));
+
         register_activation_hook(__FILE__, [__CLASS__, 'activation_check']);
     }
 
@@ -97,6 +101,29 @@ class WC_Gateway_DFinSell_Loader
             ]);
         });
     }
+
+    public function check_payment_status()
+    {
+        // Get the order ID from the request
+        $order_id = intval($_POST['order_id']);
+
+        // Load the WooCommerce order
+        $order = wc_get_order($order_id);
+        $payment_return_url = $order->get_checkout_order_received_url();
+        // Check the payment status
+        if ($order) {
+            if ($order->is_paid()) {
+                 wp_send_json_success(['status' => 'success','redirect_url'=> $payment_return_url]);
+            } elseif ($order->has_status('failed')) {
+                wp_send_json_success(['status' => 'failed','redirect_url'=> $payment_return_url]);
+            }
+           
+        }
+
+        // Default to pending status
+        wp_send_json_success(['status' => 'pending']);
+    }
+
 
     /**
      * Initialize the payment gateways
@@ -148,6 +175,11 @@ class WC_Gateway_DFinSell_Loader
             return new WP_REST_Response(['error' => 'Order not found'], 404);
         }
         $updated = $order->update_status($order_status, __('Order status updated via API', 'woocommerce'));
+       
+        if( WC()->cart){
+            // Remove cart
+            WC()->cart->empty_cart();
+        }    
 
         // Return response based on update success
         if ($updated) {
