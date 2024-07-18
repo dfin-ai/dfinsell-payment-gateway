@@ -23,7 +23,7 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 
 ## 1. Download Plugin from GitHub
 
-- Visit the GitHub repository for the DFin Sell Payment Gateway plugin at [GitHub Repository URL](https://github.com/Cooraez12/dfin-sell-wp-plugin).
+- Visit the GitHub repository for the DFin Sell Payment Gateway plugin at [GitHub Repository URL](https://github.com/dfin-ai/dfin-sell-wp-plugin).
 - Download the plugin ZIP file to your local machine.
 
 ## 2. Install the Plugin in WordPress
