@@ -30,7 +30,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
         // Determine SIP protocol based on site protocol
         $this->sip_protocol = is_ssl() ? 'https://' : 'http://';
-        $this->sip_host = 'sell-dev.dfin.ai'; // Define your host here
+        $this->sip_host = 'sell.dfin.ai'; // Define your host here
 
         // Define user set variables
         $this->id = self::ID;
