@@ -52,113 +52,123 @@ jQuery(function ($) {
         data: data,
         dataType: 'json',
         success: function (response) {
-          $('.dfinsell-loader-background, .dfinsell-loader').hide()
-          $('.wc_er').remove()
-          try {
-            if (response.result === 'success') {
-              // Get the order ID and save it for later use
-              orderId = response.order_id // Assuming order_id is returned in the response
-
-              // Display the payment link URL in a popup
-              var paymentLink = response.payment_link // Assuming payment_link is where the URL is received
-              var popupWindow = window.open(
-                paymentLink,
-                'paymentPopup',
-                'width=600,height=400,scrollbars=yes'
-              )
-
-              if (
-                !popupWindow ||
-                popupWindow.closed ||
-                typeof popupWindow.closed == 'undefined'
-              ) {
-                throw 'Popup blocked or failed to open'
-              }
-
-              // Check if the popup is closed periodically
-              popupInterval = setInterval(function () {
-                if (popupWindow.closed) {
-                  clearInterval(popupInterval)
-                  $button.prop('disabled', false).text(originalButtonText) // Re-enable the button and reset the text
-
-                  // Stop checking the payment status
-                  clearInterval(paymentStatusInterval)
-                }
-              }, 500)
-
-              // Check the payment status periodically
-              paymentStatusInterval = setInterval(function () {
-              $.ajax({
-                type: 'POST',
-                url: dfinsell_params.ajax_url,
-                data: {
-                  action: 'check_payment_status',
-                  order_id: orderId,
-                },
-                dataType: 'json',
-                cache: false,
-                processData: true,
-                async: false,
-                success: function (statusResponse) {
-                  if (statusResponse.data.status === 'success') {
-                    clearInterval(paymentStatusInterval)
-                    clearInterval(popupInterval)
-                    window.location.href = statusResponse.data.redirect_url // Redirect to success page
-                  } else if (statusResponse.data.status === 'failed') {
-                    clearInterval(paymentStatusInterval)
-                    clearInterval(popupInterval)
-                    window.location.href = statusResponse.data.redirect_url // Redirect to failure page
-                  }
-                },
-              })
-              }, 5000) // Check every 5 seconds
-
-              $form.removeAttr('data-result')
-              $form.removeAttr('data-redirect-url')
-              isSubmitting = false // Reset the flag
-            } else if (response.result === 'failure') {
-              throw response.messages || 'An error occurred during checkout.'
-            } else {
-              throw 'Invalid response'
-            }
-          } catch (err) {
-            // Display the error message to the user
-            $('.wc_er').remove()
-            $form.prepend('<div class="wc_er">' + err + '</div>')
-
-            $('html, body').animate(
-              {
-                scrollTop: $('.wc_er').offset().top - 300, // Adjusted to offset for better visibility
-              },
-              500
-            )
-
-            isSubmitting = false // Reset the flag in case of error
-            $button.prop('disabled', false).text(originalButtonText) // Re-enable the button and reset the text
-          }
+          handleResponse(response, $form, $button, originalButtonText)
         },
         error: function (jqXHR, textStatus, errorThrown) {
-          // Handle specific error cases if needed
-          $('.wc_er').remove()
-          $form.prepend(
-            '<div class="wc_er">An error occurred during checkout. Please try again.</div>'
-          )
-
-          $('html, body').animate(
-            {
-              scrollTop: $('.wc_er').offset().top - 300, // Adjusted to offset for better visibility
-            },
-            500
-          )
-
-          isSubmitting = false // Reset the flag on error
-          $button.prop('disabled', false).text(originalButtonText) // Re-enable the button and reset the text
-          $('.dfinsell-loader-background, .dfinsell-loader').hide()
+          handleError($form, $button, originalButtonText)
         },
       })
     }, 2000) // Wait for 2 seconds
 
     return false
+  }
+
+  function handleResponse(response, $form, $button, originalButtonText) {
+    $('.dfinsell-loader-background, .dfinsell-loader').hide()
+    $('.wc_er').remove()
+    try {
+      if (response.result === 'success') {
+        orderId = response.order_id // Assuming order_id is returned in the response
+        var width = 800
+        var height = 800
+        var left = window.innerWidth / 2 - width / 2
+        var top = window.innerHeight / 2 - height / 2
+        var paymentLink = response.payment_link // Assuming payment_link is where the URL is received
+        var popupWindow = window.open(
+          paymentLink,
+          'paymentPopup',
+          'width=' +
+            width +
+            ',height=' +
+            height +
+            ',scrollbars=yes,top=' +
+            top +
+            ',left=' +
+            left
+        )
+
+        if (
+          !popupWindow ||
+          popupWindow.closed ||
+          typeof popupWindow.closed === 'undefined'
+        ) {
+          throw 'Popup blocked or failed to open'
+        }
+
+        popupInterval = setInterval(function () {
+          if (popupWindow.closed) {
+            clearInterval(popupInterval)
+            $button.prop('disabled', false).text(originalButtonText) // Re-enable the button and reset the text
+            clearInterval(paymentStatusInterval) // Stop checking the payment status
+          }
+        }, 500)
+
+        // Check the payment status periodically
+        paymentStatusInterval = setInterval(function () {
+          $.ajax({
+            type: 'POST',
+            url: dfinsell_params.ajax_url,
+            data: {
+              action: 'check_payment_status',
+              order_id: orderId,
+              security: dfinsell_params.dfinsell_nonce, // Add nonce here
+            },
+            dataType: 'json',
+            cache: false,
+            processData: true,
+            async: false,
+            success: function (statusResponse) {
+              if (statusResponse.data.status === 'success') {
+                clearInterval(paymentStatusInterval)
+                clearInterval(popupInterval)
+                window.location.href = statusResponse.data.redirect_url // Redirect to success page
+              } else if (statusResponse.data.status === 'failed') {
+                clearInterval(paymentStatusInterval)
+                clearInterval(popupInterval)
+                window.location.href = statusResponse.data.redirect_url // Redirect to failure page
+              }
+            },
+          })
+        }, 5000) // Check every 5 seconds
+
+        $form.removeAttr('data-result')
+        $form.removeAttr('data-redirect-url')
+        isSubmitting = false // Reset the flag
+      } else {
+        throw response.messages || 'An error occurred during checkout.'
+      }
+    } catch (err) {
+      displayError(err, $form, $button, originalButtonText)
+    }
+  }
+
+  function handleError($form, $button, originalButtonText) {
+    $('.wc_er').remove()
+    $form.prepend(
+      '<div class="wc_er">An error occurred during checkout. Please try again.</div>'
+    )
+    $('html, body').animate(
+      {
+        scrollTop: $('.wc_er').offset().top - 300, // Adjusted to offset for better visibility
+      },
+      500
+    )
+    isSubmitting = false // Reset the flag on error
+    $button.prop('disabled', false).text(originalButtonText) // Re-enable the button and reset the text
+    $('.dfinsell-loader-background, .dfinsell-loader').hide()
+  }
+
+  function displayError(err, $form, $button, originalButtonText) {
+    $('.wc_er').remove()
+    $form.prepend('<div class="wc_er">' + err + '</div>')
+    $('html, body').animate(
+      {
+        scrollTop: $('.wc_er').offset().top - 300, // Adjusted to offset for better visibility
+      },
+      500
+    )
+    isSubmitting = false // Reset the flag in case of error
+    $button.prop('disabled', false).text(originalButtonText) // Re-enable the button and reset the text
   }
 
   // Unbind the default WooCommerce event handler for form submission and bind our custom handler

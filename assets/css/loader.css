@@ -1,10 +1,23 @@
 .dfinsell-loader {
-  display: none;
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  display: none;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: #0000004f;
   z-index: 9999;
+}
+
+.dfinsell-loader img {
+  margin: auto;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-radius: 100%;
 }
 
 .dfinsell-loader-background {
