@@ -117,11 +117,11 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 
 ## Documentation
 
-The official documentation for this plugin is available at: [https://dev.dfin.ai/api/docs/wordpress-plugin](https://dev.dfin.ai/api/docs/wordpress-plugin)
+The official documentation for this plugin is available at: [https://www.dfin.ai/api/docs/wordpress-plugin](https://www.dfin.ai/api/docs/wordpress-plugin)
 
 ## Support
 
-For customer support, visit: [https://dev.dfin.ai/reach-out](https://dev.dfin.ai/reach-out)
+For customer support, visit: [https://www.dfin.ai/reach-out](https://www.dfin.ai/reach-out)
 
 ## Why Choose DFin Sell Payment Gateway?
 
