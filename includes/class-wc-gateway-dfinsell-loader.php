@@ -109,8 +109,8 @@ class WC_Gateway_DFinSell_Loader
   {
     if (plugin_basename(WC_DFIN_SELL_FILE) === $file) {
       $row_meta = [
-        'docs'    => '<a href="' . esc_url(apply_filters('wc_gateway_dfin_sell_docs_url', 'https://docs.dfin.ai')) . '" target="_blank">' . __('Documentation', 'dfin-sell-payment-gateway') . '</a>',
-        'support' => '<a href="' . esc_url(apply_filters('wc_gateway_dfin_sell_support_url', 'https://support.dfin.ai')) . '" target="_blank">' . __('Support', 'dfin-sell-payment-gateway') . '</a>',
+        'docs'    => '<a href="' . esc_url(apply_filters('wc_gateway_dfin_sell_docs_url', 'https://www.dfin.ai/api/docs/wordpress-plugin')) . '" target="_blank">' . __('Documentation', 'dfin-sell-payment-gateway') . '</a>',
+        'support' => '<a href="' . esc_url(apply_filters('wc_gateway_dfin_sell_support_url', 'https://www.dfin.ai/reach-out')) . '" target="_blank">' . __('Support', 'dfin-sell-payment-gateway') . '</a>',
       ];
 
       $links = array_merge($links, $row_meta);

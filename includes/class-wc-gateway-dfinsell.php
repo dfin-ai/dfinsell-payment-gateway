@@ -9,6 +9,11 @@ if (!defined('ABSPATH')) {
 class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 {
     const ID = 'dfinsell';
+    const MODE = 'live';
+
+    // Define constants for SIP URLs
+    const SIP_HOST_SANDBOX = 'sell-dev.dfin.ai'; // Sandbox SIP host
+    const SIP_HOST_LIVE = 'sell.dfin.ai'; // Live SIP host 
 
     private $sip_protocol; // Protocol (http:// or https://)
     private $sip_host;     // Host without protocol
@@ -30,13 +35,15 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
         // Determine SIP protocol based on site protocol
         $this->sip_protocol = is_ssl() ? 'https://' : 'http://';
-        $this->sip_host = 'sell.dfin.ai'; // Define your host here
 
         // Define user set variables
         $this->id = self::ID;
         $this->icon = ''; // Define an icon URL if needed.
         $this->method_title = __('DFin Sell Payment Gateway', 'dfin-sell-payment-gateway');
         $this->method_description = __('This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security.', 'dfin-sell-payment-gateway');
+
+        // Set SIP host based on mode
+        $this->set_sip_host(self::MODE);
 
         // Load the settings
         $this->init_form_fields();
@@ -55,6 +62,18 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
         // Enqueue styles and scripts
         add_action('wp_enqueue_scripts', array($this, 'enqueue_styles_and_scripts'));
+    }
+
+    /**
+     * Set the SIP host based on the mode.
+     */
+    private function set_sip_host($mode)
+    {
+        if ($mode === 'live') {
+            $this->sip_host = self::SIP_HOST_LIVE; // Replace with your live SIP host
+        } else {
+            $this->sip_host = self::SIP_HOST_SANDBOX; // Replace with your sandbox SIP host
+        }
     }
 
     /**
@@ -207,29 +226,6 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         return '';
     }
 
-    /**
-     * @param string|int|float $totalAmount
-     *
-     * @return int
-     */
-    protected function get_total_amount($totalAmount)
-    {
-        $priceDecimals   = wc_get_price_decimals();
-        $priceMultiplier = pow(10, $priceDecimals);
-
-        return (int) round((float) $totalAmount * $priceMultiplier);
-    }
-
-    /**
-     * @param WC_Order $order
-     *
-     * @return int
-     */
-    protected function get_total($order)
-    {
-        return $this->get_total_amount($order->get_total());
-    }
-
     private function get_return_url_base()
     {
         return home_url('/wp-json/dfinsell/v1/data', $this->sip_protocol);
@@ -243,7 +239,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         // Get order details and sanitize
         $first_name = sanitize_text_field($order->get_billing_first_name());
         $last_name = sanitize_text_field($order->get_billing_last_name());
-        $amount = intval(round($this->get_total($order) / 100));
+        $amount = $order->get_total();
 
         $redirect_url = esc_url_raw(
             add_query_arg(

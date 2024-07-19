@@ -4,7 +4,7 @@
  * Plugin Name: DFin Sell Payment Gateway
  * Description: This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security.
  * Author: DFin Sell
- * Author URI: https://sell.dfin.ai/
+ * Author URI: https://www.dfin.ai/
  * Text Domain: dfin-sell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfin-sell-wp-plugin
  * Version: 1.0.1
