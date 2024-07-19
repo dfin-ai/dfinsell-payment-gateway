@@ -181,16 +181,4 @@ jQuery(function ($) {
   $(document.body).on('updated_checkout', function () {
     $('form.checkout').off('submit').on('submit', handleFormSubmit)
   })
-
-  // Listen for messages from the popup window
-  window.addEventListener('message', function (event) {
-    if (event.origin !== window.location.origin) {
-      // Ignore messages from unknown origins for security
-      return
-    }
-
-    if (event.data.action === 'redirect') {
-      window.location.href = event.data.url
-    }
-  })
 })
