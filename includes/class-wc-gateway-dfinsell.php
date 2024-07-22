@@ -58,7 +58,6 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
         // Define hooks and actions.
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
-        add_action('woocommerce_receipt_' . $this->id, array($this, 'receipt_page'));
 
         // Enqueue styles and scripts
         add_action('wp_enqueue_scripts', array($this, 'enqueue_styles_and_scripts'));
@@ -288,16 +287,6 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             $ip_address = $_SERVER['REMOTE_ADDR'];
         }
         return $ip_address;
-    }
-
-    /**
-     * Receipt page.
-     *
-     * @param int $order_id
-     */
-    public function receipt_page($order_id)
-    {
-        return $this->get_embedded_receipt_page($order_id);
     }
 
     /**
