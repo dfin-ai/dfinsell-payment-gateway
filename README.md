@@ -4,13 +4,13 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 
 ## Plugin Information
 
-**Contributors:** DFin Sell
-**Tags:** woocommerce, payment gateway, fiat, DFin Sell
-**Requires at least:** 6.2
-**Tested up to:** 6.2
-**Stable tag:** 1.0.1
-**License:** GPLv3 or later
-**License URI:** https://www.gnu.org/licenses/gpl-3.0.html
+**Contributors:** DFin Sell  
+**Tags:** woocommerce, payment gateway, fiat, DFin Sell  
+**Requires at least:** 6.2  
+**Tested up to:** 6.2  
+**Stable tag:** 1.0.1  
+**License:** GPLv3 or later  
+**License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
 ## Support
 
