@@ -6,8 +6,10 @@
  * Author: DFin Sell
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfin-sell-payment-gateway
- * Plugin URI: https://github.com/dfin-ai/dfin-sell-wp-plugin
+ * Plugin URI: https://github.com/dfin-ai/dfin-sell-payment-gateway
  * Version: 1.0.1
+ * License: GPLv3 or later
+ * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
  * Copyright (c) 2024 DFin
  */

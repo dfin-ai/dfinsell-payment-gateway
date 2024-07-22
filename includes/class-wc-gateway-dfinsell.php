@@ -22,6 +22,8 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
     public $public_key;
     public $secret_key;
 
+    private $admin_notices;
+
     /**
      * Constructor.
      */
@@ -32,6 +34,9 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             add_action('admin_notices', array($this, 'woocommerce_not_active_notice'));
             return;
         }
+
+        // Instantiate the notices class
+        $this->admin_notices = new WC_Gateway_DFinSell_Admin_Notices();
 
         // Determine SIP protocol based on site protocol
         $this->sip_protocol = is_ssl() ? 'https://' : 'http://';
@@ -61,6 +66,62 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
         // Enqueue styles and scripts
         add_action('wp_enqueue_scripts', array($this, 'enqueue_styles_and_scripts'));
+    }
+
+    public function process_admin_options()
+    {
+        parent::process_admin_options();
+
+        // Retrieve the options from the settings
+        $title = $this->get_option('title');
+        $description = $this->get_option('description');
+        $public_key = $this->get_option('public_key');
+        $secret_key = $this->get_option('secret_key');
+
+        // Log the settings to verify they are being retrieved correctly
+        error_log('Title: ' . $title);
+        error_log('Description: ' . $description);
+        error_log('Public Key: ' . $public_key);
+        error_log('Secret Key: ' . $secret_key);
+
+        // Initialize error tracking
+        $errors = array();
+
+        // Check for Title
+        if (empty($title)) {
+            $errors[] = __('Title is required. Please enter a title in the settings.', 'dfin-sell-payment-gateway');
+        }
+
+        // Check for Description
+        if (empty($description)) {
+            $errors[] = __('Description is required. Please enter a description in the settings.', 'dfin-sell-payment-gateway');
+        }
+
+        // Check for Public Key
+        if (empty($public_key)) {
+            $errors[] = __('Public Key is required. Please enter your Public Key in the settings.', 'dfin-sell-payment-gateway');
+        }
+
+        // Check for Secret Key
+        if (empty($secret_key)) {
+            $errors[] = __('Secret Key is required. Please enter your Secret Key in the settings.', 'dfin-sell-payment-gateway');
+        }
+
+        // Check API Keys only if there are no other errors
+        if (empty($errors)) {
+            $api_key_error = $this->check_api_keys();
+            if ($api_key_error) {
+                $errors[] = $api_key_error;
+            }
+        }
+
+        // Display all errors
+        if (!empty($errors)) {
+            foreach ($errors as $error) {
+                $this->admin_notices->add_notice('settings_error', 'error', $error);
+            }
+            add_action('admin_notices', array($this->admin_notices, 'display_notices'));
+        }
     }
 
     /**
@@ -113,8 +174,11 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             'instructions' => array(
                 'title' => __('Instructions', 'dfin-sell-payment-gateway'),
                 'type' => 'title',
+                // Translators comment added here
+                /* translators: 1: Link to developer account */
                 'description' => sprintf(
-                    __('To configure this gateway, %sGet your API keys from your merchant account: Developer Settings > API Keys.%s', 'dfin-sell-payment-gateway'),
+                    /* translators: %1$s is a link to the developer account. %2$s is used for any additional formatting if necessary. */
+                    __('To configure this gateway, %1$sGet your API keys from your merchant account: Developer Settings > API Keys.%2$s', 'dfin-sell-payment-gateway'),
                     '<strong><a href="' . esc_url($this->sip_host . '/developers') . '" target="_blank">' . __('click here to access your developer account', 'dfin-sell-payment-gateway') . '</a></strong><br>',
                     ''
                 ),
@@ -152,13 +216,6 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
     public function process_payment($order_id)
     {
         $order = wc_get_order($order_id);
-
-        // Check for API keys
-        $error_message = $this->check_api_keys();
-        if ($error_message) {
-            wc_add_notice(__('Payment error: ', 'woocommerce') . $error_message, 'error');
-            return array('result' => 'fail');
-        }
 
         // Prepare data for the API request
         $data = $this->prepare_payment_data($order);
@@ -215,15 +272,17 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
     private function check_api_keys()
     {
-        if (!$this->secret_key && !$this->public_key) {
-            return __('API Secret and Public Key are required.', 'woocommerce');
-        } elseif (!$this->secret_key) {
-            return __('API Secret is required.', 'woocommerce');
-        } elseif (!$this->public_key) {
-            return __('Public Key is required.', 'woocommerce');
+        // This method should only be called if no other errors exist
+        if (empty($this->public_key) && empty($this->secret_key)) {
+            return __('Both Public Key and Secret Key are required. Please enter them in the settings.', 'dfin-sell-payment-gateway');
+        } elseif (empty($this->public_key)) {
+            return __('Public Key is required. Please enter your Public Key in the settings.', 'dfin-sell-payment-gateway');
+        } elseif (empty($this->secret_key)) {
+            return __('Secret Key is required. Please enter your Secret Key in the settings.', 'dfin-sell-payment-gateway');
         }
         return '';
     }
+
 
     private function get_return_url_base()
     {
@@ -255,7 +314,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         $ip_address = sanitize_text_field($this->get_client_ip());
 
         // Prepare meta data
-        $meta_data = json_encode(array(
+        $meta_data = wp_json_encode(array(
             'source' => 'woocommerce',
             'order_id' => $order->get_id()
         ));
@@ -295,8 +354,8 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
     public function woocommerce_not_active_notice()
     {
         echo '<div class="error">
-    <p>' . __('DFin Sell Payment Gateway requires WooCommerce to be installed and active.', 'dfin-sell-payment-gateway') . '</p>
-</div>';
+        <p>' . esc_html__('DFin Sell Payment Gateway requires WooCommerce to be installed and active.', 'dfin-sell-payment-gateway') . '</p>
+    </div>';
     }
 
     /**
@@ -307,7 +366,10 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         $description = $this->get_description();
 
         if ($description) {
-            echo wpautop(wptexturize(trim($description)));
+            // Apply formatting
+            $formatted_description = wpautop(wptexturize(trim($description)));
+            // Output directly with escaping
+            echo wp_kses_post($formatted_description);
         }
     }
 
@@ -317,10 +379,22 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
     public function enqueue_styles_and_scripts()
     {
         // Enqueue stylesheets
-        wp_enqueue_style('dfin-sell-payment-loader-styles', plugins_url('../assets/css/loader.css', __FILE__));
+        wp_enqueue_style(
+            'dfin-sell-payment-loader-styles',
+            plugins_url('../assets/css/loader.css', __FILE__),
+            array(), // Dependencies (if any)
+            '1.0', // Version number
+            'all' // Media
+        );
 
         // Enqueue dfinsell.js script
-        wp_enqueue_script('dfinsell-js', plugins_url('../assets/js/dfinsell.js', __FILE__), array('jquery'), '1.0', true);
+        wp_enqueue_script(
+            'dfinsell-js',
+            plugins_url('../assets/js/dfinsell.js', __FILE__),
+            array('jquery'), // Dependencies
+            '1.0', // Version number
+            true // Load in footer
+        );
 
         // Localize script with parameters that need to be passed to dfinsell.js
         wp_localize_script('dfinsell-js', 'dfinsell_params', array(
