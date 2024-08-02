@@ -31,3 +31,18 @@
   z-index: 9998; /* Slightly lower than the loader */
   pointer-events: none; /* Ensure this element blocks clicks */
 }
+
+.consent-banner {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid #ddd;
+  padding: 10px;
+  text-align: center;
+  box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+}
+.consent-banner button {
+  margin: 0 10px;
+}

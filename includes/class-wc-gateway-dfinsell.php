@@ -78,12 +78,6 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         $public_key = $this->get_option('public_key');
         $secret_key = $this->get_option('secret_key');
 
-        // Log the settings to verify they are being retrieved correctly
-        error_log('Title: ' . $title);
-        error_log('Description: ' . $description);
-        error_log('Public Key: ' . $public_key);
-        error_log('Secret Key: ' . $secret_key);
-
         // Initialize error tracking
         $errors = array();
 
@@ -196,6 +190,19 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
                 'default' => '',
                 'desc_tip' => __('Enter your Secret Key obtained from your merchant account.', 'dfin-sell-payment-gateway'),
             ),
+            'order_status' => array(
+                'title' => __('Order Status', 'dfin-sell-payment-gateway'),
+                'type' => 'select',
+                'description' => __('Select the order status to be set after successful payment.', 'dfin-sell-payment-gateway'),
+                'default' => '', // Default is empty, which is our placeholder
+                'desc_tip' => true,
+                'id' => 'order_status_select', // Add an ID for targeting
+                'options' => array(
+                    // '' => __('Select order status', 'dfin-sell-payment-gateway'), // Placeholder option
+                    'processing' => __('Processing', 'dfin-sell-payment-gateway'),
+                    'completed' => __('Completed', 'dfin-sell-payment-gateway'),
+                ),
+            ),
         );
 
         return apply_filters('woocommerce_gateway_settings_fields_' . $this->id, $form_fields, $this);
@@ -254,8 +261,8 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             isset($response_data['status']) && $response_data['status'] === 'success' &&
             isset($response_data['data']['payment_link']) && !empty($response_data['data']['payment_link'])
         ) {
-            // Mark order as pending payment
-            $order->update_status('pending', __('Awaiting payment', 'woocommerce'));
+            // Update the order status
+            $order->update_status('pending', __('Payment pending.', 'woocommerce'));
 
             // Return a success result without redirecting
             return array(
@@ -291,13 +298,20 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
     private function prepare_payment_data($order)
     {
-
         // Sanitize and get the billing email or phone
         $request_for = sanitize_email($order->get_billing_email() ?: $order->get_billing_phone());
         // Get order details and sanitize
         $first_name = sanitize_text_field($order->get_billing_first_name());
         $last_name = sanitize_text_field($order->get_billing_last_name());
         $amount = $order->get_total();
+
+        // Get billing address details
+        $billing_address_1 = sanitize_text_field($order->get_billing_address_1());
+        $billing_address_2 = sanitize_text_field($order->get_billing_address_2());
+        $billing_city = sanitize_text_field($order->get_billing_city());
+        $billing_postcode = sanitize_text_field($order->get_billing_postcode());
+        $billing_country = sanitize_text_field($order->get_billing_country());
+        $billing_state = sanitize_text_field($order->get_billing_state());
 
         $redirect_url = esc_url_raw(
             add_query_arg(
@@ -330,7 +344,14 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             'ip_address' => $ip_address,
             'source' => 'wordpress',
             'meta_data' => $meta_data,
-            'remarks' => 'Order #' . $order->get_order_number()
+            'remarks' => 'Order #' . $order->get_order_number(),
+            // Add billing address details to the request
+            'billing_address_1' => $billing_address_1,
+            'billing_address_2' => $billing_address_2,
+            'billing_city' => $billing_city,
+            'billing_postcode' => $billing_postcode,
+            'billing_country' => $billing_country,
+            'billing_state' => $billing_state,
         );
     }
 
@@ -371,7 +392,29 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             // Output directly with escaping
             echo wp_kses_post($formatted_description);
         }
+
+        // Add user consent checkbox
+        echo '<p class="form-row form-row-wide">
+    <label for="dfinsell_consent">
+        <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' . __('I consent to the collection and use of my personal data, including my billing address and other details, for the purpose of processing this payment in accordance with the terms and conditions and privacy policy.', 'dfin-sell-payment-gateway') . '
+    </label>
+  </p>';
     }
+
+    /**
+     * Validate the payment form.
+     */
+    public function validate_fields()
+    {
+        // Check if the consent checkbox is checked
+        if (!isset($_POST['dfinsell_consent']) || empty($_POST['dfinsell_consent'])) {
+            wc_add_notice(__('Please consent to the terms and conditions to proceed.', 'dfin-sell-payment-gateway'), 'error');
+            return false;
+        }
+
+        return true;
+    }
+
 
     /**
      * Enqueue stylesheets for the plugin.
