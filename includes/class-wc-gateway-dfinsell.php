@@ -13,9 +13,9 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
     // Define constants for SIP URLs
     const SIP_HOST_SANDBOX = 'sell-dev.dfin.ai'; // Sandbox SIP host
-    const SIP_HOST_LIVE = 'sell.dfin.ai'; // Live SIP host 
+    const SIP_HOST_LIVE = 'sell.dfin.ai'; // Live SIP host
 
-    private $sip_protocol; // Protocol (http:// or https://)
+    private $sip_protocol; // Protocol
     private $sip_host;     // Host without protocol
 
     // Declare properties here
@@ -39,7 +39,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         $this->admin_notices = new WC_Gateway_DFinSell_Admin_Notices();
 
         // Determine SIP protocol based on site protocol
-        $this->sip_protocol = is_ssl() ? 'https://' : 'http://';
+        $this->sip_protocol = 'https://';
 
         // Define user set variables
         $this->id = self::ID;
@@ -359,13 +359,22 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
     private function get_client_ip()
     {
         $ip_address = '';
+
         if (isset($_SERVER['HTTP_CLIENT_IP'])) {
             $ip_address = $_SERVER['HTTP_CLIENT_IP'];
         } elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-            $ip_address = $_SERVER['HTTP_X_FORWARDED_FOR'];
+            // Extract the first IP address from the list
+            $forwarded_ips = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
+            $ip_address = trim($forwarded_ips[0]);
         } elseif (isset($_SERVER['REMOTE_ADDR'])) {
             $ip_address = $_SERVER['REMOTE_ADDR'];
         }
+
+        // Validate and sanitize the IP address
+        if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
+            $ip_address = 'Invalid IP';
+        }
+
         return $ip_address;
     }
 
@@ -396,7 +405,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         // Add user consent checkbox
         echo '<p class="form-row form-row-wide">
     <label for="dfinsell_consent">
-        <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' . __('I consent to the collection and use of my personal data, including my billing address and other details, for the purpose of processing this payment in accordance with the terms and conditions and privacy policy.', 'dfin-sell-payment-gateway') . '
+        <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' . __('I consent to the collection of my data to process this payment') . '
     </label>
   </p>';
     }
@@ -408,7 +417,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
     {
         // Check if the consent checkbox is checked
         if (!isset($_POST['dfinsell_consent']) || empty($_POST['dfinsell_consent'])) {
-            wc_add_notice(__('Please consent to the terms and conditions to proceed.', 'dfin-sell-payment-gateway'), 'error');
+            wc_add_notice(__('Please consent to the collection of your data to proceed with the payment.', 'dfin-sell-payment-gateway'), 'error');
             return false;
         }
 
