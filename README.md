@@ -144,7 +144,7 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
   - **Improved Billing Address Handling:** Enhancements to how billing addresses are captured and processed, ensuring accuracy and compliance during the payment process.
   - **User Consent Compliance:** Added features to capture and handle user consent, aligning with data privacy regulations and enhancing trust with your customers.
 
-### Version 1.0.0 (Initial Release)
+### Version 1.0.1 (Initial Release)
 
 - **Initial Release:** Launched the DFin Sell Payment Gateway plugin with core payment integration functionality for WooCommerce.
 
