@@ -7,7 +7,7 @@
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfin-sell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfin-sell-payment-gateway
- * Version: 1.0.2
+ * Version: 1.0.3
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
