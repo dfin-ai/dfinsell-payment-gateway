@@ -402,12 +402,15 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             echo wp_kses_post($formatted_description);
         }
 
-        // Add user consent checkbox
+        // Add user consent checkbox with escaping
         echo '<p class="form-row form-row-wide">
-    <label for="dfinsell_consent">
-        <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' . __('I consent to the collection of my data to process this payment') . '
-    </label>
-  </p>';
+                <label for="dfinsell_consent">
+                    <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' . esc_html__('I consent to the collection of my data to process this payment', 'dfin-sell-payment-gateway') . '
+                </label>
+            </p>';
+
+        // Add nonce field for security
+        wp_nonce_field('dfinsell_payment', 'dfinsell_nonce');
     }
 
     /**
@@ -415,6 +418,12 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
      */
     public function validate_fields()
     {
+        // Verify nonce
+        if (!isset($_POST['dfinsell_nonce']) || !wp_verify_nonce($_POST['dfinsell_nonce'], 'dfinsell_payment')) {
+            wc_add_notice(__('Nonce verification failed. Please try again.', 'dfin-sell-payment-gateway'), 'error');
+            return false;
+        }
+
         // Check if the consent checkbox is checked
         if (!isset($_POST['dfinsell_consent']) || empty($_POST['dfinsell_consent'])) {
             wc_add_notice(__('Please consent to the collection of your data to proceed with the payment.', 'dfin-sell-payment-gateway'), 'error');
