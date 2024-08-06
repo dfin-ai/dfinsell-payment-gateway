@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.6
-Stable tag: 1.0.2
+Stable tag: 1.0.3
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -27,6 +27,9 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 == Changelog ==
 
+= 1.0.3 =
+* Updated consent text to: "I consent to the collection of my data to process this payment."
+
 = 1.0.2 =
 * Added order status field in payment settings.
 * Improved billing address handling for the payment.
@@ -36,6 +39,9 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.0.3 =
+* Updated consent text to: "I consent to the collection of my data to process this payment."
 
 = 1.0.2 =
 * Added order status field in payment settings.

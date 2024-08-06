@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.2  
-**Stable tag:** 1.0.2  
+**Stable tag:** 1.0.3  
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -129,6 +129,24 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 ## Documentation
 
 The official documentation for this plugin is available at: [https://www.dfin.ai/api/docs/wordpress-plugin](https://www.dfin.ai/api/docs/wordpress-plugin)
+
+## Changelog
+
+### Version 1.0.3
+
+- **Updated Consent Text:** Revised the consent text displayed on the payment page to: "I consent to the collection of my data to process this payment."
+
+### Version 1.0.2
+
+- **New Features and Enhancements:**
+
+  - **Order Status Options:** You can now choose between "Processing" or "Completed" as the order status in payment settings, providing more flexibility in managing your orders.
+  - **Improved Billing Address Handling:** Enhancements to how billing addresses are captured and processed, ensuring accuracy and compliance during the payment process.
+  - **User Consent Compliance:** Added features to capture and handle user consent, aligning with data privacy regulations and enhancing trust with your customers.
+
+### Version 1.0.0 (Initial Release)
+
+- **Initial Release:** Launched the DFin Sell Payment Gateway plugin with core payment integration functionality for WooCommerce.
 
 ## Support
 

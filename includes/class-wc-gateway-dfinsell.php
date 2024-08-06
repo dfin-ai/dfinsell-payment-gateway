@@ -13,9 +13,9 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
     // Define constants for SIP URLs
     const SIP_HOST_SANDBOX = 'sell-dev.dfin.ai'; // Sandbox SIP host
-    const SIP_HOST_LIVE = 'sell.dfin.ai'; // Live SIP host
+    const SIP_HOST_LIVE = 'sell.dfin.ai'; // Live SIP host 
 
-    private $sip_protocol; // Protocol
+    private $sip_protocol; // Protocol (http:// or https://)
     private $sip_host;     // Host without protocol
 
     // Declare properties here
