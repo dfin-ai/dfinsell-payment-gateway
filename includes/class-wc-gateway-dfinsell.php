@@ -39,7 +39,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         $this->admin_notices = new WC_Gateway_DFinSell_Admin_Notices();
 
         // Determine SIP protocol based on site protocol
-        $this->sip_protocol = 'https://';
+        $this->sip_protocol = (is_ssl() ? 'https://' : 'http://'); // Use HTTPS if SSL is enabled, otherwise HTTP
 
         // Define user set variables
         $this->id = self::ID;
@@ -203,17 +203,18 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
                     'completed' => __('Completed', 'dfin-sell-payment-gateway'),
                 ),
             ),
+            'show_consent_checkbox' => array(
+                'title' => __('Show Consent Checkbox', 'dfin-sell-payment-gateway'),
+                'label' => __('Enable consent checkbox on checkout page', 'dfin-sell-payment-gateway'),
+                'type' => 'checkbox',
+                'description' => __('Check this box to show the consent checkbox on the checkout page. Uncheck to hide it.', 'dfin-sell-payment-gateway'),
+                'default' => 'yes',
+            ),
         );
 
         return apply_filters('woocommerce_gateway_settings_fields_' . $this->id, $form_fields, $this);
     }
 
-    /**
-     * Process the payment and return the result.
-     *
-     * @param int $order_id Order ID.
-     * @return array
-     */
     /**
      * Process the payment and return the result.
      *
@@ -235,6 +236,12 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         // Remove any double slashes in the URL except for the 'http://' or 'https://'
         $cleanUrl = preg_replace('#(?<!:)//+#', '/', $url);
 
+        $order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
+        $order->save();
+
+        // Log the request data (optional)
+        wc_get_logger()->info('DFin Sell Payment Request: ' . print_r($data, true), array('source' => 'dfin_sell_payment_gateway'));
+
         // Send the data to the API
         $response = wp_remote_post($cleanUrl, array(
             'method'    => 'POST',
@@ -247,14 +254,22 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             'sslverify' => true, // Ensure SSL verification
         ));
 
+        // Log the essential response data
         if (is_wp_error($response)) {
-            // Handle WP error
-            $error_message = $response->get_error_message();
-            wc_add_notice(__('Payment error: Unable to process payment.', 'woocommerce') . ' ' . $error_message, 'error');
+            // Log the error message
+            wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfin_sell_payment_gateway'));
+            wc_add_notice(__('Payment error: Unable to process payment.', 'woocommerce') . ' ' . $response->get_error_message(), 'error');
             return array('result' => 'fail');
-        }
+        } else {
+            $response_code = wp_remote_retrieve_response_code($response);
+            $response_body = wp_remote_retrieve_body($response);
 
-        $response_body = wp_remote_retrieve_body($response);
+            // Log the response code and body
+            wc_get_logger()->info(
+                sprintf('DFin Sell Payment Response: Code: %d, Body: %s', $response_code, $response_body),
+                array('source' => 'dfin_sell_payment_gateway')
+            );
+        }
         $response_data = json_decode($response_body, true);
 
         if (
@@ -263,6 +278,23 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
         ) {
             // Update the order status
             $order->update_status('pending', __('Payment pending.', 'woocommerce'));
+
+            // Check if the note already exists
+            $existing_notes = $order->get_customer_order_notes();
+            $new_note = __('Payment initiated via DFin Sell Payment Gateway. Awaiting customer action.', 'dfin-sell-payment-gateway');
+            $note_exists = false;
+
+            foreach ($existing_notes as $note) {
+                if (strip_tags($note->comment_content) === $new_note) {
+                    $note_exists = true;
+                    break;
+                }
+            }
+
+            // Add the note if it doesn't exist
+            if (!$note_exists) {
+                $order->add_order_note($new_note);
+            }
 
             // Return a success result without redirecting
             return array(
@@ -293,7 +325,7 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
 
     private function get_return_url_base()
     {
-        return home_url('/wp-json/dfinsell/v1/data', $this->sip_protocol);
+        return rest_url('/dfinsell/v1/data');
     }
 
     private function prepare_payment_data($order)
@@ -402,12 +434,15 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             echo wp_kses_post($formatted_description);
         }
 
-        // Add user consent checkbox with escaping
-        echo '<p class="form-row form-row-wide">
+        // Check if the consent checkbox should be displayed
+        if ('yes' === $this->get_option('show_consent_checkbox')) {
+            // Add user consent checkbox with escaping
+            echo '<p class="form-row form-row-wide">
                 <label for="dfinsell_consent">
                     <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' . esc_html__('I consent to the collection of my data to process this payment', 'dfin-sell-payment-gateway') . '
                 </label>
             </p>';
+        }
 
         // Add nonce field for security
         wp_nonce_field('dfinsell_payment', 'dfinsell_nonce');
@@ -424,10 +459,12 @@ class WC_Gateway_DFinSell extends WC_Payment_Gateway_CC
             return false;
         }
 
-        // Check if the consent checkbox is checked
-        if (!isset($_POST['dfinsell_consent']) || empty($_POST['dfinsell_consent'])) {
-            wc_add_notice(__('Please consent to the collection of your data to proceed with the payment.', 'dfin-sell-payment-gateway'), 'error');
-            return false;
+        // Check if the consent checkbox setting is enabled
+        if ($this->get_option('show_consent_checkbox') === 'yes') { // Corrected the option name
+            if (!isset($_POST['dfinsell_consent']) || empty($_POST['dfinsell_consent'])) {
+                wc_add_notice(__('Please consent to the collection of your data to proceed with the payment.', 'dfin-sell-payment-gateway'), 'error');
+                return false;
+            }
         }
 
         return true;

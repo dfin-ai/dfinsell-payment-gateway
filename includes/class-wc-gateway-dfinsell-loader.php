@@ -58,8 +58,9 @@ class WC_Gateway_DFinSell_Loader
     $this->init_gateways();
 
     // Initialize REST API
-    $rest_api = new WC_Gateway_DFinSell_REST_API();
+    $rest_api = WC_Gateway_DFinSell_REST_API::get_instance();
     $rest_api->register_routes();
+    $rest_api->add_cors_support();
 
     // Add plugin action links
     add_filter('plugin_action_links_' . plugin_basename(WC_DFIN_SELL_FILE), [$this, 'plugin_action_links']);
