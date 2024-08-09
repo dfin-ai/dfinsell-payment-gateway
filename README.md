@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.2  
-**Stable tag:** 1.0.3  
+**Stable tag:** 1.0.4  
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -131,6 +131,13 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 The official documentation for this plugin is available at: [https://www.dfin.ai/api/docs/wordpress-plugin](https://www.dfin.ai/api/docs/wordpress-plugin)
 
 ## Changelog
+
+### Version 1.0.4
+
+- **Updated REST API Consent Handling:** Improved the consent handling mechanism in the REST API, ensuring better compliance with data privacy regulations.
+- **Enhanced Security:** Implemented additional security measures for API requests, including improved API key verification and authorization checks.
+- **Updated CORS Handling:** Refined CORS (Cross-Origin Resource Sharing) handling to ensure proper support for preflight requests and enhance security for API endpoints.
+- **Added consent enable/disable option in settings:** Clients can now toggle the consent checkbox on or off.
 
 ### Version 1.0.3
 
