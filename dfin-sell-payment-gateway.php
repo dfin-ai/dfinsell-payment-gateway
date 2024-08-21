@@ -7,7 +7,7 @@
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfin-sell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfin-sell-payment-gateway
- * Version: 1.0.4
+ * Version: 1.0.5
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -15,7 +15,7 @@
  */
 
 if (!defined('ABSPATH')) {
-    exit;
+	exit;
 }
 
 define('WC_DFIN_SELL_MIN_PHP_VER', '8.0');
@@ -28,12 +28,12 @@ require_once WC_DFIN_SELL_PLUGIN_DIR . 'includes/wc-gateway-dfinsell-utils.php';
 
 // Autoload classes
 spl_autoload_register(function ($class) {
-    if (strpos($class, 'WC_Gateway_DFinSell_') === 0) {
-        $class_file = WC_DFIN_SELL_PLUGIN_DIR . 'includes/class-' . str_replace('_', '-', strtolower($class)) . '.php';
-        if (file_exists($class_file)) {
-            require_once $class_file;
-        }
-    }
+	if (strpos($class, 'WC_Gateway_DFinSell_') === 0) {
+		$class_file = WC_DFIN_SELL_PLUGIN_DIR . 'includes/class-' . str_replace('_', '-', strtolower($class)) . '.php';
+		if (file_exists($class_file)) {
+			require_once $class_file;
+		}
+	}
 });
 
 WC_Gateway_DFinSell_Loader::get_instance();
