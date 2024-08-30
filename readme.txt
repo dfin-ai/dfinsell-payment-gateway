@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.6
-Stable tag: 1.0.5
+Stable tag: 1.0.6
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -27,6 +27,10 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 == Changelog ==
 
+= 1.0.6 =
+* Sanitized, escaped, and validated data to enhance security and prevent potential vulnerabilities.
+* Improved the uniqueness of function, class, define, namespace, and option names to avoid conflicts with other plugins and ensure better compatibility with WordPress.
+
 = 1.0.5 =
 * Fixed Nonce Verification Issue: Resolved an issue with nonce verification that caused errors during the payment process. The nonce validation mechanism has been updated to ensure proper verification and smoother user experience.
 
@@ -37,7 +41,6 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Enhanced Security: Implemented additional security measures for API requests, including improved API key verification and authorization checks.
 * Updated CORS Handling: Refined CORS (Cross-Origin Resource Sharing) handling to ensure proper support for preflight requests and enhance security for API endpoints.
 * Added consent enable/disable option in settings: Clients can now toggle the consent checkbox on or off.
-
 
 = 1.0.3 =
 * Updated consent text to: "I consent to the collection of my data to process this payment."
@@ -52,17 +55,19 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 == Upgrade Notice ==
 
+= 1.0.6 =
+* Improved security by sanitizing, escaping, and validating data.
+* Enhanced compatibility by improving the uniqueness of function, class, define, namespace, and option names.
+
 = 1.0.5 =
 * Fixed Nonce Verification Issue: Resolved an issue with nonce verification that caused errors during the payment process. The nonce validation mechanism has been updated to ensure proper verification and smoother user experience.
 
 = 1.0.4 =
-* Added detailed request and response logging.
-* Handled both HTTP and HTTPS URLs for REST API endpoints.
-* Updated REST API Consent Handling: Improved the consent handling mechanism in the REST API, ensuring better compliance with data privacy regulations.
-* Enhanced Security: Implemented additional security measures for API requests, including improved API key verification and authorization checks.
-* Updated CORS Handling: Refined CORS (Cross-Origin Resource Sharing) handling to ensure proper support for preflight requests and enhance security for API endpoints.
-* Added consent enable/disable option in settings: Clients can now toggle the consent checkbox on or off.
 
+Added logging for requests/responses.
+Improved REST API consent and security.
+Enhanced CORS handling.
+Added consent toggle option in settings.
 
 = 1.0.3 =
 * Updated consent text to: "I consent to the collection of my data to process this payment."
