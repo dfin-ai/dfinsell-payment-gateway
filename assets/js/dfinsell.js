@@ -18,6 +18,13 @@ jQuery(function ($) {
   function handleFormSubmit(e) {
     var $form = $(this)
 
+    if (isSubmitting) {
+      e.preventDefault() // Prevent the form from submitting if already in progress
+      return false
+    }
+
+    isSubmitting = true // Set the flag to true to prevent multiple submissions
+
     var selectedPaymentMethod = $form
       .find('input[name="payment_method"]:checked')
       .val()
@@ -34,12 +41,6 @@ jQuery(function ($) {
 
     var data = $form.serialize()
 
-    if (isSubmitting) {
-      return false
-    }
-
-    isSubmitting = true
-
     setTimeout(function () {
       $.ajax({
         type: 'POST',
@@ -52,9 +53,14 @@ jQuery(function ($) {
         error: function (jqXHR, textStatus, errorThrown) {
           handleError($form)
         },
+        complete: function () {
+          // Always reset isSubmitting to false in case of success or error
+          isSubmitting = false
+        },
       })
     }, 2000)
 
+    e.preventDefault() // Prevent default form submission
     return false
   }
 
