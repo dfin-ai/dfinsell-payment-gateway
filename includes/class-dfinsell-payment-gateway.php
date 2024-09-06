@@ -74,7 +74,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Retrieve the options from the settings
 		$title = sanitize_text_field($this->get_option('title'));
-		$description = sanitize_textarea_field($this->get_option('description'));
 		$public_key = sanitize_text_field($this->get_option('public_key'));
 		$secret_key = sanitize_text_field($this->get_option('secret_key'));
 
@@ -84,11 +83,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Check for Title
 		if (empty($title)) {
 			$errors[] = __('Title is required. Please enter a title in the settings.', 'dfinsell-payment-gateway');
-		}
-
-		// Check for Description
-		if (empty($description)) {
-			$errors[] = __('Description is required. Please enter a description in the settings.', 'dfinsell-payment-gateway');
 		}
 
 		// Check for Public Key
