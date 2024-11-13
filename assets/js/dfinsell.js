@@ -6,11 +6,14 @@ jQuery(function ($) {
   var $button // To store reference to the submit button
   var originalButtonText // To store original button text
 
-  // Append loader image to the body or a specific element
+  // Sanitize loader URL and append loader image to the body
+  var loaderUrl = dfinsell_params.dfin_loader
+    ? encodeURI(dfinsell_params.dfin_loader)
+    : ''
   $('body').append(
     '<div class="dfinsell-loader-background"></div>' +
       '<div class="dfinsell-loader"><img src="' +
-      dfinsell_params.dfin_loader +
+      loaderUrl +
       '" alt="Loading..." /></div>'
   )
 
@@ -50,7 +53,7 @@ jQuery(function ($) {
         success: function (response) {
           handleResponse(response, $form)
         },
-        error: function (jqXHR, textStatus, errorThrown) {
+        error: function () {
           handleError($form)
         },
         complete: function () {
@@ -65,12 +68,15 @@ jQuery(function ($) {
   }
 
   function openPaymentLink(paymentLink) {
+    // Sanitize the payment link
+    var sanitizedPaymentLink = encodeURI(paymentLink)
+
     var width = 700
     var height = 700
     var left = window.innerWidth / 2 - width / 2
     var top = window.innerHeight / 2 - height / 2
     var popupWindow = window.open(
-      paymentLink,
+      sanitizedPaymentLink,
       'paymentPopup',
       'width=' +
         width +
@@ -88,7 +94,7 @@ jQuery(function ($) {
       typeof popupWindow.closed === 'undefined'
     ) {
       // Redirect to the payment link if popup was blocked
-      window.location.href = paymentLink
+      window.location.href = sanitizedPaymentLink
       resetButton()
     } else {
       popupInterval = setInterval(function () {

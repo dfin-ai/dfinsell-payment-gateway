@@ -36,18 +36,20 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	{
 		// Handle CORS preflight requests
 		add_action('rest_api_init', function () {
-			if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-				header('Access-Control-Allow-Origin: *');
+			if (isset($_SERVER['REQUEST_METHOD']) && sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'])) === 'OPTIONS') {
+				// Validate and set CORS headers
+				header('Access-Control-Allow-Origin: *');  // Be cautious about using '*' in production, restrict it to specific origins if needed.
 				header('Access-Control-Allow-Methods: POST, OPTIONS');
 				header('Access-Control-Allow-Headers: Content-Type, Authorization');
-				header('Access-Control-Max-Age: 86400');
+				header('Access-Control-Max-Age: 86400'); // Caching preflight request for 24 hours
 				exit;
 			}
 		});
 
 		// Set CORS headers for regular requests
 		add_action('rest_api_init', function () {
-			header('Access-Control-Allow-Origin: *');
+			// Validate and set CORS headers
+			header('Access-Control-Allow-Origin: *');  // Be cautious about using '*' in production, restrict it to specific origins if needed.
 			header('Access-Control-Allow-Methods: POST, OPTIONS');
 			header('Access-Control-Allow-Headers: Content-Type, Authorization');
 		});
@@ -55,13 +57,22 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 	private function dfinsell_verify_api_key($api_key)
 	{
+		// Sanitize the API key parameter early
+		$api_key = sanitize_text_field($api_key);
+
 		// Get DFinSell public key from WooCommerce settings
 		$dfin_sell_settings = get_option('woocommerce_dfinsell_settings');
-		$public_key = isset($dfin_sell_settings['public_key']) ? sanitize_text_field($dfin_sell_settings['public_key']) : '';
 
-		// Verify the API key
+		// Sanitize WooCommerce settings fields
+		$sandbox = isset($dfin_sell_settings['sandbox']) && 'yes' === sanitize_text_field($dfin_sell_settings['sandbox']);
+
+		// Choose between sandbox and production keys, sanitize them
+		$public_key = $sandbox ? sanitize_text_field($dfin_sell_settings['sandbox_public_key']) : sanitize_text_field($dfin_sell_settings['public_key']);
+
+		// Ensure public key is not empty and verify API key with a secure hash comparison
 		return !empty($public_key) && hash_equals($public_key, $api_key);
 	}
+
 
 	public function dfinsell_handle_api_request(WP_REST_Request $request)
 	{

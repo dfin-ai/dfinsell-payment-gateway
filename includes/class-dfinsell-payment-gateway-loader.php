@@ -141,15 +141,15 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		// Verify nonce for security (recommended)
 		check_ajax_referer('dfinsell_nonce', 'security');
 
-		// Get the order ID from $_POST
-		$order_id = isset($_POST['order_id']) ? intval($_POST['order_id']) : null;
+		// Sanitize and validate the order ID from $_POST
+		$order_id = isset($_POST['order_id']) ? intval(sanitize_text_field(wp_unslash($_POST['order_id']))) : null;
 		if (!$order_id) {
 			wp_send_json_error(array('error' => esc_html__('Invalid order ID', 'dfinsell-payment-gateway')));
 		}
 
+		// Call the function to check payment status with the validated order ID
 		return $this->dfinsell_check_payment_status($order_id);
 	}
-
 
 	/**
 	 * Check the payment status for an order.

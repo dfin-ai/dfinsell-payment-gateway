@@ -18,9 +18,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $sip_protocol; // Protocol (http:// or https://)
 	private $sip_host;     // Host without protocol
 
-	// Declare properties here
-	public $public_key;
-	public $secret_key;
+	protected $sandbox;
+
+	private $public_key;
+	private $secret_key;
+	private $sandbox_secret_key;
+	private $sandbox_public_key;
 
 	private $admin_notices;
 
@@ -56,16 +59,25 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Define properties
 		$this->title = sanitize_text_field($this->get_option('title'));
-		$this->description = sanitize_textarea_field($this->get_option('description'));
+		$this->description = !empty($this->get_option('description')) ? sanitize_textarea_field($this->get_option('description')) : ($this->get_option('show_consent_checkbox') === 'yes' ? 1 : 0);
 		$this->enabled = sanitize_text_field($this->get_option('enabled'));
-		$this->public_key = sanitize_text_field($this->get_option('public_key'));
-		$this->secret_key = sanitize_text_field($this->get_option('secret_key'));
+		$this->sandbox = 'yes' === sanitize_text_field($this->get_option('sandbox')); // Use boolean
+		$this->public_key                 = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('public_key')) : sanitize_text_field($this->get_option('sandbox_public_key'));
+		$this->secret_key                = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('secret_key')) : sanitize_text_field($this->get_option('sandbox_secret_key'));
 
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'dfinsell_process_admin_options'));
 
 		// Enqueue styles and scripts
 		add_action('wp_enqueue_scripts', array($this, 'dfinsell_enqueue_styles_and_scripts'));
+
+		add_action('admin_enqueue_scripts', array($this, 'dfinsell_admin_scripts'));
+
+		// Add action to display test order tag in order details
+		add_action('woocommerce_admin_order_data_after_order_details', array($this, 'dfinsell_display_test_order_tag'));
+
+		// Hook into WooCommerce to add a custom label to order rows
+		add_filter('woocommerce_admin_order_preview_line_items', array($this, 'dfinsell_add_custom_label_to_order_row'), 10, 2);
 	}
 
 	public function dfinsell_process_admin_options()
@@ -74,8 +86,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Retrieve the options from the settings
 		$title = sanitize_text_field($this->get_option('title'));
-		$public_key = sanitize_text_field($this->get_option('public_key'));
-		$secret_key = sanitize_text_field($this->get_option('secret_key'));
+		// Check if sandbox mode is enabled and sanitize the option
+		$is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
+
+		$secret_key = $is_sandbox ? sanitize_key($this->get_option('sandbox_secret_key')) : sanitize_key($this->get_option('secret_key'));
+		$public_key = $is_sandbox ? sanitize_key($this->get_option('sandbox_public_key')) : sanitize_key($this->get_option('public_key'));
 
 		// Initialize error tracking
 		$errors = array();
@@ -168,17 +183,42 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				),
 				'desc_tip' => true,
 			),
+			'sandbox' => array(
+				'title'       => __('Sandbox', 'dfinsell-payment-gateway'),
+				'label'       => __('Enable Sandbox Mode', 'dfinsell-payment-gateway'),
+				'type'        => 'checkbox',
+				'description' => __('Place the payment gateway in sandbox mode using sandbox API keys (real payments will not be taken).', 'dfinsell-payment-gateway'),
+				'default'     => 'no',
+			),
+			'sandbox_public_key'  => array(
+				'title'       => __('Sandbox Public Key', 'dfinsell-payment-gateway'),
+				'type'        => 'text',
+				'description' => __('Get your API keys from your merchant account: Account Settings > API Keys.', 'dfinsell-payment-gateway'),
+				'default'     => '',
+				'desc_tip'    => true,
+				'class'       => 'dfinsell-sandbox-keys', // Add class for JS handling
+			),
+			'sandbox_secret_key' => array(
+				'title'       => __('Sandbox Private Key', 'dfinsell-payment-gateway'),
+				'type'        => 'text',
+				'description' => __('Get your API keys from your merchant account: Account Settings > API Keys.', 'dfinsell-payment-gateway'),
+				'default'     => '',
+				'desc_tip'    => true,
+				'class'       => 'dfinsell-sandbox-keys', // Add class for JS handling
+			),
 			'public_key' => array(
 				'title' => __('Public Key', 'dfinsell-payment-gateway'),
 				'type' => 'text',
 				'default' => '',
 				'desc_tip' => __('Enter your Public Key obtained from your merchant account.', 'dfinsell-payment-gateway'),
+				'class'       => 'dfinsell-production-keys', // Add class for JS handling
 			),
 			'secret_key' => array(
 				'title' => __('Secret Key', 'dfinsell-payment-gateway'),
 				'type' => 'text',
 				'default' => '',
 				'desc_tip' => __('Enter your Secret Key obtained from your merchant account.', 'dfinsell-payment-gateway'),
+				'class'       => 'dfinsell-production-keys', // Add class for JS handling
 			),
 			'order_status' => array(
 				'title' => __('Order Status', 'dfinsell-payment-gateway'),
@@ -222,6 +262,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			return;
 		}
 
+		// Check if sandbox mode is enabled
+		if ($this->sandbox) {
+			// Add a meta field to mark this order as a test order
+			$order->update_meta_data('_is_test_order', true);
+			$order->add_order_note(__('This is a test order in sandbox mode.', 'dfinsell-payment-gateway'));
+		}
+
 		// Prepare data for the API request
 		$data = $this->dfinsell_prepare_payment_data($order);
 
@@ -246,7 +293,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'body'      => $data,
 			'headers'   => array(
 				'Content-Type'  => 'application/x-www-form-urlencoded',
-				'Authorization' => 'Bearer ' . sanitize_text_field($this->public_key),
+				'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
 			),
 			'sslverify' => true, // Ensure SSL verification
 		));
@@ -292,6 +339,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			if (!$note_exists) {
 				$order->add_order_note(
 					__('Payment initiated via DFin Sell Payment Gateway. Awaiting customer action.', 'dfin-sell-payment-gateway'),
+					__('Payment initiated via DFin Sell Payment Gateway. Awaiting customer action.', 'dfin-sell-payment-gateway'),
+					__('Payment initiated via DFin Sell Payment Gateway. Awaiting customer action.', 'dfin-sell-payment-gateway'),
 					false // The second parameter `false` ensures the note is not visible to the customer.
 				);
 			}
@@ -306,6 +355,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Unable to retrieve payment link.', 'woocommerce');
 			wc_add_notice(__('Payment error: ', 'woocommerce') . $error_message, 'error');
 			return array('result' => 'fail');
+		}
+	}
+
+	// Display the "Test Order" tag in admin order details
+	public function dfinsell_display_test_order_tag($order)
+	{
+		if (get_post_meta($order->get_id(), '_is_test_order', true)) {
+			echo '<p><strong>' . esc_html__('Test Order', 'dfinsell-payment-gateway') . '</strong></p>';
 		}
 	}
 
@@ -333,6 +390,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	private function dfinsell_prepare_payment_data($order)
 	{
+		// Check if sandbox mode is enabled
+		$is_sandbox = $this->get_option('sandbox') === 'yes';
+
+		// Use sandbox keys if sandbox mode is enabled, otherwise use live keys
+		$api_secret = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_secret_key')) : sanitize_text_field($this->get_option('secret_key'));
+		$api_public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
+
 		// Sanitize and get the billing email or phone
 		$request_for = sanitize_email($order->get_billing_email() ?: $order->get_billing_phone());
 		// Get order details and sanitize
@@ -369,7 +433,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		));
 
 		return array(
-			'api_secret' => sanitize_text_field($this->secret_key),
+			'api_secret'       => $api_secret, // Use sandbox or live secret key
+			'api_public_key'   => $api_public_key, // Add the public key for API calls
 			'first_name' => $first_name,
 			'last_name' => $last_name,
 			'request_for' => $request_for,
@@ -395,21 +460,42 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	{
 		$ip = '';
 
-		if (isset($_SERVER['HTTP_CLIENT_IP'])) {
-			$ip = sanitize_text_field($_SERVER['HTTP_CLIENT_IP']);
-		} elseif (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-			$ip_list = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-			$ip = sanitize_text_field(trim(current($ip_list)));
-		} elseif (isset($_SERVER['REMOTE_ADDR'])) {
-			$ip = sanitize_text_field($_SERVER['REMOTE_ADDR']);
+		if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+			// Sanitize the client's IP directly on $_SERVER access
+			$ip = sanitize_text_field(wp_unslash($_SERVER['HTTP_CLIENT_IP']));
+		} elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+			// Sanitize and handle multiple proxies
+			$ip_list = explode(',', sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR'])));
+			$ip = trim($ip_list[0]); // Take the first IP in the list and trim any whitespace
+		} elseif (!empty($_SERVER['REMOTE_ADDR'])) {
+			// Sanitize the remote address directly
+			$ip = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
 		}
 
-		// Basic IP validation (not foolproof)
-		if (!filter_var($ip, FILTER_VALIDATE_IP)) {
-			$ip = 'Invalid IP';
+		// Validate the IP after retrieving it
+		return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
+	}
+
+
+	/**
+	 * Add a custom label next to the order status in the order list.
+	 *
+	 * @param array $line_items The order line items array.
+	 * @param WC_Order $order The WooCommerce order object.
+	 * @return array Modified line items array.
+	 */
+	public function dfinsell_add_custom_label_to_order_row($line_items, $order)
+	{
+		// Get the custom meta field value (e.g. '_order_origin')
+		$order_origin = $order->get_meta('_order_origin');
+
+		// Check if the meta exists and has value
+		if (!empty($order_origin)) {
+			// Add the label text to the first item in the order preview
+			$line_items[0]['name'] .= ' <span style="background-color: #ffeb3b; color: #000; padding: 3px 5px; border-radius: 3px; font-size: 12px;">' . esc_html($order_origin) . '</span>';
 		}
 
-		return $ip;
+		return $line_items;
 	}
 
 	/**
@@ -427,7 +513,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 */
 	public function payment_fields()
 	{
-		$description = $this->get_description();
+		$description = $this->get_option('description');
 
 		if ($description) {
 			// Apply formatting
@@ -465,8 +551,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				return false;
 			}
 
-			// Check if the consent checkbox was checked
-			if (!isset($_POST['dfinsell_consent']) || $_POST['dfinsell_consent'] !== 'on') {
+			// Sanitize the consent checkbox input
+			$consent = isset($_POST['dfinsell_consent']) ? sanitize_text_field(wp_unslash($_POST['dfinsell_consent'])) : '';
+
+			// Validate the consent checkbox was checked
+			if ($consent !== 'on') {
 				wc_add_notice(__('You must consent to the collection of your data to process this payment.', 'dfinsell-payment-gateway'), 'error');
 				return false;
 			}
@@ -474,6 +563,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		return true;
 	}
+
 
 	/**
 	 * Enqueue stylesheets for the plugin.
@@ -507,5 +597,20 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'dfinsell_nonce' => wp_create_nonce('dfinsell_nonce'), // Create a nonce for verification
 			));
 		}
+	}
+
+	function dfinsell_admin_scripts($hook)
+	{
+		if ('woocommerce_page_wc-settings' !== $hook) {
+			return; // Only load on WooCommerce settings page
+		}
+
+		// Register and enqueue your script
+		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
+
+		// Localize the script to pass parameters
+		wp_localize_script('dfinsell-admin-script', 'params', array(
+			'PAYMENT_CODE' => $this->id,
+		));
 	}
 }
