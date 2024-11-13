@@ -9,7 +9,6 @@ if (!defined('ABSPATH')) {
 class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 {
 	const ID = 'dfinsell';
-	const MODE = 'live';
 
 	// Define constants for SIP URLs
 	const SIP_HOST_SANDBOX = 'sell-dev.dfin.ai'; // Sandbox SIP host
@@ -50,9 +49,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->method_title = __('DFin Sell Payment Gateway', 'dfinsell-payment-gateway');
 		$this->method_description = __('This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security.', 'dfinsell-payment-gateway');
 
-		// Set SIP host based on mode
-		$this->dfinsell_set_sip_host(self::MODE);
-
 		// Load the settings
 		$this->dfinsell_init_form_fields();
 		$this->init_settings();
@@ -64,6 +60,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->sandbox = 'yes' === sanitize_text_field($this->get_option('sandbox')); // Use boolean
 		$this->public_key                 = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('public_key')) : sanitize_text_field($this->get_option('sandbox_public_key'));
 		$this->secret_key                = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('secret_key')) : sanitize_text_field($this->get_option('sandbox_secret_key'));
+
+		// Set SIP host based on mode
+		$this->dfinsell_set_sip_host($this->sandbox);
 
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'dfinsell_process_admin_options'));
@@ -130,9 +129,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	/**
 	 * Set the SIP host based on the mode.
 	 */
-	private function dfinsell_set_sip_host($mode)
+	private function dfinsell_set_sip_host($sandbox)
 	{
-		$this->sip_host = ($mode === 'live') ? self::SIP_HOST_LIVE : self::SIP_HOST_SANDBOX;
+		$this->sip_host = ($sandbox) ? self::SIP_HOST_SANDBOX : self::SIP_HOST_LIVE;
 	}
 
 	/**
@@ -148,6 +147,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 */
 	public function dfinsell_get_form_fields()
 	{
+
+		// Check if sandbox mode is enabled and set the host accordingly
+		$this->dfinsell_set_sip_host($this->sandbox);
+
 		$form_fields = array(
 			'enabled' => array(
 				'title' => __('Enable/Disable', 'dfinsell-payment-gateway'),
@@ -178,7 +181,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'description' => sprintf(
 					/* translators: %1$s is a link to the developer account. %2$s is used for any additional formatting if necessary. */
 					__('To configure this gateway, %1$sGet your API keys from your merchant account: Developer Settings > API Keys.%2$s', 'dfinsell-payment-gateway'),
-					'<strong><a href="' . esc_url($this->sip_host . '/developers') . '" target="_blank">' . __('click here to access your developer account', 'dfinsell-payment-gateway') . '</a></strong><br>',
+					'<strong><a class="dfinsell-instructions-url" href="' . esc_url($this->sip_host . '/developers') . '" target="_blank">' . __('click here to access your developer account', 'dfinsell-payment-gateway') . '</a></strong><br>',
 					''
 				),
 				'desc_tip' => true,
@@ -262,6 +265,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			return;
 		}
 
+		// Check if sandbox mode is enabled and set the host accordingly
+		$this->dfinsell_set_sip_host($this->sandbox);
+
 		// Check if sandbox mode is enabled
 		if ($this->sandbox) {
 			// Add a meta field to mark this order as a test order
@@ -297,6 +303,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			),
 			'sslverify' => true, // Ensure SSL verification
 		));
+
 
 		// Log the essential response data
 		if (is_wp_error($response)) {
@@ -352,9 +359,26 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			);
 		} else {
 			// Handle API error response
-			$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Unable to retrieve payment link.', 'woocommerce');
-			wc_add_notice(__('Payment error: ', 'woocommerce') . $error_message, 'error');
-			return array('result' => 'fail');
+			if (isset($response_data['status']) && $response_data['status'] === 'error') {
+				// Initialize an error message
+				$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Unable to retrieve payment link.', 'woocommerce');
+
+				// Check if there are validation errors and handle them
+				if (isset($response_data['errors']) && is_array($response_data['errors'])) {
+					// Loop through the errors and format them into a user-friendly message
+					foreach ($response_data['errors'] as $field => $field_errors) {
+						foreach ($field_errors as $error) {
+							// Append only the error message without the field name
+							$error_message .= ' : ' . sanitize_text_field($error);
+						}
+					}
+				}
+
+				// Add the error message to WooCommerce notices
+				wc_add_notice(__('Payment error: ', 'woocommerce') . $error_message, 'error');
+
+				return array('result' => 'fail');
+			}
 		}
 	}
 
@@ -614,6 +638,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Localize the script to pass parameters
 		wp_localize_script('dfinsell-admin-script', 'params', array(
 			'PAYMENT_CODE' => $this->id,
+			'SIP_HOST_SANDBOX' =>  $this->sip_protocol . self::SIP_HOST_SANDBOX,
+			'SIP_HOST_LIVE' =>  $this->sip_protocol . self::SIP_HOST_LIVE,
 		));
 	}
 }

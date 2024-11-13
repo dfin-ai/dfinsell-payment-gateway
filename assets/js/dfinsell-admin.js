@@ -6,25 +6,30 @@ jQuery(document).ready(function ($) {
   function toggleSandboxFields() {
     // Ensure PAYMENT_CODE is sanitized and valid
     if (PAYMENT_CODE) {
-      var sandboxChecked = $(
+      // Check if sandbox mode is enabled based on checkbox state
+      const sandboxChecked = $(
         '#woocommerce_' + $.escapeSelector(PAYMENT_CODE) + '_sandbox'
       ).is(':checked')
 
-      if (sandboxChecked) {
-        $('.' + $.escapeSelector(PAYMENT_CODE) + '-sandbox-keys')
-          .closest('tr')
-          .show()
-        $('.' + $.escapeSelector(PAYMENT_CODE) + '-production-keys')
-          .closest('tr')
-          .hide()
-      } else {
-        $('.' + $.escapeSelector(PAYMENT_CODE) + '-sandbox-keys')
-          .closest('tr')
-          .hide()
-        $('.' + $.escapeSelector(PAYMENT_CODE) + '-production-keys')
-          .closest('tr')
-          .show()
-      }
+      // Selectors for sandbox and production key fields
+      const sandboxSelector =
+        '.' + $.escapeSelector(PAYMENT_CODE) + '-sandbox-keys'
+      const productionSelector =
+        '.' + $.escapeSelector(PAYMENT_CODE) + '-production-keys'
+      const instructionsSelector = '.dfinsell-instructions-url'
+
+      // Show/hide sandbox and production key fields based on checkbox
+      $(sandboxSelector).closest('tr').toggle(sandboxChecked)
+      $(productionSelector).closest('tr').toggle(!sandboxChecked)
+
+      const baseUrl = sandboxChecked
+        ? params.SIP_HOST_SANDBOX
+        : params.SIP_HOST_LIVE
+
+      // Full URL for the developer page
+      const newUrl = baseUrl + '/developers'
+
+      $(instructionsSelector).attr('href', newUrl)
     }
   }
 
