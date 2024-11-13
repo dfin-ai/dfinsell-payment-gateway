@@ -368,8 +368,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	private function dfinsell_check_api_keys()
 	{
-		$public_key = sanitize_text_field($this->get_option('public_key'));
-		$secret_key = sanitize_text_field($this->get_option('secret_key'));
+		// Check if sandbox mode is enabled
+		$is_sandbox = $this->get_option('sandbox') === 'yes';
+
+		$secret_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_secret_key')) : sanitize_text_field($this->get_option('secret_key'));
+		$public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
 
 		// This method should only be called if no other errors exist
 		if (empty($public_key) && empty($secret_key)) {
