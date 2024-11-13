@@ -378,6 +378,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				wc_add_notice(__('Payment error: ', 'woocommerce') . $error_message, 'error');
 
 				return array('result' => 'fail');
+			} else {
+				// Add the error message to WooCommerce notices
+				wc_add_notice(__('Payment error: ', 'woocommerce') . $response_data['error'], 'error');
+				return array('result' => 'fail');
 			}
 		}
 	}
