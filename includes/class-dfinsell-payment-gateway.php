@@ -11,11 +11,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	const ID = 'dfinsell';
 
 	// Define constants for SIP URLs
-	const SIP_HOST_SANDBOX = 'sell-dev.dfin.ai'; // Sandbox SIP host
-	const SIP_HOST_LIVE = 'sell.dfin.ai'; // Live SIP host 
+	const SIP_HOST = 'sell.dfin.ai'; // Live SIP host 
 
 	private $sip_protocol; // Protocol (http:// or https://)
-	private $sip_host;     // Host without protocol
 
 	protected $sandbox;
 
@@ -60,9 +58,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->sandbox = 'yes' === sanitize_text_field($this->get_option('sandbox')); // Use boolean
 		$this->public_key                 = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('public_key')) : sanitize_text_field($this->get_option('sandbox_public_key'));
 		$this->secret_key                = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('secret_key')) : sanitize_text_field($this->get_option('sandbox_secret_key'));
-
-		// Set SIP host based on mode
-		$this->dfinsell_set_sip_host($this->sandbox);
 
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'dfinsell_process_admin_options'));
@@ -127,14 +122,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	}
 
 	/**
-	 * Set the SIP host based on the mode.
-	 */
-	private function dfinsell_set_sip_host($sandbox)
-	{
-		$this->sip_host = ($sandbox) ? self::SIP_HOST_SANDBOX : self::SIP_HOST_LIVE;
-	}
-
-	/**
 	 * Initialize gateway settings form fields.
 	 */
 	public function dfinsell_init_form_fields()
@@ -147,10 +134,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 */
 	public function dfinsell_get_form_fields()
 	{
-
-		// Check if sandbox mode is enabled and set the host accordingly
-		$this->dfinsell_set_sip_host($this->sandbox);
-
 		$form_fields = array(
 			'enabled' => array(
 				'title' => __('Enable/Disable', 'dfinsell-payment-gateway'),
@@ -181,7 +164,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'description' => sprintf(
 					/* translators: %1$s is a link to the developer account. %2$s is used for any additional formatting if necessary. */
 					__('To configure this gateway, %1$sGet your API keys from your merchant account: Developer Settings > API Keys.%2$s', 'dfinsell-payment-gateway'),
-					'<strong><a class="dfinsell-instructions-url" href="' . esc_url($this->sip_host . '/developers') . '" target="_blank">' . __('click here to access your developer account', 'dfinsell-payment-gateway') . '</a></strong><br>',
+					'<strong><a class="dfinsell-instructions-url" href="' . esc_url(self::SIP_HOST . '/developers') . '" target="_blank">' . __('click here to access your developer account', 'dfinsell-payment-gateway') . '</a></strong><br>',
 					''
 				),
 				'desc_tip' => true,
@@ -265,9 +248,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			return;
 		}
 
-		// Check if sandbox mode is enabled and set the host accordingly
-		$this->dfinsell_set_sip_host($this->sandbox);
-
 		// Check if sandbox mode is enabled
 		if ($this->sandbox) {
 			// Add a meta field to mark this order as a test order
@@ -281,7 +261,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$apiPath = '/api/request-payment';
 
 		// Concatenate the base URL and path
-		$url = $this->sip_protocol . $this->sip_host . $apiPath;
+		$url = $this->sip_protocol . self::SIP_HOST . $apiPath;
 
 		// Remove any double slashes in the URL except for the 'http://' or 'https://'
 		$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
@@ -641,9 +621,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Localize the script to pass parameters
 		wp_localize_script('dfinsell-admin-script', 'params', array(
-			'PAYMENT_CODE' => $this->id,
-			'SIP_HOST_SANDBOX' =>  $this->sip_protocol . self::SIP_HOST_SANDBOX,
-			'SIP_HOST_LIVE' =>  $this->sip_protocol . self::SIP_HOST_LIVE,
+			'PAYMENT_CODE' => $this->id
 		));
 	}
 }

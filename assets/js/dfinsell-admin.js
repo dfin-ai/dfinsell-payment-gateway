@@ -16,20 +16,10 @@ jQuery(document).ready(function ($) {
         '.' + $.escapeSelector(PAYMENT_CODE) + '-sandbox-keys'
       const productionSelector =
         '.' + $.escapeSelector(PAYMENT_CODE) + '-production-keys'
-      const instructionsSelector = '.dfinsell-instructions-url'
 
       // Show/hide sandbox and production key fields based on checkbox
       $(sandboxSelector).closest('tr').toggle(sandboxChecked)
       $(productionSelector).closest('tr').toggle(!sandboxChecked)
-
-      const baseUrl = sandboxChecked
-        ? params.SIP_HOST_SANDBOX
-        : params.SIP_HOST_LIVE
-
-      // Full URL for the developer page
-      const newUrl = baseUrl + '/developers'
-
-      $(instructionsSelector).attr('href', newUrl)
     }
   }
 

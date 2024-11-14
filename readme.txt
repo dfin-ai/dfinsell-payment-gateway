@@ -2,7 +2,7 @@
 Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
-Tested up to: 6.6
+Tested up to: 6.7
 Stable tag: 1.0.8
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
