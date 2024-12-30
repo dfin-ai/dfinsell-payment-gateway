@@ -1,9 +1,9 @@
-=== DFin Sell Payment Gateway ===
+=== DFin Sell Payment Gateway for WooCommerce ===
 Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.0.9
+Stable tag: 1.0.8
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -26,11 +26,6 @@ This plugin integrates DFin Sell Payment Gateway with WooCommerce, enabling you 
 Visit the DFin website and log in to your account. Navigate to Developer Settings to generate or retrieve API keys.
 
 == Changelog ==
-
-= 1.0.9 =
-* Added Transaction Limits Handling: Hides the payment gateway if the transaction amount exceeds the supported range or if the limit is not set.
-* Enhanced Error Messages: Included plugin version information in error messages for better troubleshooting.
-* Minor bug fixes and improvements.
 
 = 1.0.8 =
 * Added Mode Button: Introduced a mode selection button in the plugin settings, allowing users to switch between "Live" and "Test" modes for easier testing and production deployment.
@@ -65,10 +60,6 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
-
-= 1.0.9 =
-* Added Transaction Limits Handling: Now, the plugin is hidden if the transaction amount exceeds the supported range or if the limit is not set.
-* Enhanced Error Messages: Plugin version information is included in error messages to help with troubleshooting.
 
 = 1.0.8 =
 * Added Mode Button: Switch between "Live" and "Test" modes directly in plugin settings for safer testing and smoother deployment to production.
