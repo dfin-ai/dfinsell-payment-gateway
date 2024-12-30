@@ -3,6 +3,9 @@ if (!defined('ABSPATH')) {
 	exit; // Exit if accessed directly.
 }
 
+// Include the configuration file
+require_once plugin_dir_path(__FILE__) . 'config.php';
+
 /**
  * Class DFINSELL_PAYMENT_GATEWAY_Loader
  * Handles the loading and initialization of the DFin Sell Payment Gateway plugin.
@@ -11,7 +14,10 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 {
 	private static $instance = null;
 	private $admin_notices;
-
+	
+	private $sip_protocol;
+    private $sip_host;
+	
 	/**
 	 * Get the singleton instance of this class.
 	 * @return DFINSELL_PAYMENT_GATEWAY_Loader
@@ -24,11 +30,16 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		return self::$instance;
 	}
 
+
 	/**
 	 * Constructor. Sets up actions and hooks.
 	 */
 	private function __construct()
 	{
+
+		$this->sip_protocol = SIP_PROTOCOL;
+        $this->sip_host = SIP_HOST;
+
 		$this->admin_notices = new DFINSELL_PAYMENT_GATEWAY_Admin_Notices();
 
 		add_action('admin_init', [$this, 'dfinsell_handle_environment_check']);
@@ -39,8 +50,12 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('wp_ajax_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
 		add_action('wp_ajax_nopriv_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
 
+		add_action('wp_ajax_popup_closed_event', array($this, 'handle_popup_close'));
+		add_action('wp_ajax_nopriv_popup_closed_event', array($this, 'handle_popup_close'));
+
 		register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_activation_check');
 	}
+	
 
 	/**
 	 * Initializes the plugin.
@@ -60,7 +75,6 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		// Initialize REST API
 		$rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
 		$rest_api->dfinsell_register_routes();
-		$rest_api->dfinsell_add_cors_support();
 
 		// Add plugin action links
 		add_filter('plugin_action_links_' . plugin_basename(DFINSELL_PAYMENT_GATEWAY_FILE), [$this, 'dfinsell_plugin_action_links']);
@@ -84,6 +98,13 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			$methods[] = 'DFINSELL_PAYMENT_GATEWAY';
 			return $methods;
 		});
+	}
+
+
+	private function get_api_url($endpoint)
+	{
+		$base_url = $this->sip_host;
+		return $this->sip_protocol . $base_url . $endpoint;
 	}
 
 	/**
@@ -139,7 +160,14 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	public function dfinsell_handle_check_payment_status_request($request)
 	{
 		// Verify nonce for security (recommended)
-		check_ajax_referer('dfinsell_nonce', 'security');
+		// Sanitize and unslash the 'security' value
+		$security = isset($_POST['security']) ? sanitize_text_field(wp_unslash($_POST['security'])) : '';
+
+		// Check the nonce for security
+		if (empty($security) || !wp_verify_nonce($security, 'dfinsell_payment')) {
+		    wp_send_json_error(['message' => 'Nonce verification failed.']);
+		    wp_die();
+		}
 
 		// Sanitize and validate the order ID from $_POST
 		$order_id = isset($_POST['order_id']) ? intval(sanitize_text_field(wp_unslash($_POST['order_id']))) : null;
@@ -178,4 +206,75 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		// Default to pending status
 		wp_send_json_success(['status' => 'pending']);
 	}
+
+	
+	public function handle_popup_close() {
+
+		// Sanitize and unslash the 'security' value
+		$security = isset($_POST['security']) ? sanitize_text_field(wp_unslash($_POST['security'])) : '';
+
+		// Check the nonce for security
+		if (empty($security) || !wp_verify_nonce($security, 'dfinsell_payment')) {
+		    wp_send_json_error(['message' => 'Nonce verification failed.']);
+		    wp_die();
+		}
+	
+		// Get the order ID from the request
+		$order_id = isset($_POST['order_id']) ? sanitize_text_field(wp_unslash($_POST['order_id'])) : null;
+	
+		// Validate order ID
+		if (!$order_id) {
+			wp_send_json_error(['message' => 'Order ID is missing.']);
+			wp_die();
+		}
+	
+		// Call third-party API to update status
+		$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status'); // Replace with the actual API URL
+		// Prepare data to send in API request
+		$response = wp_remote_post($transactionStatusApiUrl, [
+			'method'    => 'POST',
+			'body'      => wp_json_encode([
+				'order_id' => $order_id,
+				'status'   => 'updated', // Replace with the status you want to send
+			]),
+			'headers'   => [
+				'Content-Type'  => 'application/json',
+				'Authorization' => 'Bearer ' . $security, // Add your API key or authentication header
+			],
+			'timeout'   => 15,
+		]);
+	
+		// Check if the request was successful
+		if (is_wp_error($response)) {
+			wp_send_json_error(['message' => 'Failed to update third-party status.']);
+			wp_die();
+		}
+	
+		// Parse the response from the third-party API
+		$response_body = wp_remote_retrieve_body($response);
+		$response_data = json_decode($response_body, true);
+
+		// Handle the response from the third-party API (example: check if status is "success")
+		if (isset($response_data['status']) && $response_data['status'] === true) {
+			// Fetch the order in WordPress (WooCommerce order)
+			$order = wc_get_order($order_id); // Assuming you're using WooCommerce. If not, use appropriate WP functions.
+	
+			if ($order) {
+				// Update the order status in WooCommerce
+				$order->update_status($response_data['transaction_status'], 'Status updated from third-party API.');
+	
+				// Respond with success
+				wp_send_json_success(['message' => 'Popup closed and status updated successfully in WordPress.', 'order_id' => $order_id]);
+			} else {
+				wp_send_json_error(['message' => 'Order not found in WordPress.']);
+			}
+		} else {
+			// Respond with an error if the third-party update failed
+			wp_send_json_error(['message' => 'Failed to update status in third-party API.']);
+		}
+	
+		wp_die();
+	}
+	
+	
 }

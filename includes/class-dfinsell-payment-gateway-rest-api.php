@@ -24,34 +24,13 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 	public function dfinsell_register_routes()
 	{
+		// Log incoming request with sanitized parameters
 		add_action('rest_api_init', function () {
 			register_rest_route('dfinsell/v1', '/data', array(
 				'methods' => 'POST',
 				'callback' => array($this, 'dfinsell_handle_api_request'),
 				'permission_callback' => '__return_true',
 			));
-		});
-	}
-	public function dfinsell_add_cors_support()
-	{
-		// Handle CORS preflight requests
-		add_action('rest_api_init', function () {
-			if (isset($_SERVER['REQUEST_METHOD']) && sanitize_text_field(wp_unslash($_SERVER['REQUEST_METHOD'])) === 'OPTIONS') {
-				// Validate and set CORS headers
-				header('Access-Control-Allow-Origin: *');  // Be cautious about using '*' in production, restrict it to specific origins if needed.
-				header('Access-Control-Allow-Methods: POST, OPTIONS');
-				header('Access-Control-Allow-Headers: Content-Type, Authorization');
-				header('Access-Control-Max-Age: 86400'); // Caching preflight request for 24 hours
-				exit;
-			}
-		});
-
-		// Set CORS headers for regular requests
-		add_action('rest_api_init', function () {
-			// Validate and set CORS headers
-			header('Access-Control-Allow-Origin: *');  // Be cautious about using '*' in production, restrict it to specific origins if needed.
-			header('Access-Control-Allow-Methods: POST, OPTIONS');
-			header('Access-Control-Allow-Headers: Content-Type, Authorization');
 		});
 	}
 
@@ -84,7 +63,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$api_order_status = isset($parameters['order_status']) ? sanitize_text_field($parameters['order_status']) : '';
 
 		// Log incoming request with sanitized parameters
-		$this->logger->info('DFin Sell API Request Received: ' . print_r($parameters, true), array('source' => 'dfin_sell_payment_gateway'));
+		$this->logger->info('DFin Sell API Request Received: ' . wp_json_encode($parameters, true), array('source' => 'dfin_sell_payment_gateway'));
 
 		// Verify API key
 		if (!$this->dfinsell_verify_api_key(base64_decode($api_key))) {
@@ -125,7 +104,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			$order_status = $order->get_status();
 		}
 
-		$updated = $order->update_status($order_status, __('Order status updated via API', 'woocommerce'));
+		$updated = $order->update_status($order_status, __('Order status updated via API', 'dfinsell-payment-gateway'));
 
 		if (WC()->cart) {
 			// Remove cart
