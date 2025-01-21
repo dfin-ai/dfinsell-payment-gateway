@@ -3,4 +3,4 @@
 
 // Determine SIP protocol based on the site's protocol
 define('SIP_PROTOCOL', is_ssl() ? 'https://' : 'http://');
-define('SIP_HOST', 'sell.dfin.ai');
+define('SIP_HOST', 'sell.rtpay.co');

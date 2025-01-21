@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.0.9
+Stable tag: 1.1.0
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -21,11 +21,19 @@ This plugin integrates DFin Sell Payment Gateway with WooCommerce, enabling you 
 
 == Frequently Asked Questions ==
 
-= How do I obtain API keys? =
+### 1. Why was the domain changed in this update?
+The domain update reflects rebranding efforts to align the plugin with updated organizational and technical standards.
 
+### 2. Will my existing settings be preserved after updating?
+Yes, all your settings will be preserved during the update process.
+
+### 3. How do I obtain API keys?  
 Visit the DFin website and log in to your account. Navigate to Developer Settings to generate or retrieve API keys.
 
 == Changelog ==
+
+= 1.1.0 =
+* Updated plugin text domain for rebranding from `https://sell.dfin.ai/` to `https://sell.rtpay.co`.
 
 = 1.0.9 =
 * Added Transaction Limits Handling: Hides the payment gateway if the transaction amount exceeds the supported range or if the limit is not set.
@@ -65,6 +73,9 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.1.0 =
+* Updated plugin domain to align with rebranding (`https://sell.rtpay.co`).
 
 = 1.0.9 =
 * Added Transaction Limits Handling: Now, the plugin is hidden if the transaction amount exceeds the supported range or if the limit is not set.

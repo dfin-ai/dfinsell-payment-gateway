@@ -249,18 +249,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	public function process_payment($order_id)
 	{
 		global $woocommerce;
-
-		 // Prevent duplicate payment requests
-		//  $payment_processing_key = "payment_processing_{$order_id}";
-		//  if (get_transient($payment_processing_key)) {
-		// 	 // Payment is already being processed, return immediately
-		// 	 wc_add_notice(__('Payment is already being processed. Please wait.', 'dfinsell-payment-gateway'), 'error');
-		// 	 return array('result' => 'fail');
-		//  }
 	 
-		//  // Set the transient to lock the payment process for 5 minutes
-		//  set_transient($payment_processing_key, 'processing', 5 * MINUTE_IN_SECONDS);
-
 		// Ensure the 'REMOTE_ADDR' is set and then unslash it to remove any slashes
 		if (isset($_SERVER['REMOTE_ADDR'])) {
 			$ip_address = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])); // Unsheath the value
