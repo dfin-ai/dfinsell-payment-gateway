@@ -112,7 +112,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		}
 
 		if ($updated) {
-			$payment_return_url = esc_url_raw($order->get_checkout_order_received_url());
+			$payment_return_url = esc_url($order->get_checkout_order_received_url());
 			$this->logger->info('Order status updated successfully: ' . esc_html($order_id), array('source' => 'dfin_sell_payment_gateway'));
 			return new WP_REST_Response(['success' => true, 'message' => 'Order status updated successfully', 'payment_return_url' => $payment_return_url], 200);
 		} else {
