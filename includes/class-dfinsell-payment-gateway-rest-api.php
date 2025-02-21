@@ -12,10 +12,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	private $logger;
 	private static $instance = null;
 
-	private $sip_protocol;
-    private $sip_host;
-	private $base_domain;
-
 	public static function get_instance()
 	{
 		if (null === self::$instance) {
@@ -28,11 +24,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	{
 		// Initialize the logger
 		$this->logger = wc_get_logger();
-		$this->sip_protocol = SIP_PROTOCOL;
-        $this->sip_host = SIP_HOST;
-
-		 // Set base domain dynamically
-		 $this->base_domain = $this->sip_protocol . $this->sip_host;
 
 		   // Add CORS support
 		   add_action('rest_pre_serve_request', [$this, 'add_cors_headers']);
@@ -52,9 +43,17 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 	public function add_cors_headers()
     {
-        header("Access-Control-Allow-Origin: " . esc_url($this->base_domain));
-        header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
-        header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Authorization, x-firewall-token");
+        $allowed_origins = [
+			'https://www.bytecash.co',
+			'https://dev.simplepayments.org'
+		];
+	
+		if (isset($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowed_origins)) {
+			header("Access-Control-Allow-Origin: " . esc_url_raw($_SERVER['HTTP_ORIGIN']));
+		}
+	
+		header("Access-Control-Allow-Methods: POST, GET, OPTIONS");
+		header("Access-Control-Allow-Headers: X-Requested-With, Content-Type, Authorization, x-firewall-token");
     }
 
 	private function dfinsell_verify_api_key($api_key)
