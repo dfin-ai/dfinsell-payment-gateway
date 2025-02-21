@@ -42,17 +42,21 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	}
 
 	public function add_cors_headers()
-    {
-        header("Access-Control-Allow-Origin: *"); // Replace * with your frontend URL if needed
+	{
+	    $allowed_origin = 'https://www.bytecash.co';
+
+	    if (isset($_SERVER['HTTP_ORIGIN']) && $_SERVER['HTTP_ORIGIN'] === $allowed_origin) {
+	        header("Access-Control-Allow-Origin: " . $allowed_origin);
+	    }
+
 	    header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 	    header("Access-Control-Allow-Headers: Content-Type, Authorization, x-firewall-token");
 
-	    // ✅ Check if REQUEST_METHOD is set before using it
-	    if (isset($_SERVER['REQUEST_METHOD']) && $_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+	    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 	        status_header(200);
 	        exit();
 	    }
-    }
+	}
 
 	private function dfinsell_verify_api_key($api_key)
 	{
