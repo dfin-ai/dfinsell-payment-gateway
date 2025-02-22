@@ -3,10 +3,6 @@ if (!defined('ABSPATH')) {
 	exit; // Exit if accessed directly.
 }
 
-
-// Include the configuration file
-require_once plugin_dir_path(__FILE__) . 'config.php';
-
 class DFINSELL_PAYMENT_GATEWAY_REST_API
 {
 	private $logger;
@@ -24,9 +20,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	{
 		// Initialize the logger
 		$this->logger = wc_get_logger();
-
-		   // Add CORS support
-		   add_action('rest_pre_serve_request', [$this, 'add_cors_headers']);
 	}
 
 	public function dfinsell_register_routes()
@@ -39,23 +32,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 				'permission_callback' => '__return_true',
 			));
 		});
-	}
-
-	public function add_cors_headers()
-	{
-	    $allowed_origin = 'https://www.bytecash.co';
-
-	    if (isset($_SERVER['HTTP_ORIGIN']) && $_SERVER['HTTP_ORIGIN'] === $allowed_origin) {
-	        header("Access-Control-Allow-Origin: " . $allowed_origin);
-	    }
-
-	    header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-	    header("Access-Control-Allow-Headers: Content-Type, Authorization, x-firewall-token");
-
-	    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-	        status_header(200);
-	        exit();
-	    }
 	}
 
 	private function dfinsell_verify_api_key($api_key)
