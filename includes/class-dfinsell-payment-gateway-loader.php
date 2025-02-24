@@ -73,8 +73,13 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		$this->dfinsell_init_gateways();
 
 		// Initialize REST API
-		$rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
-		$rest_api->dfinsell_register_routes();
+		// $rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
+		// $rest_api->dfinsell_register_routes();
+
+		// ✅ Hook REST API initialization properly
+		add_action('rest_api_init', function () {
+			DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance()->dfinsell_register_routes();
+		});
 
 		// Add plugin action links
 		add_filter('plugin_action_links_' . plugin_basename(DFINSELL_PAYMENT_GATEWAY_FILE), [$this, 'dfinsell_plugin_action_links']);

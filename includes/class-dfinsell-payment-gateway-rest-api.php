@@ -20,18 +20,47 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	{
 		// Initialize the logger
 		$this->logger = wc_get_logger();
+
+		// Register API routes
+		add_action('rest_api_init', [$this, 'dfinsell_register_routes']);
+
+		// Add CORS headers
+		add_action('rest_pre_serve_request', [$this, 'add_cors_headers']);
 	}
 
+	/**
+	 * Registers the custom REST API route
+	 */
 	public function dfinsell_register_routes()
 	{
-		// Log incoming request with sanitized parameters
-		add_action('rest_api_init', function () {
-			register_rest_route('dfinsell/v1', '/data', array(
-				'methods' => 'POST',
-				'callback' => array($this, 'dfinsell_handle_api_request'),
-				'permission_callback' => '__return_true',
-			));
-		});
+		register_rest_route('dfinsell/v1', '/data', [
+			'methods'  => 'POST',
+			'callback' => [$this, 'dfinsell_handle_api_request'],
+			'permission_callback' => '__return_true',
+		]);
+	}
+
+	/**
+	 * Adds CORS headers to allow both 'https://www.bytecash.co' and 'https://bytecash.co'
+	 */
+	public function add_cors_headers()
+	{
+	    $allowed_origins = [
+	        'https://www.bytecash.co',
+	        'https://bytecash.co'
+	    ];
+
+	    if (!empty($_SERVER['HTTP_ORIGIN']) && in_array($_SERVER['HTTP_ORIGIN'], $allowed_origins, true)) {
+	        header("Access-Control-Allow-Origin: " . $_SERVER['HTTP_ORIGIN']);
+	        header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+	        header("Access-Control-Allow-Headers: Content-Type, Authorization, x-firewall-token");
+	    }
+
+	    // Handle preflight (OPTIONS) requests properly
+	    if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+	        status_header(200);
+	        exit();
+	    }
 	}
 
 	private function dfinsell_verify_api_key($api_key)
