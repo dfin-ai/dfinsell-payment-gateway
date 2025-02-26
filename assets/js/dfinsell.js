@@ -55,7 +55,7 @@ jQuery(function ($) {
 	e.preventDefault(); // Prevent the form from submitting if already in progress
 
 	  var $form = $(this);
-	      //$button = $(e.target);
+	   $button = $(e.target);
 	  // If a submission is already in progress, prevent further submissions
 	  if (isSubmitting) {
 		return false;
@@ -72,11 +72,11 @@ jQuery(function ($) {
 	  }
   
 	  // Disable the submit button immediately to prevent further clicks
-	 // if ($button.is('button[type="submit"], input[type="submit"]')) { 
+	  if ($button.is('button[type="submit"], input[type="submit"]')) { 
 	  $button = $form.find('button[type="submit"]');
 	  originalButtonText = $button.text();
 	  $button.prop('disabled', true).text('Processing...');
-	  //}
+	  }
   
 	  // Show loader
 	  $('.dfinsell-loader-background, .dfinsell-loader').show();
