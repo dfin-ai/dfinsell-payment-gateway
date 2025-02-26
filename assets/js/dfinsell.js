@@ -236,7 +236,7 @@ jQuery(function ($) {
   
 	function resetButton() {
 	  isSubmitting = false;
-	  if ($button) {
+	  if ($button && $button.length) {
 		$button.prop('disabled', false).text(originalButtonText);
 	  }
 	  $('.dfinsell-loader-background, .dfinsell-loader').hide();
