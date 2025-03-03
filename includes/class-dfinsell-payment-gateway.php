@@ -431,9 +431,12 @@ error_log('Settings: ' . print_r($settings, true));
 			}
 		}
 
-		// Prepare data for the API request
-		$data = $this->dfinsell_prepare_payment_data($order);
-
+		   // Get the current account
+		   $account = $this->get_next_account();
+		 $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+		 $secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
+			// Prepare data for the API request
+		$data = $this->dfinsell_prepare_payment_data($order,$public_key,$secret_key );
 		$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 
 		// Send the data to the API
@@ -642,16 +645,12 @@ error_log('Settings: ' . print_r($settings, true));
 		return rest_url('/dfinsell/v1/data');
 	}
 
-	private function dfinsell_prepare_payment_data($order)
+	private function dfinsell_prepare_payment_data($order, $api_public_key, $api_secret)
 	{
 		$order_id = $order->get_id(); // Validate order ID
 		// Check if sandbox mode is enabled
 		$is_sandbox = $this->get_option('sandbox') === 'yes';
-
-		// Use sandbox keys if sandbox mode is enabled, otherwise use live keys
-		$api_secret = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_secret_key')) : sanitize_text_field($this->get_option('secret_key'));
-		$api_public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
-
+		
 		// Sanitize and get the billing email or phone
 		$request_for = sanitize_email($order->get_billing_email() ?: $order->get_billing_phone());
 		// Get order details and sanitize
@@ -703,6 +702,7 @@ error_log('Settings: ' . print_r($settings, true));
 				);
 			}
 		}
+	
 
 		return array(
 			'api_secret'       => $api_secret, // Use sandbox or live secret key
@@ -726,6 +726,8 @@ error_log('Settings: ' . print_r($settings, true));
 			'billing_state' => $billing_state,
 			'is_sandbox' => $is_sandbox,
 		);
+	
+
 	}
 
 	// Helper function to get client IP address
@@ -887,46 +889,37 @@ error_log('Settings: ' . print_r($settings, true));
 			'PAYMENT_CODE' => $this->id
 		));
 	}
-
 	public function hide_custom_payment_gateway_conditionally($available_gateways) {
 		$gateway_id = self::ID;
 	
-		// Retrieve the current order's total using the WC_Cart object
 		if (is_checkout() && WC()->cart) {
 			$amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 	
-			$is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
-			$public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
+			// Get the current account
+			$account = $this->get_next_account();
+			
+			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
 	
 			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 	
 			$data = [
-				'is_sandbox' => $is_sandbox,
+				'is_sandbox' => $this->sandbox,
 				'amount'     => $amount,
+				'api_public_key' => $public_key,
 			];
 	
-			// Send the data to the API
-			$transaction_limit_response = wp_remote_post($transactionLimitApiUrl, array(
-				'method'    => 'POST',
-				'timeout'   => 30,
-				'body'      => $data,
-				'headers'   => array(
-					'Content-Type'  => 'application/x-www-form-urlencoded',
-					'Authorization' => 'Bearer ' . $public_key,
-				),
-				'sslverify' => true, // Ensure SSL verification
-			));
-	
-			$transaction_limit_response_body = wp_remote_retrieve_body($transaction_limit_response);
-			$transaction_limit_response_data = json_decode($transaction_limit_response_body, true);
+			// Use cached API response
+			$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
+			$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
 	
 			if (isset($transaction_limit_response_data['error'])) {
+				dfinsell_log('error', 'API returned an error: ' . $transaction_limit_response_data['error']);
 				unset($available_gateways[$gateway_id]);
 			}
 		}
 	
 		return $available_gateways;
-	}	
+	}
 
 
 
@@ -1136,6 +1129,57 @@ protected function sanitize_accounts($accounts) {
     }
 
     return $sanitized_accounts;
+}
+
+
+private function get_next_account() {
+    $accounts = $this->get_option('accounts', array());
+    $current_account_index = get_transient('dfinsell_current_account_index');
+
+    if ($current_account_index === false || $current_account_index >= count($accounts) - 1) {
+        $current_account_index = 0; // Reset to the first account
+    } else {
+        $current_account_index++; // Move to the next account
+    }
+
+	
+    // Save the current account index
+    set_transient('dfinsell_current_account_index', $current_account_index, DAY_IN_SECONDS);
+
+    return $accounts[$current_account_index];
+}
+
+private function get_cached_api_response($url, $data, $cache_key) {
+    // Check if the response is already cached
+    $cached_response = get_transient($cache_key);
+
+    if ($cached_response !== false) {
+        return $cached_response;
+    }
+
+    // Make the API call
+    $response = wp_remote_post($url, array(
+        'method'    => 'POST',
+        'timeout'   => 30,
+        'body'      => $data,
+        'headers'   => array(
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+            'Authorization' => 'Bearer ' . $data['api_public_key'],
+        ),
+        'sslverify' => true,
+    ));
+
+    if (is_wp_error($response)) {
+        return false;
+    }
+
+    $response_body = wp_remote_retrieve_body($response);
+    $response_data = json_decode($response_body, true);
+
+    // Cache the response for 5 minutes
+    set_transient($cache_key, $response_data, 5 * MINUTE_IN_SECONDS);
+
+    return $response_data;
 }
 
 
