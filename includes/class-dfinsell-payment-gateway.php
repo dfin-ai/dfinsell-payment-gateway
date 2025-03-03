@@ -75,6 +75,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		add_filter('woocommerce_admin_order_preview_line_items', array($this, 'dfinsell_add_custom_label_to_order_row'), 10, 2);
 
 		add_filter('woocommerce_available_payment_gateways',  array($this, 'hide_custom_payment_gateway_conditionally'));
+	
+	  // Add custom field rendering hook
+	  add_action('woocommerce_admin_field_dfinsell_key_pairs', array($this, 'render_key_pairs_field'));
+	
 	}
 
 	private function get_api_url($endpoint)
@@ -92,43 +96,117 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$enabled = sanitize_text_field($this->get_option('enabled'));
 		$is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
 
-		$secret_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_secret_key')) : sanitize_text_field($this->get_option('secret_key'));
-		$public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
+		//$accounts = $this->get_option('accounts', []);
 
+	
+		$existing_settings = get_option('woocommerce_dfinsell_settings', []);
+		$existing_accounts = isset($existing_settings['accounts']) ? $existing_settings['accounts'] : [];
+	
+		// Extract the new accounts data from POST
+		$new_accounts = isset($_POST['accounts']) ? $_POST['accounts'] : [];
+	
+		// Merge existing accounts with new accounts
+		if(is_array($existing_accounts)){
+		$all_accounts = array_merge($existing_accounts, $new_accounts);
+		}else{
+			$all_accounts =	$new_accounts ;
+		}
+		// Validate all accounts
+		$validation_errors = $this->validate_accounts($all_accounts);
 		// Initialize error tracking
 		$errors = array();
 
 		// Check for Title
 		if (empty($title)) {
 			$errors[] = __('Title is required. Please enter a title in the settings.', 'dfinsell-payment-gateway');
-		}
+			}
+	// If validation fails, display the error and stop saving
 
-		// Check for Public Key
-		if (empty($public_key)) {
-			$errors[] = __('Public Key is required. Please enter your Public Key in the settings.', 'dfinsell-payment-gateway');
-		}
 
-		// Check for Secret Key
-		if (empty($secret_key)) {
-			$errors[] = __('Secret Key is required. Please enter your Secret Key in the settings.', 'dfinsell-payment-gateway');
-		}
+	 // If there are validation errors, display them
+	 if (!empty($validation_result['errors'])) {
+	
+        foreach ($validation_result['errors'] as $error) {
+			$errors[] = $error;
+        }
+     
+    }
 
+	
 		// Check API Keys only if there are no other errors
 		if (empty($errors)) {
 			$api_key_error = $this->dfinsell_check_api_keys();
+			
 			if ($api_key_error) {
 				$errors[] = $api_key_error;
 			}
 		}
 
+		
 		// Display all errors
 		if (!empty($errors)) {
 			foreach ($errors as $error) {
 				$this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
 			}
+		
 			add_action('admin_notices', array($this->admin_notices, 'display_notices'));
+		}else{
+			
+			// Save accounts
+			$accounts = isset($_POST['accounts']) ? $this->sanitize_accounts($_POST['accounts']) : [];
+			$settings = get_option('woocommerce_dfinsell_settings', array());
+			$settings['accounts'] = $accounts;
+			update_option('woocommerce_dfinsell_settings', $settings);
 		}
 	}
+	
+
+/*
+	public function process_admin_options() {
+		echo "Dddd";exit;
+		// Retrieve all POST data
+		$post_data = $this->get_post_data();
+	print_r($post_data );exit;
+		// Extract the accounts data from POST
+		$accounts = isset($post_data['accounts']) ? $post_data['accounts'] : [];
+	
+		// Validate all accounts
+		$validation_result = $this->validate_accounts($accounts);
+	
+		// If validation fails, display the error and stop saving
+		if ($validation_result !== true) {
+			$this->add_error($validation_result);
+			$this->display_errors();
+			return;
+		}
+	
+		// Sanitize the accounts
+		$sanitized_accounts = $this->sanitize_accounts($accounts);
+	
+		// Prepare the settings array
+		$settings = [
+			'enabled' => isset($post_data['enabled']) ? sanitize_text_field($post_data['enabled']) : 'no',
+			'title' => isset($post_data['title']) ? sanitize_text_field($post_data['title']) : '',
+			'description' => isset($post_data['description']) ? sanitize_textarea_field($post_data['description']) : '',
+			'instructions' => isset($post_data['instructions']) ? sanitize_textarea_field($post_data['instructions']) : '',
+			'accounts' => $sanitized_accounts,
+			'order_status' => isset($post_data['order_status']) ? sanitize_text_field($post_data['order_status']) : 'processing',
+			'show_consent_checkbox' => isset($post_data['show_consent_checkbox']) ? sanitize_text_field($post_data['show_consent_checkbox']) : 'no',
+		];
+
+	
+	
+		// Save the settings under the option key `woocommerce_dfinsell_settings`
+		update_option('woocommerce_dfinsell_settings', $settings);
+	
+		// Call the parent method to handle other WooCommerce settings
+		parent::process_admin_options();
+		error_log('POST Data: ' . print_r($_POST, true));
+error_log('Accounts Data: ' . print_r($accounts, true));
+error_log('Sanitized Accounts: ' . print_r($sanitized_accounts, true));
+error_log('Settings: ' . print_r($settings, true));
+	}
+	*/
 
 	/**
 	 * Initialize gateway settings form fields.
@@ -178,7 +256,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				),
 				'desc_tip' => true,
 			),
-			'sandbox' => array(
+			/*'sandbox' => array(
 				'title'       => __('Sandbox', 'dfinsell-payment-gateway'),
 				'label'       => __('Enable Sandbox Mode', 'dfinsell-payment-gateway'),
 				'type'        => 'checkbox',
@@ -215,6 +293,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'desc_tip' => __('Enter your Secret Key obtained from your merchant account.', 'dfinsell-payment-gateway'),
 				'class'       => 'dfinsell-production-keys', // Add class for JS handling
 			),
+			*/
+			'accounts' => [
+				'title' => __('Accounts', 'dfinsell-payment-gateway'),
+				'type' => 'dfinsell_accounts', // Custom field type
+				'description' => __('Add multiple accounts with sandbox and live API keys.', 'dfinsell-payment-gateway'),
+				'default' => [],
+				//'html' => $this->get_key_pair_html('sandbox'),
+			],
+		
 			'order_status' => array(
 				'title' => __('Order Status', 'dfinsell-payment-gateway'),
 				'type' => 'select',
@@ -493,7 +580,42 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 	}
 
-	private function dfinsell_check_api_keys()
+
+	private function dfinsell_check_api_keys() {
+		// Retrieve the accounts from the settings
+		$accounts = $this->get_option('accounts', []);
+	
+		// Check if sandbox mode is enabled
+		$is_sandbox = $this->get_option('sandbox') === 'yes';
+	
+		// Initialize an array to store validation errors
+		$errors = [];
+	
+		// Loop through each account and validate its keys
+		foreach ($accounts as $index => $account) {
+			// Determine which keys to check based on sandbox mode
+			$public_key = $is_sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+			$secret_key = $is_sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
+	
+			// Validate the keys for the current account
+			if (isset($public_key)) {
+				$errors[] = sprintf(__('Secret Key is required for Account %d. Please enter your Secret Key.', 'dfinsell-payment-gateway'), $index + 1);
+			}
+			if (isset($secret_key)) {
+				$errors[] = sprintf(__('Secret Key is required for Account %d. Please enter your Secret Key.', 'dfinsell-payment-gateway'), $index + 1);
+			}
+		}
+	
+		// If there are validation errors, return them as a single string
+		if (!empty($errors)) {
+			return implode('<br>', $errors);
+		}
+	
+		// If no errors, return an empty string
+		return '';
+	}
+	
+	/*private function dfinsell_check_api_keys()
 	{
 		// Check if sandbox mode is enabled
 		$is_sandbox = $this->get_option('sandbox') === 'yes';
@@ -511,6 +633,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 		return '';
 	}
+
+	*/
 
 
 	private function dfinsell_get_return_url_base()
@@ -754,7 +878,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		if ('woocommerce_page_wc-settings' !== $hook) {
 			return; // Only load on WooCommerce settings page
 		}
-
+		error_log('Enqueuing admin scripts and styles'); // Debugging
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
@@ -803,4 +927,216 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	
 		return $available_gateways;
 	}	
+
+
+
+
+public function render_key_pairs_field($data)
+{
+	error_log('Rendering key pairs field for mode: ' . $field['id']); // Debugging
+    // Ensure the 'id' key exists in the $data array
+    if (!isset($data['id'])) {
+        error_log('Missing "id" key in $data array'); // Debugging
+        return;
+    }
+
+    $mode = str_replace('_keys', '', $data['id']); // Extract mode (sandbox or live)
+    $key_pairs = $this->get_option($data['id'], []); // Retrieve saved key pairs
+	echo $this->get_key_pair_html($mode);
+ 
+}
+
+private function get_key_pair_html($mode)
+{
+	error_log('get_key_pair_html'); // Debugging
+	
+	ob_start();
+    ?>
+<div class="dfinsell-accounts-container">
+    <div class="dfinsell-account-template">
+        <h4><?php echo esc_html(__('Account 1', 'dfinsell-payment-gateway')); ?></h4>
+        <input type="text" 
+               name="accounts[0][title]" 
+               placeholder="<?php echo esc_attr(__('Account Title', 'dfinsell-payment-gateway')); ?>">
+
+        <h5><?php echo esc_html(__('Sandbox Keys', 'dfinsell-payment-gateway')); ?></h5>
+        <input type="text" 
+               name="accounts[0][sandbox_public_key]" 
+               placeholder="<?php echo esc_attr(__('Sandbox Public Key', 'dfinsell-payment-gateway')); ?>">
+        <input type="text" 
+               name="accounts[0][sandbox_secret_key]" 
+               placeholder="<?php echo esc_attr(__('Sandbox Secret Key', 'dfinsell-payment-gateway')); ?>">
+
+        <h5><?php echo esc_html(__('Live Keys', 'dfinsell-payment-gateway')); ?></h5>
+        <input type="text" 
+               name="accounts[0][live_public_key]" 
+               placeholder="<?php echo esc_attr(__('Live Public Key', 'dfinsell-payment-gateway')); ?>">
+        <input type="text" 
+               name="accounts[0][live_secret_key]" 
+               placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>">
+
+        <button class="button dfinsell-remove-account">Remove</button>
+    </div>
+    <button class="button dfinsell-add-account">Add Account</button>
+</div>
+    <?php
+    return ob_get_clean();
+}
+
+public function generate_dfinsell_accounts_html($key, $data) {
+    $field_key = $this->get_field_key($key);
+    $defaults = array(
+        'title' => '',
+        'type' => 'text',
+        'id' => $key,
+    );
+    $data = wp_parse_args($data, $defaults);
+
+    ob_start();
+    ?>
+    <tr valign="top">
+        <th scope="row" class="titledesc">
+            <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
+        </th>
+        <td class="forminp">
+            <?php echo $this->render_accounts_field($data); ?>
+        </td>
+    </tr>
+    <?php
+    return ob_get_clean();
+}
+
+public function render_accounts_field($data) {
+    $accounts = $this->get_option('accounts', []);
+    if (empty($accounts)) {
+        $accounts = [
+            [
+                'title' => '',
+                'sandbox_public_key' => '',
+                'sandbox_secret_key' => '',
+                'live_public_key' => '',
+                'live_secret_key' => '',
+            ],
+        ];
+    }
+
+    ob_start();
+    ?>
+    <div class="dfinsell-accounts-container">
+        <?php foreach ($accounts as $index => $account) : ?>
+            <div class="dfinsell-account">
+                <h4><?php echo esc_html(sprintf(__('Account %d', 'dfinsell-payment-gateway'), $index + 1)); ?></h4>
+                <input type="text" 
+                       name="accounts[<?php echo esc_attr($index); ?>][title]" 
+                       placeholder="<?php echo esc_attr(__('Account Title', 'dfinsell-payment-gateway')); ?>" 
+                       value="<?php echo esc_attr($account['title']); ?>">
+
+                <h5><?php echo esc_html(__('Sandbox Keys', 'dfinsell-payment-gateway')); ?></h5>
+                <input type="text" 
+                       name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]" 
+                       placeholder="<?php echo esc_attr(__('Sandbox Public Key', 'dfinsell-payment-gateway')); ?>" 
+                       value="<?php echo esc_attr($account['sandbox_public_key']); ?>">
+                <input type="text" 
+                       name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]" 
+                       placeholder="<?php echo esc_attr(__('Sandbox Secret Key', 'dfinsell-payment-gateway')); ?>" 
+                       value="<?php echo esc_attr($account['sandbox_secret_key']); ?>">
+
+                <h5><?php echo esc_html(__('Live Keys', 'dfinsell-payment-gateway')); ?></h5>
+                <input type="text" 
+                       name="accounts[<?php echo esc_attr($index); ?>][live_public_key]" 
+                       placeholder="<?php echo esc_attr(__('Live Public Key', 'dfinsell-payment-gateway')); ?>" 
+                       value="<?php echo esc_attr($account['live_public_key']); ?>">
+                <input type="text" 
+                       name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]" 
+                       placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>" 
+                       value="<?php echo esc_attr($account['live_secret_key']); ?>">
+
+                <button class="button dfinsell-remove-account">Remove</button>
+            </div>
+        <?php endforeach; ?>
+        <button class="button dfinsell-add-account">Add Account</button>
+    </div>
+    <?php
+    return ob_get_clean();
+}
+
+
+/**
+ * Validate an individual account.
+ *
+ * @param array $account The account data to validate.
+ * @param int $index The index of the account (for error messages).
+ * @return bool|string True if valid, error message if invalid.
+ */
+protected function validate_account($account, $index) {
+    $is_empty = empty($account['title']) && empty($account['sandbox_public_key']) && empty($account['sandbox_secret_key']) && empty($account['live_public_key']) && empty($account['live_secret_key']);
+    $is_filled = !empty($account['title']) && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']) && !empty($account['live_public_key']) && !empty($account['live_secret_key']);
+
+    if (!$is_empty && !$is_filled) {
+        return sprintf(__('Account %d is invalid. Please fill all fields or leave the account empty.', 'dfinsell-payment-gateway'), $index + 1);
+    }
+
+    return true;
+}
+
+/**
+ * Validate all accounts.
+ *
+ * @param array $accounts The list of accounts to validate.
+ * @return bool|string True if valid, error message if invalid.
+ */
+protected function validate_accounts($accounts) {
+    $valid_accounts = [];
+    $errors = [];
+
+    foreach ($accounts as $index => $account) {
+        // Check if the account is completely empty
+        $is_empty = empty($account['title']) && empty($account['sandbox_public_key']) && empty($account['sandbox_secret_key']) && empty($account['live_public_key']) && empty($account['live_secret_key']);
+
+        // Check if the account is completely filled
+        $is_filled = !empty($account['title']) && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']) && !empty($account['live_public_key']) && !empty($account['live_secret_key']);
+
+        // If the account is neither empty nor fully filled, it's invalid
+        if (!$is_empty && !$is_filled) {
+            $errors[] = sprintf(__('Account %d is invalid. Please fill all fields or leave the account empty.', 'dfinsell-payment-gateway'), $index + 1);
+        } elseif ($is_filled) {
+            // If the account is fully filled, add it to the valid accounts array
+            $valid_accounts[] = $account;
+        }
+    }
+
+    // If there are validation errors, return them
+    if (!empty($errors)) {
+        return ['errors' => $errors, 'valid_accounts' => $valid_accounts];
+    }
+
+    // If no errors, return the valid accounts
+    return ['valid_accounts' => $valid_accounts];
+}
+
+/**
+ * Sanitize account data.
+ *
+ * @param array $accounts The list of accounts to sanitize.
+ * @return array The sanitized accounts.
+ */
+protected function sanitize_accounts($accounts) {
+    $sanitized_accounts = [];
+
+    foreach ($accounts as $account) {
+        if (!empty($account['title']) && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']) && !empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
+            $sanitized_accounts[] = [
+                'title' => sanitize_text_field($account['title']),
+                'sandbox_public_key' => sanitize_text_field($account['sandbox_public_key']),
+                'sandbox_secret_key' => sanitize_text_field($account['sandbox_secret_key']),
+                'live_public_key' => sanitize_text_field($account['live_public_key']),
+                'live_secret_key' => sanitize_text_field($account['live_secret_key']),
+            ];
+        }
+    }
+
+    return $sanitized_accounts;
+}
+
+
 }
