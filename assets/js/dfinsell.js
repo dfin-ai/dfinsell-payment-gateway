@@ -55,7 +55,12 @@ jQuery(function ($) {
 	e.preventDefault(); // Prevent the form from submitting if already in progress
 
 	  var $form = $(this);
-	   $button = $(e.target);
+	  var $clickedButton = $(document.activeElement); // Get the actual button clicked
+	// Ensure the clicked button is the "Place Order" button
+    if (!$clickedButton.is("#place_order")) {
+        return true; // Allow other buttons to work normally
+    }
+  
 	  // If a submission is already in progress, prevent further submissions
 	  if (isSubmitting) {
 		return false;
@@ -70,13 +75,9 @@ jQuery(function ($) {
 		isSubmitting = false; // Reset the flag if not using the custom payment method
 		return true; // Allow default WooCommerce behavior
 	  }
-  
-	  // Disable the submit button immediately to prevent further clicks
-	  if ($button.is('button[type="submit"], input[type="submit"]')) { 
-	  $button = $form.find('button[type="submit"]');
-	  originalButtonText = $button.text();
-	  $button.prop('disabled', true).text('Processing...');
-	  }
+    // Store the button reference globally
+      window.lastClickedButton = $clickedButton;
+	  $clickedButton.prop("disabled", true).text("Processing...");
   
 	  // Show loader
 	  $('.dfinsell-loader-background, .dfinsell-loader').show();
@@ -99,7 +100,6 @@ jQuery(function ($) {
 		  },
 		});
 
-	  e.preventDefault(); // Prevent default form submission
 	  return false;
 	}
   
@@ -219,7 +219,7 @@ jQuery(function ($) {
 		},
 		500
 	  );
-	  resetButton();
+	  resetButton(window.lastClickedButton);
 	}
   
 	function displayError(err, $form) {
@@ -231,16 +231,19 @@ jQuery(function ($) {
 		},
 		500
 	  );
-	  resetButton();
+	  resetButton(window.lastClickedButton);
 	}
   
-	function resetButton() {
-	  isSubmitting = false;
-	  if ($button && $button.length) {
-		$button.prop('disabled', false).text(originalButtonText);
-	  }
-	  $('.dfinsell-loader-background, .dfinsell-loader').hide();
+	function resetButton($clickedButton) {
+		isSubmitting = false;
+		
+		if ($clickedButton && $clickedButton.length) { // Ensure the button is valid
+			$clickedButton.prop("disabled", false).text("Place Order");
+		} else {
+			console.error("resetButton: $clickedButton is undefined or empty.");
+		}
+	
+		$(".dfinsell-loader-background, .dfinsell-loader").hide();
 	}
-  
   });
   
