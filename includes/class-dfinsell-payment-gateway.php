@@ -256,14 +256,14 @@ error_log('Settings: ' . print_r($settings, true));
 				),
 				'desc_tip' => true,
 			),
-			/*'sandbox' => array(
+			'sandbox' => array(
 				'title'       => __('Sandbox', 'dfinsell-payment-gateway'),
 				'label'       => __('Enable Sandbox Mode', 'dfinsell-payment-gateway'),
 				'type'        => 'checkbox',
 				'description' => __('Place the payment gateway in sandbox mode using sandbox API keys (real payments will not be taken).', 'dfinsell-payment-gateway'),
 				'default'     => 'no',
 			),
-			'sandbox_public_key'  => array(
+			/*'sandbox_public_key'  => array(
 				'title'       => __('Sandbox Public Key', 'dfinsell-payment-gateway'),
 				'type'        => 'text',
 				'description' => __('Get your API keys from your merchant account: Account Settings > API Keys.', 'dfinsell-payment-gateway'),
@@ -589,7 +589,8 @@ error_log('Settings: ' . print_r($settings, true));
 		$accounts = $this->get_option('accounts', []);
 	
 		// Check if sandbox mode is enabled
-		$is_sandbox = $this->get_option('sandbox') === 'yes';
+		$is_sandbox =  $this->get_option('sandbox') === 'yes';
+
 	
 		// Initialize an array to store validation errors
 		$errors = [];
@@ -649,7 +650,8 @@ error_log('Settings: ' . print_r($settings, true));
 	{
 		$order_id = $order->get_id(); // Validate order ID
 		// Check if sandbox mode is enabled
-		$is_sandbox = $this->get_option('sandbox') === 'yes';
+		$is_sandbox =  $this->get_option('sandbox') === 'yes';
+
 		
 		// Sanitize and get the billing email or phone
 		$request_for = sanitize_email($order->get_billing_email() ?: $order->get_billing_phone());
