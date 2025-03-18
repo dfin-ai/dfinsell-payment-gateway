@@ -114,11 +114,11 @@ jQuery(function ($) {
 		'paymentPopup',
 		'width=' + width + ',height=' + height + ',scrollbars=yes,top=' + top + ',left=' + left
 	  );
-  
+	  resetButton(window.lastClickedButton);
 	  if (!popupWindow || popupWindow.closed || typeof popupWindow.closed === 'undefined') {
 		// Redirect to the payment link if popup was blocked
 		window.location.href = sanitizedPaymentLink;
-		resetButton();
+		resetButton(window.lastClickedButton);
 	  } else {
 		popupInterval = setInterval(function () {
 		  if (popupWindow.closed) {
@@ -151,7 +151,7 @@ jQuery(function ($) {
 					console.error("AJAX Error: ", error);
 				},
 				complete:function(){
-					resetButton();
+					resetButton(window.lastClickedButton);
 				}
 			});
 		  }
