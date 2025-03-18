@@ -4,7 +4,7 @@ jQuery(function ($) {
 	var paymentStatusInterval; // Interval ID for checking payment status
 	var orderId; // To store the order ID
 	var $button; // To store reference to the submit button
-	var originalButtonText; // To store original button text
+	var originalButtonText=""; // To store original button text
 	var isPollingActive = false; // Flag to ensure only one polling interval runs
 	let isHandlerBound = false;
 
@@ -75,8 +75,13 @@ jQuery(function ($) {
 		isSubmitting = false; // Reset the flag if not using the custom payment method
 		return true; // Allow default WooCommerce behavior
 	  }
+	  if (!originalButtonText) {
+		originalButtonText = $clickedButton.text();
+		console.log(originalButtonText,'originalButtonText');
+	   }
     // Store the button reference globally
       window.lastClickedButton = $clickedButton;
+	  console.log(window.lastClickedButton,'window.lastClickedButton');
 	  $clickedButton.prop("disabled", true).text("Processing...");
   
 	  // Show loader
@@ -238,7 +243,8 @@ jQuery(function ($) {
 		isSubmitting = false;
 		
 		if ($clickedButton && $clickedButton.length) { // Ensure the button is valid
-			$clickedButton.prop("disabled", false).text("Place Order");
+			$clickedButton.prop("disabled", false).text(originalButtonText || "Place Order"); // Restore original text
+			originalButtonText = ""; // Reset the stored text for future submissions
 		} else {
 			console.error("resetButton: $clickedButton is undefined or empty.");
 		}
