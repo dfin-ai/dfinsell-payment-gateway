@@ -203,7 +203,7 @@ jQuery(function ($) {
 	  try {
 		if (response.result === 'success') {
 		  orderId = response.order_id;
-		  var paymentLink = response.payment_link;
+		  var paymentLink = response.redirect;
 		  openPaymentLink(paymentLink);
 		  $form.removeAttr('data-result');
 		  $form.removeAttr('data-redirect-url');
