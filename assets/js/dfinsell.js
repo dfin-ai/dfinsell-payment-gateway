@@ -119,7 +119,7 @@ jQuery(function ($) {
 		'paymentPopup',
 		'width=' + width + ',height=' + height + ',scrollbars=yes,top=' + top + ',left=' + left
 	  );
-	  resetButton(window.lastClickedButton);
+	 // resetButton(window.lastClickedButton);
 	  if (!popupWindow || popupWindow.closed || typeof popupWindow.closed === 'undefined') {
 		// Redirect to the payment link if popup was blocked
 		window.location.href = sanitizedPaymentLink;
