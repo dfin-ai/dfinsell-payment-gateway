@@ -23,6 +23,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $sandbox_public_key;
 
 	private $admin_notices;
+	private $accounts = [];
+	private $current_account_index = 0;
+	private $used_accounts = [];
 
 	/**
 	 * Constructor.
@@ -60,6 +63,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->public_key                 = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('public_key')) : sanitize_text_field($this->get_option('sandbox_public_key'));
 		$this->secret_key                = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('secret_key')) : sanitize_text_field($this->get_option('sandbox_secret_key'));
 
+		$this->accounts = $this->get_option('accounts', array());
+        $this->current_account_index = 0;
+		
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'dfinsell_process_admin_options'));
 
@@ -76,8 +82,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		add_filter('woocommerce_available_payment_gateways',  array($this, 'hide_custom_payment_gateway_conditionally'));
 	
-	  // Add custom field rendering hook
-	  add_action('woocommerce_admin_field_dfinsell_key_pairs', array($this, 'render_key_pairs_field'));
 	
 	}
 
@@ -336,6 +340,7 @@ error_log('Settings: ' . print_r($settings, true));
 	public function process_payment($order_id)
 	{
 		global $woocommerce;
+	
 
 		 // Prevent duplicate payment requests
 		//  $payment_processing_key = "payment_processing_{$order_id}";
@@ -404,6 +409,12 @@ error_log('Settings: ' . print_r($settings, true));
 			wc_add_notice(__('Invalid order. Please try again.', 'dfinsell-payment-gateway'), 'error');
 			return;
 		}
+		$account = $this->get_next_account();
+
+        if (!$account) {
+            wc_add_notice(__('No available payment accounts.', 'woocommerce'), 'error');
+            return array('result' => 'fail');
+        }
 
 		// Check if sandbox mode is enabled
 		if ($this->sandbox) {
@@ -433,8 +444,9 @@ error_log('Settings: ' . print_r($settings, true));
 
 		   // Get the current account
 		   $account = $this->get_next_account();
-		 $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
-		 $secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
+		   $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+		   $secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
+   
 			// Prepare data for the API request
 		$data = $this->dfinsell_prepare_payment_data($order,$public_key,$secret_key );
 		$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
@@ -457,12 +469,21 @@ error_log('Settings: ' . print_r($settings, true));
 
 		if (isset($transaction_limit_response_data['error'])) {
 			// Display error message to the user
-			wc_add_notice(
+			/*wc_add_notice(
 				__('Payment error: ', 'dfinsell-payment-gateway') . "Dfin Sell payment method is currently unavailable. Please contact support for assistance.",
 				'error'
 			);
 
-			return array('result' => 'fail');
+			return array('result' => 'fail'); */
+
+			wc_get_logger()->warning('Daily limit reached, switching account.', array('source' => 'dfin_sell_payment_gateway'));
+           
+            if ($this->switch_account()) {
+				return $this->process_payment($order_id);
+			} else {
+				wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . 'All account reached the limit', 'error');
+				return ['result' => 'fail'];
+			}
 		}
 
 		$apiPath = '/api/request-payment';
@@ -603,7 +624,7 @@ error_log('Settings: ' . print_r($settings, true));
 	
 			// Validate the keys for the current account
 			if (isset($public_key)) {
-				$errors[] = sprintf(__('Secret Key is required for Account %d. Please enter your Secret Key.', 'dfinsell-payment-gateway'), $index + 1);
+				$errors[] = sprintf(__('Public  Key is required for Account %d. Please enter your Public ret Key.', 'dfinsell-payment-gateway'), $index + 1);
 			}
 			if (isset($secret_key)) {
 				$errors[] = sprintf(__('Secret Key is required for Account %d. Please enter your Secret Key.', 'dfinsell-payment-gateway'), $index + 1);
@@ -897,35 +918,53 @@ error_log('Settings: ' . print_r($settings, true));
 		if (is_checkout() && WC()->cart) {
 			$amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 	
-			// Get the current account
-			$account = $this->get_next_account();
-			
-			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+			// Ensure get_all_accounts() exists
+			if (!method_exists($this, 'get_all_accounts')) {
+				wc_get_logger()->error('Method get_all_accounts() is missing!', ['source' => 'dfin_sell_payment_gateway']);
+				return $available_gateways;
+			}
 	
-			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
+			$accounts = $this->get_all_accounts();
+			if (empty($accounts)) {
+				wc_get_logger()->warning('No accounts available.', ['source' => 'dfin_sell_payment_gateway']);
+				return $available_gateways;
+			}
 	
-			$data = [
-				'is_sandbox' => $this->sandbox,
-				'amount'     => $amount,
-				'api_public_key' => $public_key,
-			];
+			$all_accounts_limited = true;
 	
-			// Use cached API response
-			$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
-			$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
+			foreach ($accounts as $account) {
+				$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+				$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 	
-			if (isset($transaction_limit_response_data['error'])) {
-				dfinsell_log('error', 'API returned an error: ' . $transaction_limit_response_data['error']);
+				$data = [
+					'is_sandbox' => $this->sandbox,
+					'amount' => $amount,
+					'api_public_key' => $public_key,
+				];
+	
+				$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
+				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
+	
+				if (!isset($transaction_limit_response_data['error'])) {
+					$all_accounts_limited = false;
+					break;
+				}
+			}
+	
+			if ($all_accounts_limited) {
+				wc_get_logger()->warning('All accounts have exceeded transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
 				unset($available_gateways[$gateway_id]);
 			}
 		}
 	
 		return $available_gateways;
 	}
+	
+	
+	
 
 
-
-
+/*
 public function render_key_pairs_field($data)
 {
 	error_log('Rendering key pairs field for mode: ' . $field['id']); // Debugging
@@ -977,7 +1016,7 @@ private function get_key_pair_html($mode)
     <?php
     return ob_get_clean();
 }
-
+*/
 public function generate_dfinsell_accounts_html($key, $data) {
     $field_key = $this->get_field_key($key);
     $defaults = array(
@@ -1019,29 +1058,35 @@ public function render_accounts_field($data) {
     ?>
     <div class="dfinsell-accounts-container">
         <?php foreach ($accounts as $index => $account) : ?>
-            <div class="dfinsell-account">
-                <h4><?php echo esc_html(sprintf(__('Account %d', 'dfinsell-payment-gateway'), $index + 1)); ?></h4>
-                <input type="text" 
+			<div class="dfinsell-account <?php echo $account['active'] == '1' ? 'active-account' : 'inactive-account'; ?>">
+       
+                <h4><?php echo esc_html(sprintf(__('Account %d', 'dfinsell-payment-gateway'), $index + 1)); ?> <?php 
+    			  $is_active = isset($account['status']) && $account['status'] == 'true';
+   				 ?>
+	<?php if ($is_active) : ?>
+                <span class="active-indicator" style="color: green; font-weight: bold;"> ✅ Active</span>
+            <?php endif; ?></h4>
+                <input type="text"  class="account-title"
                        name="accounts[<?php echo esc_attr($index); ?>][title]" 
                        placeholder="<?php echo esc_attr(__('Account Title', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['title']); ?>">
 
                 <h5><?php echo esc_html(__('Sandbox Keys', 'dfinsell-payment-gateway')); ?></h5>
-                <input type="text" 
+                <input type="text" class="sandbox-public-key"
                        name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]" 
                        placeholder="<?php echo esc_attr(__('Sandbox Public Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['sandbox_public_key']); ?>">
-                <input type="text" 
+                <input type="text"  class="sandbox-secret-key"
                        name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]" 
                        placeholder="<?php echo esc_attr(__('Sandbox Secret Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['sandbox_secret_key']); ?>">
 
                 <h5><?php echo esc_html(__('Live Keys', 'dfinsell-payment-gateway')); ?></h5>
-                <input type="text" 
+                <input type="text"  class="live-public-key"
                        name="accounts[<?php echo esc_attr($index); ?>][live_public_key]" 
                        placeholder="<?php echo esc_attr(__('Live Public Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['live_public_key']); ?>">
-                <input type="text" 
+                <input type="text"  class="live-secret-key"
                        name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]" 
                        placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['live_secret_key']); ?>">
@@ -1118,14 +1163,20 @@ protected function validate_accounts($accounts) {
 protected function sanitize_accounts($accounts) {
     $sanitized_accounts = [];
 
-    foreach ($accounts as $account) {
+    foreach ($accounts as $index => &$account) {
         if (!empty($account['title']) && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']) && !empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
-            $sanitized_accounts[] = [
+            if ($index == 0) {
+				$active = 'true'; // First account active
+			} else {
+				$active = 'false'; // Other accounts inactive
+			}
+			$sanitized_accounts[] = [
                 'title' => sanitize_text_field($account['title']),
                 'sandbox_public_key' => sanitize_text_field($account['sandbox_public_key']),
                 'sandbox_secret_key' => sanitize_text_field($account['sandbox_secret_key']),
                 'live_public_key' => sanitize_text_field($account['live_public_key']),
                 'live_secret_key' => sanitize_text_field($account['live_secret_key']),
+				'status'=>$active,
             ];
         }
     }
@@ -1134,22 +1185,74 @@ protected function sanitize_accounts($accounts) {
 }
 
 
-private function get_next_account() {
-    $accounts = $this->get_option('accounts', array());
-    $current_account_index = get_transient('dfinsell_current_account_index');
 
-    if ($current_account_index === false || $current_account_index >= count($accounts) - 1) {
-        $current_account_index = 0; // Reset to the first account
-    } else {
-        $current_account_index++; // Move to the next account
+
+public function switch_account() {
+    if ($this->current_account) {
+        wc_get_logger()->info(
+            'Switching from account: ' . $this->current_account['title'],
+            ['source' => 'dfin_sell_payment_gateway']
+        );
+
+        // Store the used account title to prevent reuse
+        $this->used_accounts[] = $this->current_account['title'];
     }
 
-	
-    // Save the current account index
-    set_transient('dfinsell_current_account_index', $current_account_index, DAY_IN_SECONDS);
+    // Get the next available account
+    $new_account = $this->get_next_account();
 
-    return $accounts[$current_account_index];
+    // If no account is available, return an error
+    if (!$new_account) {
+        wc_get_logger()->error(
+            'All payment accounts have reached their limit. No more accounts available.',
+            ['source' => 'dfin_sell_payment_gateway']
+        );
+        wc_add_notice(
+            __('Payment temporarily unavailable. Please try again later.', 'dfinsell-payment-gateway'),
+            'error'
+        );
+
+        return false; // Stop further retries
+    }
+
+	// Load existing settings from WooCommerce
+    $settings = get_option('woocommerce_dfinsell_settings', []);
+
+    // Update account statuses
+    foreach ($settings['accounts'] as $index => &$account) {
+        if ($account['title'] === $new_account['title']) {
+            $account['status'] = "true"; // Activate this account
+        } else {
+            $account['status'] = "false"; // Deactivate all other accounts
+        }
+    }
+
+    // Save the updated settings
+    update_option('woocommerce_dfinsell_settings', $settings);
+    // Successfully switched to a new account
+    $this->current_account = $new_account;
+    wc_get_logger()->info(
+        'Switched to new account: ' . $this->current_account['title'],
+        ['source' => 'dfin_sell_payment_gateway']
+    );
+
+    return true;
 }
+
+
+private function get_next_account() {
+    $available_accounts = array_filter($this->accounts, function ($account) {
+        return !in_array($account['title'], $this->used_accounts);
+    });
+
+    if (empty($available_accounts)) {
+        return false; // No accounts left to switch to
+    }
+
+    // Pick the first available account
+    return reset($available_accounts);
+}
+
 
 private function get_cached_api_response($url, $data, $cache_key) {
     // Check if the response is already cached
@@ -1184,5 +1287,8 @@ private function get_cached_api_response($url, $data, $cache_key) {
     return $response_data;
 }
 
+private function get_all_accounts() {
+    return $this->accounts; // Assuming accounts are stored in this variable
+}
 
 }
