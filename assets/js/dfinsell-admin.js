@@ -98,7 +98,7 @@ jQuery(document).ready(function ($) {
   
       var $container = $('.dfinsell-accounts-container');
       var index = $container.find('.dfinsell-account').length;
-  
+      let isActive = index === 0;
       var html = `
         <div class="dfinsell-account">
            
@@ -106,14 +106,16 @@ jQuery(document).ready(function ($) {
             <input type="text" name="accounts[${index}][title]" class="account-title" placeholder="Account Title" required>
             
             <h5>Sandbox Keys</h5>
+            <div class="add-blog">
             <input type="text" name="accounts[${index}][sandbox_public_key]" class="sandbox-public-key" placeholder="Sandbox Public Key" required>
             <input type="text" name="accounts[${index}][sandbox_secret_key]" class="sandbox-secret-key" placeholder="Sandbox Secret Key" required>
-            
+            </div>
             <h5>Live Keys</h5>
+            <div class="add-blog">
             <input type="text" name="accounts[${index}][live_public_key]" class="live-public-key" placeholder="Live Public Key" required>
             <input type="text" name="accounts[${index}][live_secret_key]" class="live-secret-key" placeholder="Live Secret Key" required>
-            
-            <button class="button dfinsell-remove-account">Remove</button>
+            </div>
+               <button class="button dfinsell-remove-account"><span>-</span></button>
         </div>
       `;
   

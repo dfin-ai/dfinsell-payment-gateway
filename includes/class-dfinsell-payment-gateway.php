@@ -81,7 +81,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		add_filter('woocommerce_admin_order_preview_line_items', array($this, 'dfinsell_add_custom_label_to_order_row'), 10, 2);
 
 		add_filter('woocommerce_available_payment_gateways',  array($this, 'hide_custom_payment_gateway_conditionally'));
-	
+		add_action('woocommerce_init', [$this, 'reset_account_statuses_if_needed']);
+		//add_action('admin_enqueue_scripts', 'dfinsell_enqueue_admin_styles');
 	
 	}
 
@@ -907,18 +908,26 @@ error_log('Settings: ' . print_r($settings, true));
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
+		wp_enqueue_style(
+			'dfinsell-admin-style',
+			plugins_url('assets/css/admin-style.css', __DIR__), // This ensures correct path
+			[],
+			'1.0.0'
+		);
+		
 		// Localize the script to pass parameters
 		wp_localize_script('dfinsell-admin-script', 'params', array(
 			'PAYMENT_CODE' => $this->id
 		));
 	}
 	public function hide_custom_payment_gateway_conditionally($available_gateways) {
+		static $already_logged = false; // Prevent duplicate logging
+	
 		$gateway_id = self::ID;
 	
 		if (is_checkout() && WC()->cart) {
 			$amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 	
-			// Ensure get_all_accounts() exists
 			if (!method_exists($this, 'get_all_accounts')) {
 				wc_get_logger()->error('Method get_all_accounts() is missing!', ['source' => 'dfin_sell_payment_gateway']);
 				return $available_gateways;
@@ -952,13 +961,17 @@ error_log('Settings: ' . print_r($settings, true));
 			}
 	
 			if ($all_accounts_limited) {
-				wc_get_logger()->warning('All accounts have exceeded transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
+				if (!$already_logged) { // Only log once per request
+					wc_get_logger()->warning('All accounts have exceeded transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
+					$already_logged = true;
+				}
 				unset($available_gateways[$gateway_id]);
 			}
 		}
 	
 		return $available_gateways;
 	}
+	
 	
 	
 	
@@ -1072,6 +1085,7 @@ public function render_accounts_field($data) {
                        value="<?php echo esc_attr($account['title']); ?>">
 
                 <h5><?php echo esc_html(__('Sandbox Keys', 'dfinsell-payment-gateway')); ?></h5>
+				<div class="add-blog">
                 <input type="text" class="sandbox-public-key"
                        name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]" 
                        placeholder="<?php echo esc_attr(__('Sandbox Public Key', 'dfinsell-payment-gateway')); ?>" 
@@ -1080,8 +1094,9 @@ public function render_accounts_field($data) {
                        name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]" 
                        placeholder="<?php echo esc_attr(__('Sandbox Secret Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['sandbox_secret_key']); ?>">
-
+				</div>
                 <h5><?php echo esc_html(__('Live Keys', 'dfinsell-payment-gateway')); ?></h5>
+				<div class="add-blog">
                 <input type="text"  class="live-public-key"
                        name="accounts[<?php echo esc_attr($index); ?>][live_public_key]" 
                        placeholder="<?php echo esc_attr(__('Live Public Key', 'dfinsell-payment-gateway')); ?>" 
@@ -1090,11 +1105,17 @@ public function render_accounts_field($data) {
                        name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]" 
                        placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['live_secret_key']); ?>">
-
-                <button class="button dfinsell-remove-account">Remove</button>
+				</div>
+					   <button class="button dfinsell-remove-account"><span>-</span></button>
             </div>
+
+
+			
         <?php endforeach; ?>
-        <button class="button dfinsell-add-account">Add Account</button>
+       
+		<div class="add-account-btn">
+            <button class="button dfinsell-add-account"><span>+</span> Add Acoount</button>
+        </div>
     </div>
     <?php
     return ob_get_clean();
@@ -1290,5 +1311,44 @@ private function get_cached_api_response($url, $data, $cache_key) {
 private function get_all_accounts() {
     return $this->accounts; // Assuming accounts are stored in this variable
 }
+
+
+public function reset_account_statuses() {
+    $settings = get_option('woocommerce_dfinsell_settings', []);
+
+    if (!isset($settings['accounts']) || empty($settings['accounts'])) {
+        wc_get_logger()->warning('No accounts found in settings for reset.', ['source' => 'dfin_sell_payment_gateway']);
+        return;
+    }
+
+    // Activate first account, deactivate others
+    foreach ($settings['accounts'] as $index => &$account) {
+        $account['status'] = ($index === 0) ? "true" : "false";
+    }
+
+    update_option('woocommerce_dfinsell_settings', $settings);
+    wc_get_logger()->info('Daily reset: First account activated, others deactivated.', ['source' => 'dfin_sell_payment_gateway']);
+}
+
+public function reset_account_statuses_if_needed() {
+    $last_reset = get_option('dfinsell_last_reset', '');
+    $current_date = gmdate('Y-m-d'); // Use UTC date
+
+    if ($last_reset !== $current_date) {
+        $this->reset_account_statuses(); // Reset accounts
+        update_option('dfinsell_last_reset', $current_date); // Update last reset date
+    }
+}
+
+
+function dfinsell_enqueue_admin_styles($hook) {
+    // Load only on WooCommerce settings pages
+    if (strpos($hook, 'woocommerce') === false) {
+        return;
+    }
+
+    wp_enqueue_style('dfinsell-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '1.0.0');
+}
+
 
 }
