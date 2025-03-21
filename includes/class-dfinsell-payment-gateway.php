@@ -1075,10 +1075,10 @@ public function render_accounts_field($data) {
        
                 <h4><?php echo esc_html(sprintf(__('Account %d', 'dfinsell-payment-gateway'), $index + 1)); ?> <?php 
     			  $is_active = isset($account['status']) && $account['status'] == 'true';
-   				 ?>
-	<?php if ($is_active) : ?>
-                <span class="active-indicator" style="color: green; font-weight: bold;"> ✅ Active</span>
-            <?php endif; ?></h4>
+					?>
+				<?php if ($is_active) : ?>
+					<span class="active-indicator"> Active</span>
+				<?php endif; ?></h4>
                 <input type="text"  class="account-title"
                        name="accounts[<?php echo esc_attr($index); ?>][title]" 
                        placeholder="<?php echo esc_attr(__('Account Title', 'dfinsell-payment-gateway')); ?>" 
@@ -1105,18 +1105,18 @@ public function render_accounts_field($data) {
                        name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]" 
                        placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['live_secret_key']); ?>">
-				</div>
 					   <button class="button dfinsell-remove-account"><span>-</span></button>
+				</div>
             </div>
 
 
 			
         <?php endforeach; ?>
        
-		<div class="add-account-btn">
-            <button class="button dfinsell-add-account"><span>+</span> Add Acoount</button>
-        </div>
     </div>
+	<div class="add-account-btn">
+		<button class="button dfinsell-add-account"><span>+</span> Add Acoount</button>
+	</div>
     <?php
     return ob_get_clean();
 }

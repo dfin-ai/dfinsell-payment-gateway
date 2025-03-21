@@ -114,8 +114,8 @@ jQuery(document).ready(function ($) {
             <div class="add-blog">
             <input type="text" name="accounts[${index}][live_public_key]" class="live-public-key" placeholder="Live Public Key" required>
             <input type="text" name="accounts[${index}][live_secret_key]" class="live-secret-key" placeholder="Live Secret Key" required>
+            <button class="button dfinsell-remove-account"><span>-</span></button>
             </div>
-               <button class="button dfinsell-remove-account"><span>-</span></button>
         </div>
       `;
   

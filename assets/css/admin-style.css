@@ -1,20 +1,17 @@
-.dfinsell-accounts-container{
-    margin: 10px 30px;
-}
+
 .add-blog{
-    display: flex ;
+    display: flex !important;
     align-items: center;
-    flex-wrap: wrap;
 }
 .dfinsell-accounts-container input{
-    padding: 8px 10px;
+    padding: 8px 10px !important;
     border-radius: 5px;
     border: 1px solid #cfcfcf;
     font-size: 15px;
     color: #000;
-    margin-bottom: 6px;
-    height: 22px !important;
-    margin-right: 8px;
+    min-height: 22px !important;
+    margin-bottom: 6px !important;
+    margin-right: 8px !important;
 }
 .dfinsell-accounts-container h4{
     font-size: 20px;
@@ -34,18 +31,31 @@
     margin: 0;
 }
 .dfinsell-remove-account{
-    background: #F5F5F5;
+    background: #c2c0c02b !important;
     border: 1px solid #e3e3e3 !important;
-    border-radius: 5px;
-    color: #757575;
-    width: 39.6px;
-    height: 39.6px;
-    margin-bottom: 6px;
+    border-radius: 5px !important;
+    color: #000 !important;
+    width: 47.6px;
+    height: 47.6px;
+    margin-bottom: 6px !important;
 }
 .dfinsell-remove-account{
-    font-size: 20px;
+    font-size: 20px !important;
 }
 .add-account-btn .dfinsell-add-account{
+    border-radius: 5px;
+    background: #0A0B21;
+    color: #F5F5F5;
+    font-size: 16px;
+    margin: 25px 0;
+    max-width: 204px;
+    width: 100%;
+    padding: 11px;
+    border: 1px solid #0A0B21;
+    height: 42px;
+    line-height: 21px;
+}
+.add-account-btn .dfinsell-add-account:hover{
     border-radius: 5px;
     background: #0A0B21;
     color: #F5F5F5;
@@ -61,4 +71,12 @@
 .add-account-btn .dfinsell-add-account span{
     font-size: 19px;
     line-height: 12px;    
+}
+
+.dfinsell-accounts-container .active-indicator{
+    font-size: 15px;
+    color: #66BB6A;
+    background: #E8F5E9;
+    border-radius: 5px;
+    padding: 4px 16px;
 }
