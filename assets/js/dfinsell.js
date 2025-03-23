@@ -4,7 +4,7 @@ jQuery(function ($) {
 	var paymentStatusInterval; // Interval ID for checking payment status
 	var orderId; // To store the order ID
 	var $button; // To store reference to the submit button
-	var originalButtonText=""; // To store original button text
+	var originalButtonText; // To store original button text
 	var isPollingActive = false; // Flag to ensure only one polling interval runs
 	let isHandlerBound = false;
 
@@ -55,11 +55,6 @@ jQuery(function ($) {
 	e.preventDefault(); // Prevent the form from submitting if already in progress
 
 	  var $form = $(this);
-	  var $clickedButton = $(document.activeElement); // Get the actual button clicked
-	// Ensure the clicked button is the "Place Order" button
-    if (!$clickedButton.is("#place_order")) {
-        return true; // Allow other buttons to work normally
-    }
   
 	  // If a submission is already in progress, prevent further submissions
 	  if (isSubmitting) {
@@ -75,14 +70,11 @@ jQuery(function ($) {
 		isSubmitting = false; // Reset the flag if not using the custom payment method
 		return true; // Allow default WooCommerce behavior
 	  }
-	  if (!originalButtonText) {
-		originalButtonText = $clickedButton.text();
-		console.log(originalButtonText,'originalButtonText');
-	   }
-    // Store the button reference globally
-      window.lastClickedButton = $clickedButton;
-	  console.log(window.lastClickedButton,'window.lastClickedButton');
-	  $clickedButton.prop("disabled", true).text("Processing...");
+  
+	  // Disable the submit button immediately to prevent further clicks
+	  $button = $form.find('button[type="submit"]');
+	  originalButtonText = $button.text();
+	  $button.prop('disabled', true).text('Processing...');
   
 	  // Show loader
 	  $('.dfinsell-loader-background, .dfinsell-loader').show();
@@ -105,6 +97,7 @@ jQuery(function ($) {
 		  },
 		});
 
+	  e.preventDefault(); // Prevent default form submission
 	  return false;
 	}
   
@@ -119,11 +112,11 @@ jQuery(function ($) {
 		'paymentPopup',
 		'width=' + width + ',height=' + height + ',scrollbars=yes,top=' + top + ',left=' + left
 	  );
-	 // resetButton(window.lastClickedButton);
+  
 	  if (!popupWindow || popupWindow.closed || typeof popupWindow.closed === 'undefined') {
 		// Redirect to the payment link if popup was blocked
 		window.location.href = sanitizedPaymentLink;
-		resetButton(window.lastClickedButton);
+		resetButton();
 	  } else {
 		popupInterval = setInterval(function () {
 		  if (popupWindow.closed) {
@@ -156,7 +149,7 @@ jQuery(function ($) {
 					console.error("AJAX Error: ", error);
 				},
 				complete:function(){
-					resetButton(window.lastClickedButton);
+					resetButton();
 				}
 			});
 		  }
@@ -203,7 +196,7 @@ jQuery(function ($) {
 	  try {
 		if (response.result === 'success') {
 		  orderId = response.order_id;
-		  var paymentLink = response.redirect;
+		  var paymentLink = response.payment_link;
 		  openPaymentLink(paymentLink);
 		  $form.removeAttr('data-result');
 		  $form.removeAttr('data-redirect-url');
@@ -224,7 +217,7 @@ jQuery(function ($) {
 		},
 		500
 	  );
-	  resetButton(window.lastClickedButton);
+	  resetButton();
 	}
   
 	function displayError(err, $form) {
@@ -236,20 +229,16 @@ jQuery(function ($) {
 		},
 		500
 	  );
-	  resetButton(window.lastClickedButton);
+	  resetButton();
 	}
   
-	function resetButton($clickedButton) {
-		isSubmitting = false;
-		
-		if ($clickedButton && $clickedButton.length) { // Ensure the button is valid
-			$clickedButton.prop("disabled", false).text(originalButtonText || "Place Order"); // Restore original text
-			originalButtonText = ""; // Reset the stored text for future submissions
-		} else {
-			console.error("resetButton: $clickedButton is undefined or empty.");
-		}
-	
-		$(".dfinsell-loader-background, .dfinsell-loader").hide();
+	function resetButton() {
+	  isSubmitting = false;
+	  if ($button) {
+		$button.prop('disabled', false).text(originalButtonText);
+	  }
+	  $('.dfinsell-loader-background, .dfinsell-loader').hide();
 	}
+  
   });
   

@@ -450,7 +450,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			// Return a success result without redirecting
 			return array(
-				'redirect' => esc_url($response_data['data']['payment_link']),
+				'payment_link' => esc_url($response_data['data']['payment_link']),
 				'result'   => 'success',
 			);
 		} else {
