@@ -339,201 +339,162 @@ error_log('Settings: ' . print_r($settings, true));
 	 * @return array
 	 */
 	public function process_payment($order_id)
-	{
-		global $woocommerce;
-	
+{
+    global $woocommerce;
 
-		 // Prevent duplicate payment requests
-		//  $payment_processing_key = "payment_processing_{$order_id}";
-		//  if (get_transient($payment_processing_key)) {
-		// 	 // Payment is already being processed, return immediately
-		// 	 wc_add_notice(__('Payment is already being processed. Please wait.', 'dfinsell-payment-gateway'), 'error');
-		// 	 return array('result' => 'fail');
-		//  }
-	 
-		//  // Set the transient to lock the payment process for 5 minutes
-		//  set_transient($payment_processing_key, 'processing', 5 * MINUTE_IN_SECONDS);
+    // Prevent duplicate payment requests
 
-		// Ensure the 'REMOTE_ADDR' is set and then unslash it to remove any slashes
-		if (isset($_SERVER['REMOTE_ADDR'])) {
-			$ip_address = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])); // Unsheath the value
-		} else {
-			$ip_address = ''; // Fallback if REMOTE_ADDR is not set
-		}
+	// Ensure the 'REMOTE_ADDR' is set and then unslash it to remove any slashes
+	if (isset($_SERVER['REMOTE_ADDR'])) {
+		$ip_address = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])); // Unsheath the value
+	} else {
+		$ip_address = ''; // Fallback if REMOTE_ADDR is not set
+	}
+    if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
+        $ip_address = 'invalid';
+    }
 
-		// Validate the IP address format (IPv4 or IPv6)
-		if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
-			$ip_address = 'invalid'; // Or handle it however you see fit
-		}
+    // Rate limiting
+    $window_size = 30; // 30 seconds
+    $max_requests = 5;
+    $timestamp = time();
+    $timestamp_key = "rate_limit_{$ip_address}_timestamps";
+    $request_timestamps = get_transient($timestamp_key) ?: [];
+	if (!$request_timestamps) {
+		$request_timestamps = [];
+	}
 
-		// Rate-limiting configuration
-		$window_size = 30; // 30 seconds
-		$max_requests = 5;  // Max 5 requests in the last 30 seconds
+	// Remove timestamps older than the last $window_size seconds
+	$request_timestamps = array_filter($request_timestamps, function ($ts) use ($timestamp, $window_size) {
+		return ($timestamp - $ts <= $window_size);
+	});
 
-		// Get the current timestamp
-		$timestamp = time();
+	// Count the requests within the window
+	$request_count = count($request_timestamps);
 
-		// Retrieve stored timestamps of previous requests
-		$timestamp_key = "rate_limit_{$ip_address}_timestamps";
-		$request_timestamps = get_transient($timestamp_key);
+	// If request count exceeds limit, block the user
+	if ($request_count >= $max_requests) {
+		wc_add_notice(__('You are sending too many requests. Please try again later.', 'dfinsell-payment-gateway'), 'error');
+		return array('result' => 'fail');
+	}
 
-		if (!$request_timestamps) {
-			$request_timestamps = [];
-		}
+	// Add the current timestamp to the request list
+	$request_timestamps[] = $timestamp;
+	set_transient($timestamp_key, $request_timestamps, $window_size); // Store for $window_size seconds
 
-		// Remove timestamps older than the last $window_size seconds
-		$request_timestamps = array_filter($request_timestamps, function ($ts) use ($timestamp, $window_size) {
-			return ($timestamp - $ts <= $window_size);
-		});
+	// Log suspicious activity
+	if ($request_count >= $max_requests - 1) {
+		wc_get_logger()->info('Suspicious activity detected from IP: ' . $ip_address, array('source' => 'dfinsell-payment-gateway'));
+	}
 
-		// Count the requests within the window
-		$request_count = count($request_timestamps);
+	// Validate and sanitize order ID
+	$order = wc_get_order($order_id);
+	if (!$order) {
+		wc_add_notice(__('Invalid order. Please try again.', 'dfinsell-payment-gateway'), 'error');
+		return;
+	}
+	// Get the currently active account
+    $account = $this->get_current_active_account();
+    if (!$account) {
+        wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
+        return ['result' => 'fail'];
+    }
+	if ($this->sandbox) {
+		// Get existing order notes
+		$args = [
+		  'post_id' => $order->get_id(),
+		  'approve' => 'approve',
+		  'type'    => 'order_note',
+	  ];
+	  $notes = get_comments($args);
+  
+	  // Check if the note already exists
+	  $note_exists = false;
+	  foreach ($notes as $note) {
+		  if ($note->comment_content === __('This is a test order in sandbox mode.', 'dfinsell-payment-gateway')) {
+			  $note_exists = true;
+			  break;
+		  }
+	  }
+  
+	  // Add the meta field and note only if it doesn't already exist
+	  if (!$note_exists) {
+		  $order->update_meta_data('_is_test_order', true);
+		  $order->add_order_note(__('This is a test order in sandbox mode.', 'dfinsell-payment-gateway'));
+	  }
+  }
 
-		// If request count exceeds limit, block the user
-		if ($request_count >= $max_requests) {
-			wc_add_notice(__('You are sending too many requests. Please try again later.', 'dfinsell-payment-gateway'), 'error');
-			return array('result' => 'fail');
-		}
 
-		// Add the current timestamp to the request list
-		$request_timestamps[] = $timestamp;
-		set_transient($timestamp_key, $request_timestamps, $window_size); // Store for $window_size seconds
+    $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+    $secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
 
-		// Log suspicious activity
-		if ($request_count >= $max_requests - 1) {
-			wc_get_logger()->info('Suspicious activity detected from IP: ' . $ip_address, array('source' => 'dfinsell-payment-gateway'));
-		}
+    $data = $this->dfinsell_prepare_payment_data($order, $public_key, $secret_key);
+    $transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 
-		// Validate and sanitize order ID
-		$order = wc_get_order($order_id);
-		if (!$order) {
-			wc_add_notice(__('Invalid order. Please try again.', 'dfinsell-payment-gateway'), 'error');
-			return;
-		}
-		$account = $this->get_next_account();
+    $transaction_limit_response = wp_remote_post($transactionLimitApiUrl, [
+        'method'    => 'POST',
+        'timeout'   => 30,
+        'body'      => $data,
+        'headers'   => [
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+            'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
+        ],
+        'sslverify' => true,
+    ]);
 
-        if (!$account) {
-            wc_add_notice(__('No available payment accounts.', 'woocommerce'), 'error');
-            return array('result' => 'fail');
+    $transaction_limit_response_body = wp_remote_retrieve_body($transaction_limit_response);
+    $transaction_limit_response_data = json_decode($transaction_limit_response_body, true);
+
+    if (isset($transaction_limit_response_data['error'])) {
+        wc_get_logger()->error('Account limit reached: ' . $transaction_limit_response_data['error'], ['source' => 'dfin_sell_payment_gateway']);
+
+        if ($this->switch_account()) {
+            return $this->process_payment($order_id);
+        } else {
+            wc_add_notice(__('All accounts reached the limit.', 'dfinsell-payment-gateway'), 'error');
+            return ['result' => 'fail'];
         }
+    }
 
-		// Check if sandbox mode is enabled
-		if ($this->sandbox) {
-			  // Get existing order notes
-			  $args = [
-				'post_id' => $order->get_id(),
-				'approve' => 'approve',
-				'type'    => 'order_note',
-			];
-			$notes = get_comments($args);
-		
-			// Check if the note already exists
-			$note_exists = false;
-			foreach ($notes as $note) {
-				if ($note->comment_content === __('This is a test order in sandbox mode.', 'dfinsell-payment-gateway')) {
-					$note_exists = true;
-					break;
-				}
-			}
-		
-			// Add the meta field and note only if it doesn't already exist
-			if (!$note_exists) {
-				$order->update_meta_data('_is_test_order', true);
-				$order->add_order_note(__('This is a test order in sandbox mode.', 'dfinsell-payment-gateway'));
-			}
-		}
+    $apiPath = '/api/request-payment';
+    $url = esc_url(preg_replace('#(?<!:)//+#', '/', $this->sip_protocol . $this->sip_host . $apiPath));
 
-		   // Get the current account
-		   $account = $this->get_next_account();
-		   $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
-		   $secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
-   
-			// Prepare data for the API request
-		$data = $this->dfinsell_prepare_payment_data($order,$public_key,$secret_key );
-		$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
+    $order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
+    $order->save();
+	wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), array('source' => 'dfin_sell_payment_gateway'));
 
-		// Send the data to the API
-		$transaction_limit_response = wp_remote_post($transactionLimitApiUrl, array(
-			'method'    => 'POST',
-			'timeout'   => 30,
-			'body'      => $data,
-			'headers'   => array(
-				'Content-Type'  => 'application/x-www-form-urlencoded',
-				'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
-			),
-			'sslverify' => true, // Ensure SSL verification
-		));
+    $response = wp_remote_post($url, [
+        'method'    => 'POST',
+        'timeout'   => 30,
+        'body'      => $data,
+        'headers'   => [
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+            'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
+        ],
+        'sslverify' => true,
+    ]);
 
-		$transaction_limit_response_body = wp_remote_retrieve_body($transaction_limit_response);
-
-		$transaction_limit_response_data = json_decode($transaction_limit_response_body, true);
-
-		if (isset($transaction_limit_response_data['error'])) {
-			// Display error message to the user
-			/*wc_add_notice(
-				__('Payment error: ', 'dfinsell-payment-gateway') . "Dfin Sell payment method is currently unavailable. Please contact support for assistance.",
-				'error'
-			);
-
-			return array('result' => 'fail'); */
-
-			wc_get_logger()->warning('Daily limit reached, switching account.', array('source' => 'dfin_sell_payment_gateway'));
-           
-            if ($this->switch_account()) {
-				return $this->process_payment($order_id);
-			} else {
-				wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . 'All account reached the limit', 'error');
-				return ['result' => 'fail'];
-			}
-		}
-
-		$apiPath = '/api/request-payment';
-
-		// Concatenate the base URL and path
-		$url = $this->sip_protocol . $this->sip_host . $apiPath;
-
-		// Remove any double slashes in the URL except for the 'http://' or 'https://'
-		$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
-
-		$order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
-		$order->save();
-
-		wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), array('source' => 'dfin_sell_payment_gateway'));
-
-		// Send the data to the API
-		$response = wp_remote_post($cleanUrl, array(
-			'method'    => 'POST',
-			'timeout'   => 30,
-			'body'      => $data,
-			'headers'   => array(
-				'Content-Type'  => 'application/x-www-form-urlencoded',
-				'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
-			),
-			'sslverify' => true, // Ensure SSL verification
-		));
-
-		// Log the essential response data
-		if (is_wp_error($response)) {
-			// Log the error message
-			wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfin_sell_payment_gateway'));
-			wc_add_notice(__('Payment error: Unable to process payment.', 'dfinsell-payment-gateway') . ' ' . $response->get_error_message(), 'error');
-			return array('result' => 'fail');
-		} else {
-			$response_code = wp_remote_retrieve_response_code($response);
-			$response_body = wp_remote_retrieve_body($response);
-
-			// Log the response code and body
-			wc_get_logger()->info(
+    if (is_wp_error($response)) {
+        wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfin_sell_payment_gateway'));
+		wc_add_notice(__('Payment error: Unable to process.', 'dfinsell-payment-gateway'), 'error');
+        return ['result' => 'fail'];
+    }
+	$response_code = wp_remote_retrieve_response_code($response);
+	$response_body = wp_remote_retrieve_body($response);
+   			// Log the response code and body
+			   wc_get_logger()->info(
 				sprintf('DFin Sell Payment Response: Code: %d, Body: %s', $response_code, $response_body),
 				array('source' => 'dfin_sell_payment_gateway')
 			);
-		}
-		$response_data = json_decode($response_body, true);
+	$response_data = json_decode($response_body, true);
+	
 
-		if (
-			isset($response_data['status']) && $response_data['status'] === 'success' &&
-			isset($response_data['data']['payment_link']) && !empty($response_data['data']['payment_link'])
-		) {
+    if (
+        isset($response_data['status']) && $response_data['status'] === 'success' &&
+        isset($response_data['data']['payment_link']) && !empty($response_data['data']['payment_link'])
+    ) {
+		$order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
+
 			// Update the order status
 			$order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
 
@@ -560,42 +521,38 @@ error_log('Settings: ' . print_r($settings, true));
 				);
 			}
 
-			// Return a success result without redirecting
-			return array(
-				'payment_link' => esc_url($response_data['data']['payment_link']),
-				'result'   => 'success',
-			);
-		} else {
-			// Handle API error response
-			if (isset($response_data['status']) && $response_data['status'] === 'error') {
-				// Initialize an error message
-				$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Unable to retrieve payment link.', 'dfinsell-payment-gateway');
+        return [
+            'payment_link' => esc_url($response_data['data']['payment_link']),
+            'result'   => 'success',
+        ];
+    } else {
+		// Handle API error response
+		if (isset($response_data['status']) && $response_data['status'] === 'error') {
+		// Initialize an error message
+		$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Unable to retrieve payment link.', 'dfinsell-payment-gateway');
 
-				// Check if there are validation errors and handle them
-				if (isset($response_data['errors']) && is_array($response_data['errors'])) {
-					// Loop through the errors and format them into a user-friendly message
-					foreach ($response_data['errors'] as $field => $field_errors) {
-						foreach ($field_errors as $error) {
-							// Append only the error message without the field name
-							$error_message .= ' : ' . sanitize_text_field($error);
-						}
-					}
+		// Check if there are validation errors and handle them
+		if (isset($response_data['errors']) && is_array($response_data['errors'])) {
+			// Loop through the errors and format them into a user-friendly message
+			foreach ($response_data['errors'] as $field => $field_errors) {
+				foreach ($field_errors as $error) {
+					// Append only the error message without the field name
+					$error_message .= ' : ' . sanitize_text_field($error);
 				}
-
-				// Add the error message to WooCommerce notices
-				wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . $error_message, 'error');
-
-				return array('result' => 'fail');
-			} else {
-				// Add the error message to WooCommerce notices
-				wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . $response_data['error'], 'error');
-				return array('result' => 'fail');
 			}
 		}
 
-		 // After payment process is complete (success or fail), remove the lock
-		 //delete_transient($payment_processing_key);
+		// Add the error message to WooCommerce notices
+		wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . $error_message, 'error');
+
+		return array('result' => 'fail');
+	} else {
+		// Add the error message to WooCommerce notices
+		wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . $response_data['error'], 'error');
+		return array('result' => 'fail');
 	}
+}
+}
 
 	// Display the "Test Order" tag in admin order details
 	public function dfinsell_display_test_order_tag($order)
@@ -921,8 +878,6 @@ error_log('Settings: ' . print_r($settings, true));
 		));
 	}
 	public function hide_custom_payment_gateway_conditionally($available_gateways) {
-		static $already_logged = false; // Prevent duplicate logging
-	
 		$gateway_id = self::ID;
 	
 		if (is_checkout() && WC()->cart) {
@@ -942,6 +897,9 @@ error_log('Settings: ' . print_r($settings, true));
 			$all_accounts_limited = true;
 	
 			foreach ($accounts as $account) {
+				if ($account['status'] === 'true') {
+					$active_account = $account;
+				}
 				$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
 				$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 	
@@ -961,16 +919,20 @@ error_log('Settings: ' . print_r($settings, true));
 			}
 	
 			if ($all_accounts_limited) {
-				if (!$already_logged) { // Only log once per request
+				// Prevent multiple logs per request by storing in WooCommerce session
+				if (!WC()->session->get('dfin_gateway_hidden_logged')) {
 					wc_get_logger()->warning('All accounts have exceeded transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
-					$already_logged = true;
+					WC()->session->set('dfin_gateway_hidden_logged', true);
 				}
 				unset($available_gateways[$gateway_id]);
+			} else {
+				WC()->session->set('dfin_gateway_hidden_logged', false); // Reset if at least one account is available
 			}
 		}
 	
 		return $available_gateways;
 	}
+	
 	
 	
 	
@@ -1071,7 +1033,7 @@ public function render_accounts_field($data) {
     ?>
     <div class="dfinsell-accounts-container">
         <?php foreach ($accounts as $index => $account) : ?>
-			<div class="dfinsell-account <?php echo $account['active'] == '1' ? 'active-account' : 'inactive-account'; ?>">
+			<div class="dfinsell-account <?php echo $account['active'] == 'true' ? 'active-account' : 'inactive-account'; ?>">
        
                 <h4><?php echo esc_html(sprintf(__('Account %d', 'dfinsell-payment-gateway'), $index + 1)); ?> <?php 
     			  $is_active = isset($account['status']) && $account['status'] == 'true';
@@ -1088,22 +1050,22 @@ public function render_accounts_field($data) {
 				<div class="add-blog">
                 <input type="text" class="sandbox-public-key"
                        name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]" 
-                       placeholder="<?php echo esc_attr(__('Sandbox Public Key', 'dfinsell-payment-gateway')); ?>" 
+                       placeholder="<?php echo esc_attr(__('Public Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['sandbox_public_key']); ?>">
                 <input type="text"  class="sandbox-secret-key"
                        name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]" 
-                       placeholder="<?php echo esc_attr(__('Sandbox Secret Key', 'dfinsell-payment-gateway')); ?>" 
+                       placeholder="<?php echo esc_attr(__('Private Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['sandbox_secret_key']); ?>">
 				</div>
                 <h5><?php echo esc_html(__('Live Keys', 'dfinsell-payment-gateway')); ?></h5>
 				<div class="add-blog">
                 <input type="text"  class="live-public-key"
                        name="accounts[<?php echo esc_attr($index); ?>][live_public_key]" 
-                       placeholder="<?php echo esc_attr(__('Live Public Key', 'dfinsell-payment-gateway')); ?>" 
+                       placeholder="<?php echo esc_attr(__('Public Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['live_public_key']); ?>">
                 <input type="text"  class="live-secret-key"
                        name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]" 
-                       placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>" 
+                       placeholder="<?php echo esc_attr(__('Private Key', 'dfinsell-payment-gateway')); ?>" 
                        value="<?php echo esc_attr($account['live_secret_key']); ?>">
 					   <button class="button dfinsell-remove-account"><span>-</span></button>
 				</div>
@@ -1115,7 +1077,7 @@ public function render_accounts_field($data) {
        
     </div>
 	<div class="add-account-btn">
-		<button class="button dfinsell-add-account"><span>+</span> Add Acoount</button>
+		<button class="button dfinsell-add-account"><span>+</span> Add Account</button>
 	</div>
     <?php
     return ob_get_clean();
@@ -1183,21 +1145,36 @@ protected function validate_accounts($accounts) {
  */
 protected function sanitize_accounts($accounts) {
     $sanitized_accounts = [];
+    $has_active_account = false;
 
-    foreach ($accounts as $index => &$account) {
-        if (!empty($account['title']) && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']) && !empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
-            if ($index == 0) {
-				$active = 'true'; // First account active
-			} else {
-				$active = 'false'; // Other accounts inactive
+    // Check if there's already an active account
+    foreach ($accounts as $account) {
+			if ($account['status'] === 'true') {
+				$active_account = $account;
 			}
-			$sanitized_accounts[] = [
+        if (isset($account['status']) && $account['status'] === 'true') {
+            $has_active_account = true;
+            break;
+        }
+    }
+
+    foreach ($accounts as $index => $account) {
+        if (!empty($account['title']) && 
+            !empty($account['sandbox_public_key']) && 
+            !empty($account['sandbox_secret_key']) && 
+            !empty($account['live_public_key']) && 
+            !empty($account['live_secret_key'])) {
+
+            // Assign 'true' only if no active account exists; otherwise, keep existing status
+            $active = (!$has_active_account && $index === 0) ? 'true' : ($account['status'] ?? 'false');
+
+            $sanitized_accounts[] = [
                 'title' => sanitize_text_field($account['title']),
                 'sandbox_public_key' => sanitize_text_field($account['sandbox_public_key']),
                 'sandbox_secret_key' => sanitize_text_field($account['sandbox_secret_key']),
                 'live_public_key' => sanitize_text_field($account['live_public_key']),
                 'live_secret_key' => sanitize_text_field($account['live_secret_key']),
-				'status'=>$active,
+                'status' => $active,
             ];
         }
     }
@@ -1208,21 +1185,23 @@ protected function sanitize_accounts($accounts) {
 
 
 
-public function switch_account() {
-    if ($this->current_account) {
-        wc_get_logger()->info(
-            'Switching from account: ' . $this->current_account['title'],
+public function switch_account()
+{
+    $old_account = $this->get_current_active_account();
+    if (!$old_account) {
+        wc_get_logger()->error(
+            'No active payment account found to switch from.',
             ['source' => 'dfin_sell_payment_gateway']
         );
-
-        // Store the used account title to prevent reuse
-        $this->used_accounts[] = $this->current_account['title'];
+        return false;
     }
 
-    // Get the next available account
+    // Store used account title to prevent reuse
+    $this->used_accounts[] = $old_account['title'];
+
+    // Get the next available account (not yet used)
     $new_account = $this->get_next_account();
 
-    // If no account is available, return an error
     if (!$new_account) {
         wc_get_logger()->error(
             'All payment accounts have reached their limit. No more accounts available.',
@@ -1232,36 +1211,49 @@ public function switch_account() {
             __('Payment temporarily unavailable. Please try again later.', 'dfinsell-payment-gateway'),
             'error'
         );
-
-        return false; // Stop further retries
+        return false;
     }
 
-	// Load existing settings from WooCommerce
+    // Log why the switch is happening
+    wc_get_logger()->info(
+        sprintf(
+            'Switching from account [%s] to [%s] due to reaching transaction limit.',
+            $old_account['title'],
+            $new_account['title']
+        ),
+        ['source' => 'dfin_sell_payment_gateway']
+    );
+
+    // Load existing WooCommerce settings
     $settings = get_option('woocommerce_dfinsell_settings', []);
 
     // Update account statuses
-    foreach ($settings['accounts'] as $index => &$account) {
+    foreach ($settings['accounts'] as &$account) {
         if ($account['title'] === $new_account['title']) {
             $account['status'] = "true"; // Activate this account
         } else {
-            $account['status'] = "false"; // Deactivate all other accounts
+            $account['status'] = "false"; // Deactivate other accounts
         }
     }
 
-    // Save the updated settings
+    // Save updated settings
     update_option('woocommerce_dfinsell_settings', $settings);
-    // Successfully switched to a new account
-    $this->current_account = $new_account;
+
+    // Log the successful switch
     wc_get_logger()->info(
-        'Switched to new account: ' . $this->current_account['title'],
+        sprintf('Successfully switched to new account: [%s]', $new_account['title']),
         ['source' => 'dfin_sell_payment_gateway']
     );
+
+    // Send an email notification when an account is switched
+    $this->send_account_switch_email($old_account, $new_account);
 
     return true;
 }
 
 
-private function get_next_account() {
+private function get_next_account()
+{
     $available_accounts = array_filter($this->accounts, function ($account) {
         return !in_array($account['title'], $this->used_accounts);
     });
@@ -1270,10 +1262,8 @@ private function get_next_account() {
         return false; // No accounts left to switch to
     }
 
-    // Pick the first available account
-    return reset($available_accounts);
+    return reset($available_accounts); // Pick the first available account
 }
-
 
 private function get_cached_api_response($url, $data, $cache_key) {
     // Check if the response is already cached
@@ -1350,5 +1340,89 @@ function dfinsell_enqueue_admin_styles($hook) {
     wp_enqueue_style('dfinsell-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '1.0.0');
 }
 
+/**
+ * Send an email notification via DfinSell API
+	*/
+	private function send_account_switch_email($oldAccount, $newAccount) {
+		$dfinSellApiUrl = $this->get_api_url('/api/switch-account-email'); // Dfin Sell API Endpoint
+	
+		// Use the credentials of the old (current) account to authenticate
+		$api_key = $this->sandbox ? $oldAccount['sandbox_public_key'] : $oldAccount['live_public_key'];
+		$api_secret = $this->sandbox ? $oldAccount['sandbox_secret_key'] : $oldAccount['live_secret_key'];
+	
+		// Prepare data for API request
+		$emailData = [
+			'old_account' => [
+				'title'      => $oldAccount['title'],
+				'secret_key' => $api_secret,
+				'status'     => $oldAccount['status'],
+			],
+			'new_account' => [
+				'title'      => $newAccount['title'],
+				'status'     => $newAccount['status'],
+			],
+			'message' => "Payment processing account has been switched. Please review the details."
+		];
+		$emailData['is_sandbox'] = $this->sandbox;
+	
+		// API request headers using old account credentials
+		$headers = [
+			'Content-Type'  => 'application/json',
+			'Authorization' => 'Bearer ' . sanitize_text_field($api_key),
+		];
+	
+		// Log API request details
+		wc_get_logger()->info('Request Data: ' . json_encode($emailData), ['source' => 'dfin_sell_payment_gateway']);
+	
+		// Send data to DFinSell API
+		$response = wp_remote_post($dfinSellApiUrl, [
+			'method'    => 'POST',
+			'timeout'   => 30,
+			'body'      => json_encode($emailData),
+			'headers'   => $headers,
+			'sslverify' => true,
+		]);
+	
+		// Handle API response
+		if (is_wp_error($response)) {
+			wc_get_logger()->error('Failed to send switch email: ' . $response->get_error_message(), ['source' => 'dfin_sell_payment_gateway']);
+			return false;
+		}
+	
+		$response_code = wp_remote_retrieve_response_code($response);
+		$response_body = wp_remote_retrieve_body($response);
+		$response_data = json_decode($response_body, true);
+	
+		// Check if authentication failed
+		if ($response_code == 401 || $response_code == 403 || (!empty($response_data['error']) && strpos($response_data['error'], 'invalid credentials') !== false)) {
+			wc_get_logger()->error('Email Sending Failed : Authentication failed: Invalid API key or secret for old account', ['source' => 'dfin_sell_payment_gateway']);
+			return false; // Stop further execution
+		}
+	
+		// Check if the API response has errors
+		if (!empty($response_data['error'])) {
+			wc_get_logger()->error('DFinSell API Error: ' . json_encode($response_data), ['source' => 'dfin_sell_payment_gateway']);
+			return false;
+		}
+	
+		wc_get_logger()->info('Switch email successfully sent', ['source' => 'dfin_sell_payment_gateway']);
+		return true;
+	}
+
+private function get_current_active_account()
+{
+    $settings = get_option('woocommerce_dfinsell_settings', []);
+    if (!isset($settings['accounts']) || empty($settings['accounts'])) {
+        return false;
+    }
+
+    foreach ($settings['accounts'] as $account) {
+        if (isset($account['status']) && $account['status'] === "true") {
+            return $account;
+        }
+    }
+
+    return reset($settings['accounts']); // Default to the first account if none are marked as active
+}
 
 }
