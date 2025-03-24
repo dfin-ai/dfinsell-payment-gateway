@@ -93,6 +93,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	public function dfinsell_process_admin_options()
 	{
+		// WooCommerce settings page automatically includes _wpnonce
+		if (!isset($_POST['dfinsell_secure_nonce']) || 
+		!wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dfinsell_secure_nonce'])), 'dfinsell_secure_action')) {
+		wp_die(esc_html__('Security check failed. Please refresh the page and try again.', 'dfinsell-payment-gateway'));
+	}
+	
+
+	
+
 		parent::process_admin_options();
 
 		// Retrieve the options from the settings
@@ -107,17 +116,22 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$existing_settings = get_option('woocommerce_dfinsell_settings', []);
 		$existing_accounts = isset($existing_settings['accounts']) ? $existing_settings['accounts'] : [];
 	
-		// Extract the new accounts data from POST
-		$new_accounts = isset($_POST['accounts']) ? $_POST['accounts'] : [];
-	
-		// Merge existing accounts with new accounts
-		if(is_array($existing_accounts)){
-		$all_accounts = array_merge($existing_accounts, $new_accounts);
-		}else{
-			$all_accounts =	$new_accounts ;
+		// Extract and sanitize new accounts
+		if (isset($_POST['accounts'])) {
+		
+			// Remove slashes and sanitize recursively using map_deep
+			$new_accounts = map_deep(wp_unslash($_POST['accounts']), 'sanitize_text_field');
+		} else {
+		
+			$new_accounts = [];
 		}
+		
+		// Merge existing and new accounts
+		$all_accounts = is_array($existing_accounts) ? array_merge($existing_accounts, $new_accounts) : $new_accounts;
+
 		// Validate all accounts
 		$validation_errors = $this->validate_accounts($all_accounts);
+		
 		// Initialize error tracking
 		$errors = array();
 
@@ -147,7 +161,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 		}
 
-		
+
 		// Display all errors
 		if (!empty($errors)) {
 			foreach ($errors as $error) {
@@ -157,8 +171,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			add_action('admin_notices', array($this->admin_notices, 'display_notices'));
 		}else{
 			
-			// Save accounts
-			$accounts = isset($_POST['accounts']) ? $this->sanitize_accounts($_POST['accounts']) : [];
+			if (isset($_POST['accounts'])) {
+				// Remove slashes and sanitize recursively using map_deep
+				$accounts = map_deep(wp_unslash($_POST['accounts']), 'sanitize_text_field');
+			} else {
+				$accounts = [];
+			}
+			
 			$settings = get_option('woocommerce_dfinsell_settings', array());
 			$settings['accounts'] = $accounts;
 			update_option('woocommerce_dfinsell_settings', $settings);
@@ -226,6 +245,7 @@ error_log('Settings: ' . print_r($settings, true));
 	 */
 	public function dfinsell_get_form_fields()
 	{
+
 		$form_fields = array(
 			'enabled' => array(
 				'title' => __('Enable/Disable', 'dfinsell-payment-gateway'),
@@ -581,10 +601,14 @@ error_log('Settings: ' . print_r($settings, true));
 			$secret_key = $is_sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
 	
 			// Validate the keys for the current account
+			
 			if (isset($public_key)) {
+				/* Translators: %d is the Account Number Pubic key*/
 				$errors[] = sprintf(__('Public  Key is required for Account %d. Please enter your Public ret Key.', 'dfinsell-payment-gateway'), $index + 1);
 			}
+		
 			if (isset($secret_key)) {
+					/* Translators: %d is the Account Number for secret key.*/
 				$errors[] = sprintf(__('Secret Key is required for Account %d. Please enter your Secret Key.', 'dfinsell-payment-gateway'), $index + 1);
 			}
 		}
@@ -788,7 +812,7 @@ error_log('Settings: ' . print_r($settings, true));
             </p>';
 
 			// Add nonce field for security
-			wp_nonce_field('dfinsell_payment', 'dfinsell_nonce');
+			wp_nonce_field('dfinsell_payment', 'dfinsell_save_settings');
 		}
 	}
 
@@ -861,7 +885,7 @@ error_log('Settings: ' . print_r($settings, true));
 		if ('woocommerce_page_wc-settings' !== $hook) {
 			return; // Only load on WooCommerce settings page
 		}
-		error_log('Enqueuing admin scripts and styles'); // Debugging
+	
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
@@ -934,64 +958,7 @@ error_log('Settings: ' . print_r($settings, true));
 	}
 	
 	
-	
-	
-	
 
-
-/*
-public function render_key_pairs_field($data)
-{
-	error_log('Rendering key pairs field for mode: ' . $field['id']); // Debugging
-    // Ensure the 'id' key exists in the $data array
-    if (!isset($data['id'])) {
-        error_log('Missing "id" key in $data array'); // Debugging
-        return;
-    }
-
-    $mode = str_replace('_keys', '', $data['id']); // Extract mode (sandbox or live)
-    $key_pairs = $this->get_option($data['id'], []); // Retrieve saved key pairs
-	echo $this->get_key_pair_html($mode);
- 
-}
-
-private function get_key_pair_html($mode)
-{
-	error_log('get_key_pair_html'); // Debugging
-	
-	ob_start();
-    ?>
-<div class="dfinsell-accounts-container">
-    <div class="dfinsell-account-template">
-        <h4><?php echo esc_html(__('Account 1', 'dfinsell-payment-gateway')); ?></h4>
-        <input type="text" 
-               name="accounts[0][title]" 
-               placeholder="<?php echo esc_attr(__('Account Title', 'dfinsell-payment-gateway')); ?>">
-
-        <h5><?php echo esc_html(__('Sandbox Keys', 'dfinsell-payment-gateway')); ?></h5>
-        <input type="text" 
-               name="accounts[0][sandbox_public_key]" 
-               placeholder="<?php echo esc_attr(__('Sandbox Public Key', 'dfinsell-payment-gateway')); ?>">
-        <input type="text" 
-               name="accounts[0][sandbox_secret_key]" 
-               placeholder="<?php echo esc_attr(__('Sandbox Secret Key', 'dfinsell-payment-gateway')); ?>">
-
-        <h5><?php echo esc_html(__('Live Keys', 'dfinsell-payment-gateway')); ?></h5>
-        <input type="text" 
-               name="accounts[0][live_public_key]" 
-               placeholder="<?php echo esc_attr(__('Live Public Key', 'dfinsell-payment-gateway')); ?>">
-        <input type="text" 
-               name="accounts[0][live_secret_key]" 
-               placeholder="<?php echo esc_attr(__('Live Secret Key', 'dfinsell-payment-gateway')); ?>">
-
-        <button class="button dfinsell-remove-account">Remove</button>
-    </div>
-    <button class="button dfinsell-add-account">Add Account</button>
-</div>
-    <?php
-    return ob_get_clean();
-}
-*/
 public function generate_dfinsell_accounts_html($key, $data) {
     $field_key = $this->get_field_key($key);
     $defaults = array(
@@ -1008,7 +975,7 @@ public function generate_dfinsell_accounts_html($key, $data) {
             <label for="<?php echo esc_attr($field_key); ?>"><?php echo wp_kses_post($data['title']); ?></label>
         </th>
         <td class="forminp">
-            <?php echo $this->render_accounts_field($data); ?>
+			<?php echo wp_kses($this->render_accounts_field($data), $this->allowed_html_tags()); ?>
         </td>
     </tr>
     <?php
@@ -1033,10 +1000,10 @@ public function render_accounts_field($data) {
     ?>
     <div class="dfinsell-accounts-container">
         <?php foreach ($accounts as $index => $account) : ?>
-			<div class="dfinsell-account <?php echo $account['active'] == 'true' ? 'active-account' : 'inactive-account'; ?>">
-       
+			<div class="dfinsell-account <?php echo isset($account['active']) && $account['active'] == 'true' ? 'active-account' : 'inactive-account'; ?>">
+				<?php /* Translators: %d is the checking the status.*/?>
                 <h4><?php echo esc_html(sprintf(__('Account %d', 'dfinsell-payment-gateway'), $index + 1)); ?> <?php 
-    			  $is_active = isset($account['status']) && $account['status'] == 'true';
+    			  $is_active = !empty($account['status']) && $account['status'] == 'true';
 					?>
 				<?php if ($is_active) : ?>
 					<span class="active-indicator"> Active</span>
@@ -1079,8 +1046,13 @@ public function render_accounts_field($data) {
 	<div class="add-account-btn">
 		<button class="button dfinsell-add-account"><span>+</span> Add Account</button>
 	</div>
+	<?php 
+    // Add nonce inside the form HTML
+    wp_nonce_field('dfinsell_secure_action', 'dfinsell_secure_nonce');
+    ?>
     <?php
     return ob_get_clean();
+	
 }
 
 
@@ -1096,6 +1068,7 @@ protected function validate_account($account, $index) {
     $is_filled = !empty($account['title']) && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']) && !empty($account['live_public_key']) && !empty($account['live_secret_key']);
 
     if (!$is_empty && !$is_filled) {
+			/* Translators: %d is the keys are valid or leave empty.*/
         return sprintf(__('Account %d is invalid. Please fill all fields or leave the account empty.', 'dfinsell-payment-gateway'), $index + 1);
     }
 
@@ -1121,6 +1094,7 @@ protected function validate_accounts($accounts) {
 
         // If the account is neither empty nor fully filled, it's invalid
         if (!$is_empty && !$is_filled) {
+				/* Translators: %d is the keys are valid or leave empty.*/
             $errors[] = sprintf(__('Account %d is invalid. Please fill all fields or leave the account empty.', 'dfinsell-payment-gateway'), $index + 1);
         } elseif ($is_filled) {
             // If the account is fully filled, add it to the valid accounts array
@@ -1423,6 +1397,29 @@ private function get_current_active_account()
     }
 
     return reset($settings['accounts']); // Default to the first account if none are marked as active
+}
+
+private function allowed_html_tags() {
+    return [
+        'div'    => ['class' => []],
+        'span'   => ['class' => []],
+        'h4'     => [],
+        'h5'     => [],
+        'input'  => [
+            'type'        => [],
+            'name'        => [],
+            'value'       => [],
+            'class'       => [],
+            'placeholder' => [],
+        ],
+        'button' => [
+            'class' => [],
+        ],
+        'label'  => ['for' => []],
+        'tr'     => ['valign' => []],
+        'th'     => ['scope' => [], 'class' => []],
+        'td'     => ['class' => []],
+    ];
 }
 
 }
