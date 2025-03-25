@@ -111,7 +111,7 @@ jQuery(document).ready(function ($) {
       const isActive = index === 0 || $container.find('.dfinsell-account input[name$="[status]"]:checked').length === 0;
       const html = `
           <div class="dfinsell-account ${isActive ? 'active-account' : 'inactive-account'}">
-            <h4>Account ${index + 1} ${isActive ? '<span class="active-indicator"> Active</span>' : ''}</h4>
+            <h4>Account ${index + 1} </h4>
             <input type="text" name="accounts[${index}][title]" class="account-title" placeholder="Account Title" >
 
           <h5>Sandbox Keys</h5>
@@ -144,7 +144,7 @@ jQuery(document).ready(function ($) {
       $('.dfinsell-account').each(function (index) {
           // Update Account Title Numbering
           $(this).find('h4').html(
-              `Account ${index + 1} ${index === 0 ? '<span class="active-indicator"> </span>' : ''}`
+              `Account ${index + 1} ${index === 0 ? '<span class="active-indicator"> Active</span>' : ''}`
           );
 
           // Update input field names to match the new index
