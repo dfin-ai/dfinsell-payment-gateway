@@ -18,16 +18,17 @@ jQuery(document).ready(function ($) {
   $('#woocommerce_' + $.escapeSelector(PAYMENT_CODE) + '_sandbox').change(toggleSandboxFields);
 
   // Function to validate accounts
-// Function to validate accounts with detailed duplicate error messages including values
-function validateAccounts() {
+  function validateAccounts() {
     $('.error-msg').remove(); // Clear existing error messages
     let isValid = false;
     let keyMap = new Map(); // Store keys with their type, account index, and value
     let hasDuplicate = false;
     let duplicateErrors = [];
+    let partialAccounts = [];
 
     $('.dfinsell-account').each(function (index) {
         let allFilled = true;
+        let anyFilled = false;
 
         $(this).find('input').each(function () {
             const value = $(this).val().trim();
@@ -38,6 +39,8 @@ function validateAccounts() {
 
             if (value === '') {
                 allFilled = false;
+            } else {
+                anyFilled = true;
             }
 
             // Identify the key type
@@ -62,12 +65,16 @@ function validateAccounts() {
             }
         });
 
+        // Skip the first account from partial validation
+        if (index > 0 && anyFilled && !allFilled) {
+            partialAccounts.push(index + 1); // Store 1-based index of the incomplete account
+        }
+
         if (allFilled) {
             isValid = true; // At least one fully filled account exists
         }
     });
 
-    // Show detailed duplicate error messages with values
     if (hasDuplicate) {
         $('.dfinsell-accounts-container').before(
             `<p class="error-msg" style="color:red; font-weight:bold;">${duplicateErrors.join('<br>')}</p>`
@@ -78,6 +85,13 @@ function validateAccounts() {
         $('.dfinsell-accounts-container').before(
             '<p class="error-msg" style="color:red; font-weight:bold;">Please fill all details in at least one account.</p>'
         );
+    }
+
+    if (partialAccounts.length > 0) {
+        $('.dfinsell-accounts-container').before(
+            `<p class="error-msg" style="color:red; font-weight:bold;">Accounts ${partialAccounts.join(', ')} are partially filled. Please complete or remove them.</p>`
+        );
+        return false; // Prevent form submission
     }
 
     return isValid && !hasDuplicate;

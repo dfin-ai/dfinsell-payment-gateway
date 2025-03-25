@@ -95,142 +95,81 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	{
 		// WooCommerce settings page automatically includes _wpnonce
 		if (!isset($_POST['dfinsell_secure_nonce']) || 
-		!wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dfinsell_secure_nonce'])), 'dfinsell_secure_action')) {
-		wp_die(esc_html__('Security check failed. Please refresh the page and try again.', 'dfinsell-payment-gateway'));
-	}
-	
-
-	
-
-		parent::process_admin_options();
-
-		// Retrieve the options from the settings
-		$title = sanitize_text_field($this->get_option('title'));
-		// Check if sandbox mode is enabled and sanitize the option
-		$enabled = sanitize_text_field($this->get_option('enabled'));
-		$is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
-
-		//$accounts = $this->get_option('accounts', []);
-
-	
-		$existing_settings = get_option('woocommerce_dfinsell_settings', []);
-		$existing_accounts = isset($existing_settings['accounts']) ? $existing_settings['accounts'] : [];
-	
-		// Extract and sanitize new accounts
-		if (isset($_POST['accounts'])) {
-		
-			// Remove slashes and sanitize recursively using map_deep
-			$new_accounts = map_deep(wp_unslash($_POST['accounts']), 'sanitize_text_field');
-		} else {
-		
-			$new_accounts = [];
-		}
-		
-		// Merge existing and new accounts
-		$all_accounts = is_array($existing_accounts) ? array_merge($existing_accounts, $new_accounts) : $new_accounts;
-
-		// Validate all accounts
-		$validation_errors = $this->validate_accounts($all_accounts);
-		
-		// Initialize error tracking
-		$errors = array();
-
-		// Check for Title
-		if (empty($title)) {
-			$errors[] = __('Title is required. Please enter a title in the settings.', 'dfinsell-payment-gateway');
-			}
-	// If validation fails, display the error and stop saving
-
-
-	 // If there are validation errors, display them
-	 if (!empty($validation_result['errors'])) {
-	
-        foreach ($validation_result['errors'] as $error) {
-			$errors[] = $error;
-        }
-     
+        !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dfinsell_secure_nonce'])), 'dfinsell_secure_action')) {
+        wp_die(esc_html__('Security check failed. Please refresh the page and try again.', 'dfinsell-payment-gateway'));
     }
 
-	
-		// Check API Keys only if there are no other errors
-		if (empty($errors)) {
-			$api_key_error = $this->dfinsell_check_api_keys();
-			
-			if ($api_key_error) {
-				$errors[] = $api_key_error;
-			}
-		}
+	parent::process_admin_options();
+    // Retrieve existing settings
+    $existing_settings = get_option('woocommerce_dfinsell_settings', []);
+    $existing_accounts = isset($existing_settings['accounts']) ? $existing_settings['accounts'] : [];
 
+    $new_accounts = [];
 
-		// Display all errors
-		if (!empty($errors)) {
-			foreach ($errors as $error) {
-				$this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
-			}
-		
-			add_action('admin_notices', array($this->admin_notices, 'display_notices'));
-		}else{
-			
-			if (isset($_POST['accounts'])) {
-				// Remove slashes and sanitize recursively using map_deep
-				$accounts = map_deep(wp_unslash($_POST['accounts']), 'sanitize_text_field');
-			} else {
-				$accounts = [];
-			}
-			
-			$settings = get_option('woocommerce_dfinsell_settings', array());
-			$settings['accounts'] = $accounts;
-			update_option('woocommerce_dfinsell_settings', $settings);
-		}
-	}
-	
+    if (isset($_POST['accounts']) && is_array($_POST['accounts'])) {
+        $raw_accounts = wp_unslash($_POST['accounts']);
+        $validated_accounts = $this->validate_accounts($raw_accounts);
 
-/*
-	public function process_admin_options() {
-		echo "Dddd";exit;
-		// Retrieve all POST data
-		$post_data = $this->get_post_data();
-	print_r($post_data );exit;
-		// Extract the accounts data from POST
-		$accounts = isset($post_data['accounts']) ? $post_data['accounts'] : [];
-	
-		// Validate all accounts
-		$validation_result = $this->validate_accounts($accounts);
-	
-		// If validation fails, display the error and stop saving
-		if ($validation_result !== true) {
-			$this->add_error($validation_result);
-			$this->display_errors();
-			return;
-		}
-	
-		// Sanitize the accounts
-		$sanitized_accounts = $this->sanitize_accounts($accounts);
-	
-		// Prepare the settings array
-		$settings = [
-			'enabled' => isset($post_data['enabled']) ? sanitize_text_field($post_data['enabled']) : 'no',
-			'title' => isset($post_data['title']) ? sanitize_text_field($post_data['title']) : '',
-			'description' => isset($post_data['description']) ? sanitize_textarea_field($post_data['description']) : '',
-			'instructions' => isset($post_data['instructions']) ? sanitize_textarea_field($post_data['instructions']) : '',
-			'accounts' => $sanitized_accounts,
-			'order_status' => isset($post_data['order_status']) ? sanitize_text_field($post_data['order_status']) : 'processing',
-			'show_consent_checkbox' => isset($post_data['show_consent_checkbox']) ? sanitize_text_field($post_data['show_consent_checkbox']) : 'no',
-		];
+        if (!empty($validated_accounts['errors'])) {
+            foreach ($validated_accounts['errors'] as $error) {
+                $this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
+            }
+            add_action('admin_notices', [$this->admin_notices, 'display_notices']);
+        } else {
+            // Sanitize accounts using sanitize_accounts()
+            $new_accounts = $this->sanitize_accounts($validated_accounts['valid_accounts']);
+        }
+    }
 
+    // Merge existing and new accounts
+    $all_accounts = is_array($existing_accounts) ? array_merge($existing_accounts, $new_accounts) : $new_accounts;
+
+    // Validate all accounts again before saving
+    $validation_result = $this->validate_accounts($all_accounts);
 	
+    $errors = [];
+
+    if (!empty($validation_result['errors'])) {
+        foreach ($validation_result['errors'] as $error) {
+            $errors[] = $error;
+        }
+    }
+
+    // Check required fields
+    $title = sanitize_text_field($this->get_option('title'));
+    $enabled = sanitize_text_field($this->get_option('enabled'));
+    $is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
+
+    if (empty($title)) {
+        $errors[] = __('Title is required. Please enter a title in the settings.', 'dfinsell-payment-gateway');
+    }
+
+    // API key validation (if no errors so far)
+    if (empty($errors)) {
+        $api_key_error = $this->dfinsell_check_api_keys();
+        if ($api_key_error) {
+            $errors[] = $api_key_error;
+        }
+    }
 	
-		// Save the settings under the option key `woocommerce_dfinsell_settings`
+    // Show errors if any
+    if (!empty($errors)) {
+        foreach ($errors as $error) {
+            $this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
+        }
+        add_action('admin_notices', [$this->admin_notices, 'display_notices']);
+    } else {
+        // Save accounts in WooCommerce settings
+        $settings = get_option('woocommerce_dfinsell_settings', []);
+        $settings['accounts'] = $all_accounts;
 		update_option('woocommerce_dfinsell_settings', $settings);
+    }
+
+   
+
+}
 	
-		// Call the parent method to handle other WooCommerce settings
-		parent::process_admin_options();
-		error_log('POST Data: ' . print_r($_POST, true));
-error_log('Accounts Data: ' . print_r($accounts, true));
-error_log('Sanitized Accounts: ' . print_r($sanitized_accounts, true));
-error_log('Settings: ' . print_r($settings, true));
-	}
-	*/
+
 
 	/**
 	 * Initialize gateway settings form fields.
