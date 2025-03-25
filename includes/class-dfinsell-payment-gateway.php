@@ -118,7 +118,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         } else {
             // Sanitize accounts using sanitize_accounts()
             $new_accounts = $this->sanitize_accounts($validated_accounts['valid_accounts']);
-        }
+	    }
     }
 
     // Merge existing and new accounts
@@ -752,6 +752,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			// Add nonce field for security
 			wp_nonce_field('dfinsell_payment', 'dfinsell_save_settings');
+			wp_nonce_field('dfinsell_payment', 'dfinsell_nonce');
 		}
 	}
 
@@ -947,6 +948,8 @@ public function render_accounts_field($data) {
 				<?php if ($is_active) : ?>
 					<span class="active-indicator"> Active</span>
 				<?php endif; ?></h4>
+				<input type="hidden" name="accounts[<?php echo $index; ?>][status]" value="<?php echo esc_attr($account['status'] ?? 'false'); ?>">
+
                 <input type="text"  class="account-title"
                        name="accounts[<?php echo esc_attr($index); ?>][title]" 
                        placeholder="<?php echo esc_attr(__('Account Title', 'dfinsell-payment-gateway')); ?>" 
@@ -1059,23 +1062,24 @@ protected function validate_accounts($accounts) {
 protected function sanitize_accounts($accounts) {
     $sanitized_accounts = [];
     $has_active_account = false;
-    $first_account_index = null;
+    $first_valid_account_index = null;
 
-    // Identify if an active account exists and find the first valid account
+    // First loop: Identify if an active account exists and find the first valid account
     foreach ($accounts as $index => $account) {
-        if (!empty($account['status']) && $account['status'] === 'true') {
-            $has_active_account = true;
+        if (isset($account['status']) && $account['status'] === 'true') {
+            $has_active_account = true; // An active account already exists
         }
-        if ($first_account_index === null && 
+        if ($first_valid_account_index === null && 
             !empty($account['title']) && 
             !empty($account['sandbox_public_key']) && 
             !empty($account['sandbox_secret_key']) && 
             !empty($account['live_public_key']) && 
             !empty($account['live_secret_key'])) {
-            $first_account_index = $index;
+            $first_valid_account_index = $index; // Store the first valid account
         }
     }
 
+    // Second loop: Process each account while keeping status intact
     foreach ($accounts as $index => $account) {
         if (!empty($account['title']) && 
             !empty($account['sandbox_public_key']) && 
@@ -1083,9 +1087,15 @@ protected function sanitize_accounts($accounts) {
             !empty($account['live_public_key']) && 
             !empty($account['live_secret_key'])) {
 
-            // If status exists, keep it. Otherwise, set first account as true, others as false.
-            $active = isset($account['status']) ? $account['status'] : 
-                      (!$has_active_account && $index === $first_account_index ? 'true' : 'false');
+            // Preserve existing status, or activate first valid account if no active account exists
+            if (isset($account['status']) && ($account['status'] === 'true' || $account['status'] === 'false')) {
+                $active = $account['status']; // Keep status as is
+            } else {
+                $active = (!$has_active_account && $index === $first_valid_account_index) ? 'true' : 'false';
+                if ($active === 'true') {
+                    $has_active_account = true; // Mark that we have set an active account
+                }
+            }
 
             $sanitized_accounts[] = [
                 'title' => sanitize_text_field($account['title']),
@@ -1093,7 +1103,7 @@ protected function sanitize_accounts($accounts) {
                 'sandbox_secret_key' => sanitize_text_field($account['sandbox_secret_key']),
                 'live_public_key' => sanitize_text_field($account['live_public_key']),
                 'live_secret_key' => sanitize_text_field($account['live_secret_key']),
-                'status' => $active, // Keep existing status or assign dynamically
+                'status' => $active, // Ensure only one account is activated if needed
             ];
         }
     }

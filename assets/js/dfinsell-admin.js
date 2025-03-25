@@ -32,7 +32,7 @@ jQuery(document).ready(function ($) {
 
         $(this).find('input').each(function () {
             const value = $(this).val().trim();
-            const fieldClass = $(this).attr('class');
+            const fieldClass = $(this).attr('class') || ''; // ✅ Fix: Ensure `fieldClass` is always a string
 
             // Reset border before applying validation
             $(this).css('border', '');
@@ -44,21 +44,21 @@ jQuery(document).ready(function ($) {
             }
 
             // Identify the key type
-            let keyType = "";
-            if (fieldClass.includes('sandbox-public-key')) keyType = "Sandbox Public Key";
-            else if (fieldClass.includes('sandbox-secret-key')) keyType = "Sandbox Private Key";
-            else if (fieldClass.includes('live-public-key')) keyType = "Live Public Key";
-            else if (fieldClass.includes('live-secret-key')) keyType = "Live Private Key";
+            let keyType = '';
+            if (fieldClass.includes('sandbox-public-key')) keyType = 'Sandbox Public Key';
+            else if (fieldClass.includes('sandbox-secret-key')) keyType = 'Sandbox Private Key';
+            else if (fieldClass.includes('live-public-key')) keyType = 'Live Public Key';
+            else if (fieldClass.includes('live-secret-key')) keyType = 'Live Private Key';
 
             // Check for duplicate keys (ignore empty fields)
-            if (value !== '' && keyType !== "") {
+            if (value !== '' && keyType !== '') {
                 if (keyMap.has(value)) {
                     hasDuplicate = true;
                     let firstAccount = keyMap.get(value).accountIndex + 1; // Convert 0-based to 1-based
                     let firstKeyType = keyMap.get(value).keyType;
 
 
-                   let errorMsg = `Duplicate ${firstKeyType} detected in your account Account ${index + 1}. Please use unique keys.`;
+                    let errorMsg = `Duplicate ${firstKeyType} detected in Account ${index + 1}. Please use unique keys.`;
                     //let errorMsg = `Duplicate ${firstKeyType} found in Account ${firstAccount} and ${keyType} in Account ${index + 1}. Value: <strong>${value}</strong>`;
                     duplicateErrors.push(errorMsg);
                     $(this).css('border', '2px solid red'); // Highlight duplicate key
