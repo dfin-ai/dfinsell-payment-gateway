@@ -4,18 +4,22 @@
     align-items: center;
 }
 .dfinsell-accounts-container input{
-    padding: 8px 10px !important;
-    border-radius: 5px;
-    border: 1px solid #cfcfcf;
+    /* padding: 8px 10px !important; */
+    /* border-radius: 5px; */
+    /* border: 1px solid #cfcfcf; */
     font-size: 15px;
     color: #000;
-    min-height: 22px !important;
+    /* min-height: 22px !important; */
     margin-bottom: 6px !important;
     margin-right: 8px !important;
 }
 .dfinsell-accounts-container h4{
     font-size: 20px;
     color: #8264D7;
+    margin-top: 0;
+}
+.dfinsell-account {
+    margin-bottom: 15px;
 }
 .dfinsell-accounts-container h4 span{
     font-size: 15px;

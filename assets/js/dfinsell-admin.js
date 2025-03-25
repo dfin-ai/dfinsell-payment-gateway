@@ -46,9 +46,9 @@ jQuery(document).ready(function ($) {
             // Identify the key type
             let keyType = "";
             if (fieldClass.includes('sandbox-public-key')) keyType = "Sandbox Public Key";
-            else if (fieldClass.includes('sandbox-secret-key')) keyType = "Sandbox Secret Key";
+            else if (fieldClass.includes('sandbox-secret-key')) keyType = "Sandbox Private Key";
             else if (fieldClass.includes('live-public-key')) keyType = "Live Public Key";
-            else if (fieldClass.includes('live-secret-key')) keyType = "Live Secret Key";
+            else if (fieldClass.includes('live-secret-key')) keyType = "Live Private Key";
 
             // Check for duplicate keys (ignore empty fields)
             if (value !== '' && keyType !== "") {
@@ -57,7 +57,9 @@ jQuery(document).ready(function ($) {
                     let firstAccount = keyMap.get(value).accountIndex + 1; // Convert 0-based to 1-based
                     let firstKeyType = keyMap.get(value).keyType;
 
-                    let errorMsg = `Duplicate ${firstKeyType} found in Account ${firstAccount} and ${keyType} in Account ${index + 1}. Value: <strong>${value}</strong>`;
+
+                   let errorMsg = `Duplicate ${firstKeyType} detected in your account Account ${index + 1}. Please use unique keys.`;
+                    //let errorMsg = `Duplicate ${firstKeyType} found in Account ${firstAccount} and ${keyType} in Account ${index + 1}. Value: <strong>${value}</strong>`;
                     duplicateErrors.push(errorMsg);
                     $(this).css('border', '2px solid red'); // Highlight duplicate key
                 }
