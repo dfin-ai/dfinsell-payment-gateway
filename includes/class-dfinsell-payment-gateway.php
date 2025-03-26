@@ -91,83 +91,50 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		return $this->sip_protocol . $this->sip_host . $endpoint;
 	}
 
-	public function dfinsell_process_admin_options()
-	{
-		// WooCommerce settings page automatically includes _wpnonce
+	public function dfinsell_process_admin_options() {
 		if (!isset($_POST['dfinsell_secure_nonce']) || 
-        !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dfinsell_secure_nonce'])), 'dfinsell_secure_action')) {
-        wp_die(esc_html__('Security check failed. Please refresh the page and try again.', 'dfinsell-payment-gateway'));
-    }
-
-	parent::process_admin_options();
-    // Retrieve existing settings
-    $existing_settings = get_option('woocommerce_dfinsell_settings', []);
-    $existing_accounts = isset($existing_settings['accounts']) ? $existing_settings['accounts'] : [];
-
-    $new_accounts = [];
-
-    if (isset($_POST['accounts']) && is_array($_POST['accounts'])) {
-        $raw_accounts = wp_unslash($_POST['accounts']);
-        $validated_accounts = $this->validate_accounts($raw_accounts);
-
-        if (!empty($validated_accounts['errors'])) {
-            foreach ($validated_accounts['errors'] as $error) {
-                $this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
-            }
-            add_action('admin_notices', [$this->admin_notices, 'display_notices']);
-        } else {
-            // Sanitize accounts using sanitize_accounts()
-            $new_accounts = $this->sanitize_accounts($validated_accounts['valid_accounts']);
-	    }
-    }
-
-    // Merge existing and new accounts
-    $all_accounts = is_array($existing_accounts) ? array_merge($existing_accounts, $new_accounts) : $new_accounts;
-
-    // Validate all accounts again before saving
-    $validation_result = $this->validate_accounts($all_accounts);
+			!wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['dfinsell_secure_nonce'])), 'dfinsell_secure_action')) {
+			wp_die(esc_html__('Security check failed. Please refresh the page and try again.', 'dfinsell-payment-gateway'));
+		}
 	
-    $errors = [];
-
-    if (!empty($validation_result['errors'])) {
-        foreach ($validation_result['errors'] as $error) {
-            $errors[] = $error;
-        }
-    }
-
-    // Check required fields
-    $title = sanitize_text_field($this->get_option('title'));
-    $enabled = sanitize_text_field($this->get_option('enabled'));
-    $is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
-
-    if (empty($title)) {
-        $errors[] = __('Title is required. Please enter a title in the settings.', 'dfinsell-payment-gateway');
-    }
-
-    // API key validation (if no errors so far)
-    if (empty($errors)) {
-        $api_key_error = $this->dfinsell_check_api_keys();
-        if ($api_key_error) {
-            $errors[] = $api_key_error;
-        }
-    }
+		parent::process_admin_options();
 	
-    // Show errors if any
-    if (!empty($errors)) {
-        foreach ($errors as $error) {
-            $this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
-        }
-        add_action('admin_notices', [$this->admin_notices, 'display_notices']);
-    } else {
-        // Save accounts in WooCommerce settings
-        $settings = get_option('woocommerce_dfinsell_settings', []);
-        $settings['accounts'] = $all_accounts;
-		update_option('woocommerce_dfinsell_settings', $settings);
-    }
+		// Retrieve existing settings
+		$existing_settings = get_option('woocommerce_dfinsell_settings', []);
+		$existing_accounts = isset($existing_settings['accounts']) ? $existing_settings['accounts'] : [];
 
-   
+		$new_accounts = [];
+	
+		if (!empty($_POST['accounts']) && is_array($_POST['accounts'])) {
+			$raw_accounts = wp_unslash($_POST['accounts']);
+			$validated_accounts = $this->validate_accounts($raw_accounts);
+	
+			if (!empty($validated_accounts['errors'])) {
+				foreach ($validated_accounts['errors'] as $error) {
+					$this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
+				}
+				add_action('admin_notices', [$this->admin_notices, 'display_notices']);
+			} else {
+				$new_accounts = $this->sanitize_accounts($validated_accounts['valid_accounts']);
+			}
+		}
+	
+		// Merge existing and new accounts
+		$all_accounts = is_array($existing_accounts) ? array_merge($existing_accounts, $new_accounts) : $new_accounts;
 
-}
+		// Validate all accounts
+		$validation_result = $this->validate_accounts($all_accounts);
+		if (!empty($validation_result['errors'])) {
+			foreach ($validation_result['errors'] as $error) {
+				$this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
+			}
+			add_action('admin_notices', [$this->admin_notices, 'display_notices']);
+			return;
+		}
+	
+		// Call update_account_statuses to handle saving and setting the first account active if needed
+		$this->update_account_statuses($all_accounts);
+	}
 	
 
 
@@ -751,7 +718,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             </p>';
 
 			// Add nonce field for security
-			wp_nonce_field('dfinsell_payment', 'dfinsell_save_settings');
+			
 			wp_nonce_field('dfinsell_payment', 'dfinsell_nonce');
 		}
 	}
@@ -1220,8 +1187,8 @@ private function get_cached_api_response($url, $data, $cache_key) {
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body, true);
 
-    // Cache the response for 5 minutes
-    set_transient($cache_key, $response_data, 5 * MINUTE_IN_SECONDS);
+    // Cache the response for 2 minutes
+    set_transient($cache_key, $response_data, 2 * MINUTE_IN_SECONDS);
 
     return $response_data;
 }
@@ -1375,5 +1342,33 @@ private function allowed_html_tags() {
         'td'     => ['class' => []],
     ];
 }
+
+public function update_account_statuses($accounts) {
+    if (empty($accounts)) {
+        return;
+    }
+
+    // Ensure the first account is active if no active account exists
+    $has_active = false;
+
+    foreach ($accounts as &$account) {
+        if ($account['status'] === 'true') {
+            $has_active = true;
+            break;
+        }
+    }
+
+    if (!$has_active && !empty($accounts)) {
+        $accounts[0]['status'] = 'true'; // Set the first account as active
+    }
+
+    // Save updated accounts to settings
+    $settings = get_option('woocommerce_dfinsell_settings', []);
+    $settings['accounts'] = $accounts;
+    update_option('woocommerce_dfinsell_settings', $settings);
+
+   
+}
+
 
 }
