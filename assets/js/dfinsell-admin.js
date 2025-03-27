@@ -35,4 +35,31 @@ jQuery(document).ready(function ($) {
       toggleSandboxFields()
     }
   )
+
 })
+
+
+function accountinfoshow() {
+	console.log('hello...');
+	var div = document.getElementById("account-info");
+	if (div.style.display !== "none") {
+		div.style.display = "none";
+		document.getElementById("account-down-arrow").style.transform = "rotate(0deg)";
+
+	}
+	else {
+		document.getElementById("account-down-arrow").style.transform = "rotate(180deg)";
+		div.style.display = "block";
+
+	}
+}
+
+function sandboxkey() {
+	var checkBox = document.getElementById("sandbox-checkbox");
+	var text = document.getElementById("sandbox-key");
+	if (checkBox.checked == true){
+		text.style.display = "block";
+	} else {
+		text.style.display = "none";
+	}
+}

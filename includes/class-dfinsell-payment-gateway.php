@@ -256,141 +256,178 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				<label><?php echo esc_html($data['title']); ?></label>
 			</th>
 			<td class="forminp">
-				<div id="dfinsell-accounts-container">
-					<?php if (!empty($option_value)) : foreach ($option_value as $index => $account) : ?>
-						<div class="dfinsell-account-card" data-index="<?php echo esc_attr($index); ?>">
-							<div class="account-header">
-								<input type="radio" name="dfinsell_active_account" class="active-radio" 
-									   value="<?php echo esc_attr($index); ?>" 
-									   <?php checked($index, $active_account); ?> />
-								<input type="text" name="dfinsell_accounts[<?php echo $index; ?>][title]" class="account-title" 
-									   value="<?php echo esc_attr($account['title']); ?>" placeholder="Account Title" required />
-								<button type="button" class="toggle-details">▼</button>
-								<button type="button" class="remove-account">❌</button>
-							</div>
-							<div class="account-details" style="display: none;">
-								<label>Live Public Key *</label>
-								<input type="text" name="dfinsell_accounts[<?php echo $index; ?>][public_key]" value="<?php echo esc_attr($account['public_key']); ?>" required />
-								<button type="button" class="copy-key" data-key="<?php echo esc_attr($account['public_key']); ?>">📋</button>
-								<br>
-	
-								<label>Live Secret Key *</label>
-								<input type="text" name="dfinsell_accounts[<?php echo $index; ?>][secret_key]" value="<?php echo esc_attr($account['secret_key']); ?>" required />
-								<button type="button" class="copy-key" data-key="<?php echo esc_attr($account['secret_key']); ?>">📋</button>
-								<br>
-	
-								<label>Sandbox Public Key (Optional)</label>
-								<input type="text" name="dfinsell_accounts[<?php echo $index; ?>][sandbox_public_key]" value="<?php echo esc_attr($account['sandbox_public_key']); ?>" />
-								<button type="button" class="copy-key" data-key="<?php echo esc_attr($account['sandbox_public_key']); ?>">📋</button>
-								<br>
-	
-								<label>Sandbox Secret Key (Optional)</label>
-								<input type="text" name="dfinsell_accounts[<?php echo $index; ?>][sandbox_secret_key]" value="<?php echo esc_attr($account['sandbox_secret_key']); ?>" />
-								<button type="button" class="copy-key" data-key="<?php echo esc_attr($account['sandbox_secret_key']); ?>">📋</button>
-							</div>
-						</div>
-					<?php endforeach; endif; ?>
-				</div>
-				<button type="button" id="add-account">➕ Add Account</button>
-				<input type="hidden" id="active-account-field" name="dfinsell_active_account" value="<?php echo esc_attr($active_account); ?>">
+			<div class="dfinsell-accounts-container">
+        <div class="empty-account"> No any account added </div>
+
+        <div class="dfinsell-account">
+            <div class="title-blog">
+                <h4><i class="fa fa-user" aria-hidden="true"></i>Account 1 &nbsp;<i class="fa fa-caret-down" id="account-down-arrow" aria-hidden="true" onclick="accountinfoshow()"></i></h4>  
+                <div class="action-button">                    
+                    <button><i class="fa fa-trash" aria-hidden="true"></i></button>
+                </div>
+            </div>
+
+            
+            <div id="account-info" style="display: none;">
+                <div class="account-input">
+                    <label>Account Name</label>
+                    <input type="text" class="account-title" name="accounts[0][title]" placeholder="Account Title" value="test">
+                </div>
+                <div class="add-blog">
+                    <div class="account-input">
+                        <label>Live Keys</label>
+                        <input type="text" class="sandbox-public-key" name="accounts[0][sandbox_public_key]" placeholder="Sandbox Public Key" value="dpk.$2y$10$NnPn2u/gG66L8QmJHPuLluR4Xv0pOMLQ/Mhdu8I00DdFKy6cCGC/.">
+                    </div>
+                    <div class="account-input">
+                        <label>&nbsp;</label>
+                        <input type="text" class="sandbox-secret-key" name="accounts[0][sandbox_secret_key]" placeholder="Sandbox Secret Key" value="dsk.$2y$10$f5fKCBDATz2ZdYTHbftXYutcG4nUfY1xg4C7c7st3ZkUIQheKf1eq">
+                    </div>
+                </div>
+
+                <div class="account-checkbox">
+                    <input type="checkbox" name="woocommerce_dfinsell_sandbox" id="sandbox-checkbox" onclick="sandboxkey()"> Do you have the sandbox keys?
+                </div>
+
+
+                <div id="sandbox-key" style="display:none">
+                    <div class="add-blog" >
+                        <div class="account-input">
+                            <label>Sandbox Keys</label>
+                            <input type="text" class="sandbox-public-key" name="accounts[0][sandbox_public_key]" placeholder="Sandbox Public Key" value="dpk.$2y$10$NnPn2u/gG66L8QmJHPuLluR4Xv0pOMLQ/Mhdu8I00DdFKy6cCGC/.">
+                        </div>
+                        <div class="account-input">
+                            <label>&nbsp;</label>
+                            <input type="text" class="sandbox-secret-key" name="accounts[0][sandbox_secret_key]" placeholder="Sandbox Secret Key" value="dsk.$2y$10$f5fKCBDATz2ZdYTHbftXYutcG4nUfY1xg4C7c7st3ZkUIQheKf1eq">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        
+        <div class="add-account-btn">
+            <button class="button dfinsell-add-account"><span>+</span> Add Acoount</button>
+        </div>
+
+    </div>
 			</td>
 		</tr>
-	
-		<script>
-			jQuery(document).ready(function($) {
-				// Expand/Collapse Account Details
-				$(document).on('click', '.toggle-details', function() {
-					$(this).closest('.dfinsell-account-card').find('.account-details').toggle();
-				});
-	
-				// Handle Active Account Selection
-				$(document).on('change', '.active-radio', function() {
-					$('.active-radio').prop('checked', false); // Uncheck all
-					$(this).prop('checked', true); // Check only the selected one
-					$('#active-account-field').val($(this).val()); // Store active account value
-				});
-	
-				// Add New Account
-				$('#add-account').click(function() {
-					let index = $('.dfinsell-account-card').length;
-					let newRow = `
-						<div class="dfinsell-account-card" data-index="${index}">
-							<div class="account-header">
-								<input type="radio" name="dfinsell_active_account" class="active-radio" value="${index}" />
-								<input type="text" name="dfinsell_accounts[${index}][title]" class="account-title" placeholder="Account Title" required />
-								<button type="button" class="toggle-details">▼</button>
-								<button type="button" class="remove-account">❌</button>
-							</div>
-							<div class="account-details">
-								<label>Live Public Key *</label>
-								<input type="text" name="dfinsell_accounts[${index}][public_key]" required />
-								<button type="button" class="copy-key" data-key="">📋</button>
-								<br>
-	
-								<label>Live Secret Key *</label>
-								<input type="text" name="dfinsell_accounts[${index}][secret_key]" required />
-								<button type="button" class="copy-key" data-key="">📋</button>
-								<br>
-	
-								<label>Sandbox Public Key (Optional)</label>
-								<input type="text" name="dfinsell_accounts[${index}][sandbox_public_key]" />
-								<button type="button" class="copy-key" data-key="">📋</button>
-								<br>
-	
-								<label>Sandbox Secret Key (Optional)</label>
-								<input type="text" name="dfinsell_accounts[${index}][sandbox_secret_key]" />
-								<button type="button" class="copy-key" data-key="">📋</button>
-							</div>
-						</div>`;
-					
-					$('#dfinsell-accounts-container').append(newRow);
-				});
-	
-				// Remove Account
-				$(document).on('click', '.remove-account', function() {
-					if (confirm('Are you sure you want to remove this account?')) {
-						$(this).closest('.dfinsell-account-card').remove();
-					}
-				});
-	
-				// Copy API Key
-				$(document).on('click', '.copy-key', function() {
-					let key = $(this).prev('input').val();
-					navigator.clipboard.writeText(key);
-					alert('Key copied to clipboard!');
-				});
-			});
-		</script>
-	
 		<style>
-			.dfinsell-account-card {
-				border: 1px solid #ccc;
-				padding: 10px;
-				margin-bottom: 10px;
-				border-radius: 5px;
-				background: #f9f9f9;
-			}
-			.account-header {
-				display: flex;
-				align-items: center;
-				justify-content: space-between;
-			}
-			.account-title {
-				flex-grow: 1;
-				padding: 5px;
-				font-weight: bold;
-				width: 100%;
-			}
-			.toggle-details, .remove-account, .copy-key {
-				cursor: pointer;
-				border: none;
-				background: none;
-			}
-			input[type="text"] {
-				width: 100%;
-				padding: 5px;
-				margin: 5px 0;
-			}
+   .dfinsell-account{
+	   margin-bottom: 14px !important;
+	   border: 1px solid #C5C5C5;
+	   border-radius: 7px;
+	   padding: 12px;
+   }
+   .add-blog{
+	   display: flex ;
+	   align-items: center;
+	   flex-wrap: wrap;
+	   margin-top: 10px;
+	   justify-content: space-between;
+   }
+   .dfinsell-accounts-container .account-input input{
+		width:100% !important;
+	   margin-bottom: 8px !important;
+	   margin-right: 8px !important;
+   }
+   .dfinsell-accounts-container h4{
+	   font-size: 16px !important;
+	   margin-top: 0 !important;
+	   margin-bottom: 0px !important;
+	   line-height: 19px !important;
+	   display: flex !important;
+	   align-items: center !important;
+   }
+   .dfinsell-accounts-container h4 i{
+	   font-size: 13px !important;
+	   margin-right: 6px !important;
+	   cursor: pointer;
+   }
+   .empty-account{
+	   background: #F9F8FD;
+	   color: #8264D7;
+	   padding: 16px;
+	   border-left: 3px solid #8264D7;
+	   font-size: 15px !important;
+	   font-weight: 400;
+	   margin-bottom: 20px !important;
+   }
+   .dfinsell-accounts-container .action-button{
+	   display: flex !important;
+	   align-items: center !important;
+   }
+   .dfinsell-accounts-container .action-button button{
+	   color: #6B6B6B;
+	   font-size: 14px !important;
+	   background: transparent;
+	   border: none;
+	   cursor: pointer;
+   }
+   .dfinsell-account .active-indicator{
+	   font-size: 14px !important;
+	   color: #28A745 !important;
+	   background: #E7F5EB !important;
+	   border-radius: 5px;
+	   padding: 4px 16px;
+	   width: fit-content;
+	   margin-right:8px;
+   }
+   .dfinsell-accounts-container .account-input{
+	   width:49.5%;
+   }
+   
+   .dfinsell-accounts-container .account-input label{
+	   color: #2D3338 !important;
+	   font-size: 12px !important;
+	   display: block !important;
+	   margin-bottom: 2px !important;
+   }
+   .add-account-btn .dfinsell-add-account{
+	   border-radius: 5px;
+	   background: #0A0B21;
+	   color: #F5F5F5;
+	   font-size: 15px !important;
+	   margin: 20px 0;
+	   max-width: 204px !important;
+	   width: 100%;
+	   padding: 11px !important;
+	   border: 1px solid #0A0B21;
+	   height: 42px !important;
+	   line-height:19px !important;
+   }
+   .add-account-btn .dfinsell-add-account span{
+	   font-size: 19px;
+	   line-height: 12px;    
+   }
+   #account-info{
+	   display: none;
+	   margin-top: 18px !important;
+   }
+   #account-down-arrow{
+	   color:#6B6B6B ;
+	   font-size: 17px !important;
+	   margin-left:8px !important;
+   }
+   .account-checkbox{
+	   font-size: 14px !important;
+	   display: flex !important ;
+	   align-items: center !important;
+	   margin: 10px 0 15px !important;
+   }
+   .account-checkbox input{
+	   width: 15px !important;
+	   height: 15px !important;
+	   margin-right: 5px !important;
+	   margin-left: 0 !important;
+   }
+   .title-blog{
+	   display:flex;
+	   align-items: center;
+	   justify-content: space-between;
+   }
+
+
 		</style>
 		<?php
 		return ob_get_clean();
@@ -910,6 +947,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		if ('woocommerce_page_wc-settings' !== $hook) {
 			return; // Only load on WooCommerce settings page
 		}
+
+		 // Enqueue Font Awesome CSS
+		 wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css', array(), '6.5.1');
 
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
