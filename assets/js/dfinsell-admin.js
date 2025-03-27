@@ -1,4 +1,7 @@
 jQuery(document).ready(function ($) {
+
+	
+
   // Sanitize the PAYMENT_CODE parameter
   const PAYMENT_CODE =
     typeof params.PAYMENT_CODE === 'string' ? $.trim(params.PAYMENT_CODE) : ''

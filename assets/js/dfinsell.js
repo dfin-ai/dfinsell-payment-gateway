@@ -239,6 +239,6 @@ jQuery(function ($) {
 	  }
 	  $('.dfinsell-loader-background, .dfinsell-loader').hide();
 	}
-  
+
   });
   
