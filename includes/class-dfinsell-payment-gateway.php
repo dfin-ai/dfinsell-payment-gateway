@@ -279,7 +279,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			<td class="forminp">
 				<div class="dfinsell-accounts-container">
 					<?php if (empty($option_value)) : ?>
-						<div class="empty-account"> No any account added </div>
+						<div class="empty-account"> No accounts available. Please add one to continue. </div>
 					<?php else : ?>
 						<?php foreach (array_values($option_value) as $index => $account) : ?>
 							<div class="dfinsell-account" data-index="<?php echo $index; ?>">
