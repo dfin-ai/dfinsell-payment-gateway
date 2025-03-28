@@ -1,5 +1,4 @@
 jQuery(document).ready(function ($) {
-    // Function to update the account indices dynamically
     function updateAccountIndices() {
         $(".dfinsell-account").each(function (index) {
             $(this).attr("data-index", index);
@@ -13,40 +12,41 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    // Toggle account info on caret icon click
+    // Ensure all account details are hidden on load
+    $(".account-info").hide();
+
     $(document).on("click", ".account-toggle-btn", function () {
-        let accountContainer = $(this).closest(".dfinsell-account");
-        let accountInfo = accountContainer.find(".account-info");
-
+        let accountInfo = $(this).closest(".dfinsell-account").find(".account-info");
         accountInfo.slideToggle();
-        $(this).toggleClass("rotated"); // Rotate icon
+        $(this).toggleClass("rotated");
     });
 
-    // Update account title dynamically when the account name input changes
     $(document).on("input", ".account-title", function () {
-        let accountContainer = $(this).closest(".dfinsell-account");
-        let newTitle = $(this).val().trim() || "Untitled Account"; // Default fallback title
-        accountContainer.find(".account-name-display").text(newTitle);
+        let newTitle = $(this).val().trim() || "Untitled Account";
+        $(this).closest(".dfinsell-account").find(".account-name-display").text(newTitle);
     });
 
-    // Toggle sandbox fields based on checkbox
+    // Toggle sandbox fields and clear inputs when unchecked
     $(document).on("change", ".sandbox-checkbox", function () {
         let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
-        sandboxContainer.toggle($(this).is(":checked"));
+
+        if ($(this).is(":checked")) {
+            sandboxContainer.show();
+        } else {
+            sandboxContainer.hide();
+            sandboxContainer.find("input").val(""); // Clear sandbox key fields
+        }
     });
 
-    // Handle account deletion
     $(document).on("click", ".delete-account-btn", function () {
         $(this).closest(".dfinsell-account").remove();
         updateAccountIndices();
 
-        // Check if no accounts remain, show "No any account added"
         if ($(".dfinsell-account").length === 0) {
             $(".dfinsell-accounts-container").prepend('<div class="empty-account"> No any account added </div>');
         }
     });
 
-    // Handle adding a new account
     $(document).on("click", ".dfinsell-add-account", function () {
         let newAccountHtml = `
         <div class="dfinsell-account">
@@ -61,7 +61,7 @@ jQuery(document).ready(function ($) {
                 </div>
             </div>
 
-            <div class="account-info">
+            <div class="account-info" style="display: none;">
                 <div class="account-input">
                     <label>Account Name</label>
                     <input type="text" class="account-title" name="accounts[][title]" placeholder="Account Title">
@@ -98,7 +98,9 @@ jQuery(document).ready(function ($) {
         </div>`;
 
         $(".dfinsell-accounts-container .empty-account").remove();
-        $(".dfinsell-accounts-container").append(newAccountHtml);
+        
+        // ✅ Insert before the "Add Account" button
+        $(".dfinsell-add-account").closest(".add-account-btn").before(newAccountHtml);
 
         updateAccountIndices();
     });
