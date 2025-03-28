@@ -1,0 +1,113 @@
+.dfinsell-account{
+	margin-bottom: 14px !important;
+	border: 1px solid #C5C5C5;
+	border-radius: 7px;
+	padding: 12px;
+}
+.add-blog{
+	display: flex ;
+	align-items: center;
+	flex-wrap: wrap;
+	margin-top: 10px;
+	justify-content: space-between;
+}
+.dfinsell-accounts-container .account-input input{
+	 width:100% !important;
+	margin-bottom: 8px !important;
+	margin-right: 8px !important;
+}
+.dfinsell-accounts-container h4{
+	font-size: 16px !important;
+	margin-top: 0 !important;
+	margin-bottom: 0px !important;
+	line-height: 19px !important;
+	display: flex !important;
+	align-items: center !important;
+}
+.dfinsell-accounts-container h4 i{
+	font-size: 13px !important;
+	margin-right: 6px !important;
+	cursor: pointer;
+}
+.empty-account{
+	background: #F9F8FD;
+	color: #8264D7;
+	padding: 16px;
+	border-left: 3px solid #8264D7;
+	font-size: 15px !important;
+	font-weight: 400;
+	margin-bottom: 20px !important;
+}
+.dfinsell-accounts-container .action-button{
+	display: flex !important;
+	align-items: center !important;
+}
+.dfinsell-accounts-container .action-button button{
+	color: #6B6B6B;
+	font-size: 14px !important;
+	background: transparent;
+	border: none;
+	cursor: pointer;
+}
+.dfinsell-account .active-indicator{
+	font-size: 14px !important;
+	color: #28A745 !important;
+	background: #E7F5EB !important;
+	border-radius: 5px;
+	padding: 4px 16px;
+	width: fit-content;
+	margin-right:8px;
+}
+.dfinsell-accounts-container .account-input{
+	width:49.5%;
+}
+
+.dfinsell-accounts-container .account-input label{
+	color: #2D3338 !important;
+	font-size: 12px !important;
+	display: block !important;
+	margin-bottom: 2px !important;
+}
+.add-account-btn .dfinsell-add-account{
+	border-radius: 5px;
+	background: #0A0B21;
+	color: #F5F5F5;
+	font-size: 15px !important;
+	margin: 20px 0;
+	max-width: 204px !important;
+	width: 100%;
+	padding: 11px !important;
+	border: 1px solid #0A0B21;
+	height: 42px !important;
+	line-height:19px !important;
+}
+.add-account-btn .dfinsell-add-account span{
+	font-size: 19px;
+	line-height: 12px;    
+}
+#account-info{
+	display: none;
+	margin-top: 18px !important;
+}
+#account-down-arrow{
+	color:#6B6B6B ;
+	font-size: 17px !important;
+	margin-left:8px !important;
+}
+.account-checkbox{
+	font-size: 14px !important;
+	display: flex !important ;
+	align-items: center !important;
+	margin: 10px 0 15px !important;
+}
+.account-checkbox input{
+	width: 15px !important;
+	height: 15px !important;
+	margin-right: 5px !important;
+	margin-left: 0 !important;
+}
+.title-blog{
+	display:flex;
+	align-items: center;
+	justify-content: space-between;
+}

@@ -95,71 +95,79 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	public function dfinsell_process_admin_options()
 {
     parent::process_admin_options();
-
-    // Retrieve the options from the settings
-    $title = sanitize_text_field($this->get_option('title'));
-
-    // Initialize error tracking
+    
     $errors = array();
+    $valid_accounts = array();
 
-    // Check for Title
-    if (empty($title)) {
-        $errors[] = __('Title is required. Please enter a title in the settings.', 'dfinsell-payment-gateway');
-    }
+	//die('<pre>' . print_r($_POST, true) . '</pre>');
 
-    // Get the selected active account index
-    $selected_active_index = isset($_POST['dfinsell_active_account']) ? intval($_POST['dfinsell_active_account']) : -1;
+    // Check if accounts exist in the request
+    if (isset($_POST['accounts']) && is_array($_POST['accounts'])) {
+        $normalized_index = 0;
 
-    // Handle account updates and removals
-    if (isset($_POST['dfinsell_accounts']) && is_array($_POST['dfinsell_accounts'])) {
-        $updated_accounts = array();
+        foreach ($_POST['accounts'] as $index => $account) {
+            // Debugging: Stop execution and check data
+            if ($index === 0) {
+                //die('<pre>' . print_r($account, true) . '</pre>');
+            }
 
-        foreach ($_POST['dfinsell_accounts'] as $index => $account) {
-            // Validate required fields
+            // Sanitize input
             $account_title = sanitize_text_field($account['title'] ?? '');
-            $live_public_key = sanitize_text_field($account['public_key'] ?? '');
-            $live_secret_key = sanitize_text_field($account['secret_key'] ?? '');
+            $live_public_key = sanitize_text_field($account['live_public_key'] ?? '');
+            $live_secret_key = sanitize_text_field($account['live_secret_key'] ?? '');
             $sandbox_public_key = sanitize_text_field($account['sandbox_public_key'] ?? '');
             $sandbox_secret_key = sanitize_text_field($account['sandbox_secret_key'] ?? '');
 
-            if (empty($account_title) || empty($live_public_key) || empty($live_secret_key)) {
-                $errors[] = sprintf(__('Account #%d: Title, Live Public Key, and Live Secret Key are required.', 'dfinsell-payment-gateway'), $index + 1);
-                continue; // Skip this account if validation fails
+            // Ignore empty accounts
+            if (empty($account_title) && empty($live_public_key) && empty($live_secret_key) && empty($sandbox_public_key) && empty($sandbox_secret_key)) {
+                continue;
             }
 
-            // Check if this account should be active
-            $is_active = ($index == $selected_active_index) ? 1 : 0;
+            // Validate required fields
+            if (empty($account_title) || empty($live_public_key) || empty($live_secret_key)) {
+                $errors[] = sprintf(__('Account #%d: Title, Live Public Key, and Live Secret Key are required.', 'dfinsell-payment-gateway'), count($valid_accounts) + 1);
+                continue;
+            }
 
-            // Store valid accounts
-            $updated_accounts[] = [
-                'title'             => $account_title,
-                'public_key'        => $live_public_key,
-                'secret_key'        => $live_secret_key,
-                'sandbox_public_key'=> $sandbox_public_key,
-                'sandbox_secret_key'=> $sandbox_secret_key,
-                'is_active'         => $is_active,
+            // Store valid account
+            $valid_accounts[$normalized_index] = [
+                'title'              => $account_title,
+                'live_public_key'    => $live_public_key,
+                'live_secret_key'    => $live_secret_key,
+                'sandbox_public_key' => $sandbox_public_key,
+                'sandbox_secret_key' => $sandbox_secret_key,
             ];
+            $normalized_index++;
         }
 
-        // Save updated accounts
-        update_option('woocommerce_dfinsell_payment_gateway_accounts', $updated_accounts);
-        
-        // **Save the selected active account index**
-        update_option('dfinsell_active_account', $selected_active_index);
-    } else {
-        update_option('woocommerce_dfinsell_payment_gateway_accounts', array());
-        $errors[] = __('At least one payment account must be configured.', 'dfinsell-payment-gateway');
+        // Debugging: Show valid accounts
+        //die('<pre>' . print_r($valid_accounts, true) . '</pre>');
+
+        // Ensure at least one valid account exists
+        if (empty($valid_accounts)) {
+            $errors[] = __('At least one valid payment account must be configured.', 'dfinsell-payment-gateway');
+        } else {
+            // Save accounts
+            update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
+          //  die('<pre>' . print_r(get_option('woocommerce_dfinsell_payment_gateway_accounts'), true) . '</pre>'); // Debug saved data
+        }
     }
 
-    // Display all errors
+    // Show errors if any
     if (!empty($errors)) {
         foreach ($errors as $error) {
-            $this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
+            $this->admin_notices->dfinsell_add_notice('settings_error', 'notice notice-error', $error);
         }
-        add_action('admin_notices', array($this->admin_notices, 'display_notices'));
+    } else {
+        $this->admin_notices->dfinsell_add_notice('settings_success', 'notice notice-success', __('Settings saved successfully.', 'dfinsell-payment-gateway'));
     }
+
+    add_action('admin_notices', array($this->admin_notices, 'display_notices'));
 }
 
+	
+
+	
 	/**
 	 * Initialize gateway settings form fields.
 	 */
@@ -256,182 +264,72 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				<label><?php echo esc_html($data['title']); ?></label>
 			</th>
 			<td class="forminp">
-			<div class="dfinsell-accounts-container">
-        <div class="empty-account"> No any account added </div>
-
-        <div class="dfinsell-account">
-            <div class="title-blog">
-                <h4><i class="fa fa-user" aria-hidden="true"></i>Account 1 &nbsp;<i class="fa fa-caret-down" id="account-down-arrow" aria-hidden="true" onclick="accountinfoshow()"></i></h4>  
-                <div class="action-button">                    
-                    <button><i class="fa fa-trash" aria-hidden="true"></i></button>
-                </div>
-            </div>
-
-            
-            <div id="account-info" style="display: none;">
-                <div class="account-input">
-                    <label>Account Name</label>
-                    <input type="text" class="account-title" name="accounts[0][title]" placeholder="Account Title" value="test">
-                </div>
-                <div class="add-blog">
-                    <div class="account-input">
-                        <label>Live Keys</label>
-                        <input type="text" class="sandbox-public-key" name="accounts[0][sandbox_public_key]" placeholder="Sandbox Public Key" value="dpk.$2y$10$NnPn2u/gG66L8QmJHPuLluR4Xv0pOMLQ/Mhdu8I00DdFKy6cCGC/.">
-                    </div>
-                    <div class="account-input">
-                        <label>&nbsp;</label>
-                        <input type="text" class="sandbox-secret-key" name="accounts[0][sandbox_secret_key]" placeholder="Sandbox Secret Key" value="dsk.$2y$10$f5fKCBDATz2ZdYTHbftXYutcG4nUfY1xg4C7c7st3ZkUIQheKf1eq">
-                    </div>
-                </div>
-
-                <div class="account-checkbox">
-                    <input type="checkbox" name="woocommerce_dfinsell_sandbox" id="sandbox-checkbox" onclick="sandboxkey()"> Do you have the sandbox keys?
-                </div>
-
-
-                <div id="sandbox-key" style="display:none">
-                    <div class="add-blog" >
-                        <div class="account-input">
-                            <label>Sandbox Keys</label>
-                            <input type="text" class="sandbox-public-key" name="accounts[0][sandbox_public_key]" placeholder="Sandbox Public Key" value="dpk.$2y$10$NnPn2u/gG66L8QmJHPuLluR4Xv0pOMLQ/Mhdu8I00DdFKy6cCGC/.">
-                        </div>
-                        <div class="account-input">
-                            <label>&nbsp;</label>
-                            <input type="text" class="sandbox-secret-key" name="accounts[0][sandbox_secret_key]" placeholder="Sandbox Secret Key" value="dsk.$2y$10$f5fKCBDATz2ZdYTHbftXYutcG4nUfY1xg4C7c7st3ZkUIQheKf1eq">
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-        
-        <div class="add-account-btn">
-            <button class="button dfinsell-add-account"><span>+</span> Add Acoount</button>
-        </div>
-
-    </div>
+				<div class="dfinsell-accounts-container">
+					<?php if (empty($option_value)) : ?>
+						<div class="empty-account"> No any account added </div>
+					<?php else : ?>
+						<?php foreach (array_values($option_value) as $index => $account) : ?>
+							<div class="dfinsell-account" data-index="<?php echo $index; ?>">
+								<div class="title-blog">
+									<h4>
+										<i class="fa fa-user" aria-hidden="true"></i> 
+										<span class="account-name-display"><?php echo !empty($account['title']) ? esc_html($account['title']) : 'Untitled Account'; ?></span>
+										&nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
+									</h4>
+									<div class="action-button">
+										<button class="delete-account-btn"><i class="fa fa-trash" aria-hidden="true"></i></button>
+									</div>
+								</div>
+	
+								<div class="account-info">
+									<div class="account-input">
+										<label>Account Name</label>
+										<input type="text" class="account-title" name="accounts[<?php echo $index; ?>][title]" placeholder="Account Title" value="<?php echo esc_attr($account['title'] ?? ''); ?>">
+									</div>
+									<div class="add-blog">
+										<div class="account-input">
+											<label>Live Keys</label>
+											<input type="text" class="live-public-key" name="accounts[<?php echo $index; ?>][live_public_key]" placeholder="Live Public Key" value="<?php echo esc_attr($account['live_public_key'] ?? ''); ?>">
+										</div>
+										<div class="account-input">
+											<label>&nbsp;</label>
+											<input type="text" class="live-secret-key" name="accounts[<?php echo $index; ?>][live_secret_key]" placeholder="Live Secret Key" value="<?php echo esc_attr($account['live_secret_key'] ?? ''); ?>">
+										</div>
+									</div>
+	
+									<div class="account-checkbox">
+										<input type="checkbox" class="sandbox-checkbox" name="accounts[<?php echo $index; ?>][has_sandbox]" <?php echo !empty($account['sandbox_public_key']) ? 'checked' : ''; ?>>
+										Do you have the sandbox keys?
+									</div>
+	
+									<div class="sandbox-key" style="<?php echo empty($account['sandbox_public_key']) ? 'display: none;' : ''; ?>">
+										<div class="add-blog">
+											<div class="account-input">
+												<label>Sandbox Keys</label>
+												<input type="text" class="sandbox-public-key" name="accounts[<?php echo $index; ?>][sandbox_public_key]" placeholder="Sandbox Public Key" value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
+											</div>
+											<div class="account-input">
+												<label>&nbsp;</label>
+												<input type="text" class="sandbox-secret-key" name="accounts[<?php echo $index; ?>][sandbox_secret_key]" placeholder="Sandbox Secret Key" value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						<?php endforeach; ?>
+					<?php endif; ?>
+	
+					<div class="add-account-btn">
+						<button type="button" class="button dfinsell-add-account"><span>+</span> Add Account</button>
+					</div>
+				</div>
 			</td>
 		</tr>
-		<style>
-   .dfinsell-account{
-	   margin-bottom: 14px !important;
-	   border: 1px solid #C5C5C5;
-	   border-radius: 7px;
-	   padding: 12px;
-   }
-   .add-blog{
-	   display: flex ;
-	   align-items: center;
-	   flex-wrap: wrap;
-	   margin-top: 10px;
-	   justify-content: space-between;
-   }
-   .dfinsell-accounts-container .account-input input{
-		width:100% !important;
-	   margin-bottom: 8px !important;
-	   margin-right: 8px !important;
-   }
-   .dfinsell-accounts-container h4{
-	   font-size: 16px !important;
-	   margin-top: 0 !important;
-	   margin-bottom: 0px !important;
-	   line-height: 19px !important;
-	   display: flex !important;
-	   align-items: center !important;
-   }
-   .dfinsell-accounts-container h4 i{
-	   font-size: 13px !important;
-	   margin-right: 6px !important;
-	   cursor: pointer;
-   }
-   .empty-account{
-	   background: #F9F8FD;
-	   color: #8264D7;
-	   padding: 16px;
-	   border-left: 3px solid #8264D7;
-	   font-size: 15px !important;
-	   font-weight: 400;
-	   margin-bottom: 20px !important;
-   }
-   .dfinsell-accounts-container .action-button{
-	   display: flex !important;
-	   align-items: center !important;
-   }
-   .dfinsell-accounts-container .action-button button{
-	   color: #6B6B6B;
-	   font-size: 14px !important;
-	   background: transparent;
-	   border: none;
-	   cursor: pointer;
-   }
-   .dfinsell-account .active-indicator{
-	   font-size: 14px !important;
-	   color: #28A745 !important;
-	   background: #E7F5EB !important;
-	   border-radius: 5px;
-	   padding: 4px 16px;
-	   width: fit-content;
-	   margin-right:8px;
-   }
-   .dfinsell-accounts-container .account-input{
-	   width:49.5%;
-   }
-   
-   .dfinsell-accounts-container .account-input label{
-	   color: #2D3338 !important;
-	   font-size: 12px !important;
-	   display: block !important;
-	   margin-bottom: 2px !important;
-   }
-   .add-account-btn .dfinsell-add-account{
-	   border-radius: 5px;
-	   background: #0A0B21;
-	   color: #F5F5F5;
-	   font-size: 15px !important;
-	   margin: 20px 0;
-	   max-width: 204px !important;
-	   width: 100%;
-	   padding: 11px !important;
-	   border: 1px solid #0A0B21;
-	   height: 42px !important;
-	   line-height:19px !important;
-   }
-   .add-account-btn .dfinsell-add-account span{
-	   font-size: 19px;
-	   line-height: 12px;    
-   }
-   #account-info{
-	   display: none;
-	   margin-top: 18px !important;
-   }
-   #account-down-arrow{
-	   color:#6B6B6B ;
-	   font-size: 17px !important;
-	   margin-left:8px !important;
-   }
-   .account-checkbox{
-	   font-size: 14px !important;
-	   display: flex !important ;
-	   align-items: center !important;
-	   margin: 10px 0 15px !important;
-   }
-   .account-checkbox input{
-	   width: 15px !important;
-	   height: 15px !important;
-	   margin-right: 5px !important;
-	   margin-left: 0 !important;
-   }
-   .title-blog{
-	   display:flex;
-	   align-items: center;
-	   justify-content: space-between;
-   }
-
-
-		</style>
 		<?php
 		return ob_get_clean();
 	}
+	
+	
 	
 	/**
 	 * Process the payment and return the result.
@@ -950,6 +848,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		 // Enqueue Font Awesome CSS
 		 wp_enqueue_style('font-awesome', 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css', array(), '6.5.1');
+
+		  // Enqueue Admin CSS
+		  wp_enqueue_style(
+			'dfinsell-admin-css', 
+			plugins_url('../assets/css/admin.css', __FILE__), 
+			array(), 
+			filemtime(plugin_dir_path(__FILE__) . '../assets/css/admin.css'), 
+			'all'
+		);
 
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
