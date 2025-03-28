@@ -76,88 +76,115 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		add_filter('woocommerce_available_payment_gateways',  array($this, 'hide_custom_payment_gateway_conditionally'));
 
-		// add_action('wp_ajax_generate_single_account_html', [$this, 'ajax_generate_single_account_html']);
-		// add_action('wp_ajax_nopriv_generate_single_account_html', [$this, 'ajax_generate_single_account_html']); // For non-logged-in users
-
-
-		// add_action('wp_ajax_generate_single_account_html', function () {
-		// 	$index = isset($_POST['index']) ? intval($_POST['index']) : 0;
-		// 	echo generate_single_account_html($index, []);
-		// 	wp_die();
-		// });
 	}
 
 	private function get_api_url($endpoint)
 	{
 		return $this->sip_protocol . $this->sip_host . $endpoint;
 	}
+
 	public function dfinsell_process_admin_options()
 	{
-		parent::process_admin_options();
-		
-		$errors = array();
-		$valid_accounts = array();
-	
-		// Debugging: Check incoming request
-		// die('<pre>' . print_r($_POST, true) . '</pre>');
-	
-		// If accounts exist in the request, process them
-		if (!empty($_POST['accounts']) && is_array($_POST['accounts'])) {
-			$normalized_index = 0;
-	
-			foreach ($_POST['accounts'] as $index => $account) {
-				// Sanitize input
-				$account_title = sanitize_text_field($account['title'] ?? '');
-				$live_public_key = sanitize_text_field($account['live_public_key'] ?? '');
-				$live_secret_key = sanitize_text_field($account['live_secret_key'] ?? '');
-				$sandbox_public_key = sanitize_text_field($account['sandbox_public_key'] ?? '');
-				$sandbox_secret_key = sanitize_text_field($account['sandbox_secret_key'] ?? '');
-	
-				// Ignore empty accounts
-				if (empty($account_title) && empty($live_public_key) && empty($live_secret_key) && empty($sandbox_public_key) && empty($sandbox_secret_key)) {
-					continue;
-				}
-	
-				// Validate required fields
-				if (empty($account_title) || empty($live_public_key) || empty($live_secret_key)) {
-					$errors[] = sprintf(__('Account #%d: Title, Live Public Key, and Live Secret Key are required.', 'dfinsell-payment-gateway'), count($valid_accounts) + 1);
-					continue;
-				}
-	
-				// Store valid account
-				$valid_accounts[$normalized_index] = [
-					'title'              => $account_title,
-					'live_public_key'    => $live_public_key,
-					'live_secret_key'    => $live_secret_key,
-					'sandbox_public_key' => $sandbox_public_key,
-					'sandbox_secret_key' => $sandbox_secret_key,
-				];
-				$normalized_index++;
-			}
-	
-			// Debugging: Show valid accounts
-			// die('<pre>' . print_r($valid_accounts, true) . '</pre>');
-	
-			// ✅ FIX: Ensure database is updated even when all accounts are deleted
-			update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
-	
-		} else {
-			// ✅ If no accounts exist in the request, delete the option
-			delete_option('woocommerce_dfinsell_payment_gateway_accounts');
-		}
-	
-		// Show errors if any
-		if (!empty($errors)) {
-			foreach ($errors as $error) {
-				$this->admin_notices->dfinsell_add_notice('settings_error', 'notice notice-error', $error);
-			}
-		} else {
-			$this->admin_notices->dfinsell_add_notice('settings_success', 'notice notice-success', __('Settings saved successfully.', 'dfinsell-payment-gateway'));
-		}
-	
-		add_action('admin_notices', array($this->admin_notices, 'display_notices'));
+	    parent::process_admin_options();
+
+	    $errors = array();
+	    $valid_accounts = array();
+	    $all_live_keys = array();
+	    $all_sandbox_keys = array();
+
+	    // Check if accounts exist in the request
+	    if (isset($_POST['accounts']) && is_array($_POST['accounts'])) {
+	        $normalized_index = 0;
+
+	        foreach ($_POST['accounts'] as $index => $account) {
+	            // Sanitize input
+	            $account_title = sanitize_text_field($account['title'] ?? '');
+	            $live_public_key = sanitize_text_field($account['live_public_key'] ?? '');
+	            $live_secret_key = sanitize_text_field($account['live_secret_key'] ?? '');
+	            $sandbox_public_key = sanitize_text_field($account['sandbox_public_key'] ?? '');
+	            $sandbox_secret_key = sanitize_text_field($account['sandbox_secret_key'] ?? '');
+
+	            // Ignore empty accounts
+	            if (empty($account_title) && empty($live_public_key) && empty($live_secret_key) && empty($sandbox_public_key) && empty($sandbox_secret_key)) {
+	                continue;
+	            }
+
+	            // Validate required fields
+	            if (empty($account_title) || empty($live_public_key) || empty($live_secret_key)) {
+	                $errors[] = sprintf(__('Account "%s": Title, Live Public Key, and Live Secret Key are required.', 'dfinsell-payment-gateway'), $account_title ?: 'Untitled');
+	                continue;
+	            }
+
+	            // Ensure Live Public Key & Live Secret Key are not the same
+	            if ($live_public_key === $live_secret_key) {
+	                $errors[] = sprintf(__('Account "%s": Live Public Key and Live Secret Key must be different.', 'dfinsell-payment-gateway'), $account_title);
+	                continue;
+	            }
+
+	            // Check uniqueness of Live Keys
+	            if (in_array($live_public_key, $all_live_keys, true) || in_array($live_secret_key, $all_live_keys, true)) {
+	                $errors[] = sprintf(__('Account "%s": Live Public Key and Secret Key must be unique across all accounts.', 'dfinsell-payment-gateway'), $account_title);
+	                continue;
+	            }
+
+	            // Add live keys to tracking array
+	            $all_live_keys[] = $live_public_key;
+	            $all_live_keys[] = $live_secret_key;
+
+	            // Validate Sandbox Keys (if provided)
+	            if (!empty($sandbox_public_key) || !empty($sandbox_secret_key)) {
+	                // Ensure Sandbox Public Key & Sandbox Secret Key are not the same
+	                if ($sandbox_public_key === $sandbox_secret_key) {
+	                    $errors[] = sprintf(__('Account "%s": Sandbox Public Key and Sandbox Secret Key must be different.', 'dfinsell-payment-gateway'), $account_title);
+	                    continue;
+	                }
+
+	                // Ensure Sandbox Keys are unique
+	                if (in_array($sandbox_public_key, $all_sandbox_keys, true) || in_array($sandbox_secret_key, $all_sandbox_keys, true)) {
+	                    $errors[] = sprintf(__('Account "%s": Sandbox Public Key and Secret Key must be unique across all accounts.', 'dfinsell-payment-gateway'), $account_title);
+	                    continue;
+	                }
+
+	                // Add sandbox keys to tracking array
+	                $all_sandbox_keys[] = $sandbox_public_key;
+	                $all_sandbox_keys[] = $sandbox_secret_key;
+	            }
+
+	            // Store valid account
+	            $valid_accounts[$normalized_index] = [
+	                'title'              => $account_title,
+	                'live_public_key'    => $live_public_key,
+	                'live_secret_key'    => $live_secret_key,
+	                'sandbox_public_key' => $sandbox_public_key,
+	                'sandbox_secret_key' => $sandbox_secret_key,
+	            ];
+	            $normalized_index++;
+	        }
+
+	        // Ensure at least one valid account exists
+	        if (empty($valid_accounts)) {
+	            $errors[] = __('At least one valid payment account must be configured.', 'dfinsell-payment-gateway');
+	        } else {
+	            // Save accounts if no errors
+	            update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
+	        }
+	    } else {
+	        // If no accounts are present, remove stored accounts
+	        delete_option('woocommerce_dfinsell_payment_gateway_accounts');
+	    }
+
+	    // Show errors if any
+	    if (!empty($errors)) {
+	        foreach ($errors as $error) {
+	            $this->admin_notices->dfinsell_add_notice('settings_error', 'notice notice-error', $error);
+	        }
+	    } else {
+	        $this->admin_notices->dfinsell_add_notice('settings_success', 'notice notice-success', __('Settings saved successfully.', 'dfinsell-payment-gateway'));
+	    }
+
+	    add_action('admin_notices', array($this->admin_notices, 'display_notices'));
 	}
-	
+
 	/**
 	 * Initialize gateway settings form fields.
 	 */
@@ -318,8 +345,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		<?php
 		return ob_get_clean();
 	}
-	
-	
 	
 	/**
 	 * Process the payment and return the result.
