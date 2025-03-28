@@ -12,7 +12,6 @@ jQuery(document).ready(function ($) {
         });
     }
 
-    // Ensure all account details are hidden on load
     $(".account-info").hide();
 
     $(document).on("click", ".account-toggle-btn", function () {
@@ -26,20 +25,27 @@ jQuery(document).ready(function ($) {
         $(this).closest(".dfinsell-account").find(".account-name-display").text(newTitle);
     });
 
-    // Toggle sandbox fields and clear inputs when unchecked
     $(document).on("change", ".sandbox-checkbox", function () {
         let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
-
         if ($(this).is(":checked")) {
             sandboxContainer.show();
         } else {
             sandboxContainer.hide();
-            sandboxContainer.find("input").val(""); // Clear sandbox key fields
+            sandboxContainer.find("input").val("");
         }
     });
 
+    // ✅ Fix: Properly delete accounts
     $(document).on("click", ".delete-account-btn", function () {
-        $(this).closest(".dfinsell-account").remove();
+        let $account = $(this).closest(".dfinsell-account");
+        let index = $account.attr("data-index");
+
+        // Mark deleted accounts (so they don't get submitted)
+        $account.find("input").each(function () {
+            $(this).attr("name", ""); // Remove name so it won't be submitted
+        });
+
+        $account.remove();
         updateAccountIndices();
 
         if ($(".dfinsell-account").length === 0) {
@@ -86,7 +92,7 @@ jQuery(document).ready(function ($) {
                     <div class="add-blog">
                         <div class="account-input">
                             <label>Sandbox Keys</label>
-                            <input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Sandbox Public Key">
+                        <input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Sandbox Public Key">
                         </div>
                         <div class="account-input">
                             <label>&nbsp;</label>
@@ -98,10 +104,54 @@ jQuery(document).ready(function ($) {
         </div>`;
 
         $(".dfinsell-accounts-container .empty-account").remove();
-        
-        // ✅ Insert before the "Add Account" button
         $(".dfinsell-add-account").closest(".add-account-btn").before(newAccountHtml);
-
         updateAccountIndices();
+    });
+
+    // ✅ Validate unique Live & Sandbox keys before form submission
+    $(document).on("submit", "form", function (event) {
+        let livePublicKeys = new Set();
+        let liveSecretKeys = new Set();
+        let sandboxPublicKeys = new Set();
+        let sandboxSecretKeys = new Set();
+        let hasDuplicate = false;
+
+        $(".dfinsell-account").each(function () {
+            let livePublicKey = $(this).find(".live-public-key").val().trim();
+            let liveSecretKey = $(this).find(".live-secret-key").val().trim();
+            let sandboxPublicKey = $(this).find(".sandbox-public-key").val().trim();
+            let sandboxSecretKey = $(this).find(".sandbox-secret-key").val().trim();
+
+            if (livePublicKey && livePublicKeys.has(livePublicKey)) {
+                alert("Live Public Key must be unique.");
+                hasDuplicate = true;
+                return false;
+            }
+            if (liveSecretKey && liveSecretKeys.has(liveSecretKey)) {
+                alert("Live Secret Key must be unique.");
+                hasDuplicate = true;
+                return false;
+            }
+            if (sandboxPublicKey && sandboxPublicKeys.has(sandboxPublicKey)) {
+                alert("Sandbox Public Key must be unique.");
+                hasDuplicate = true;
+                return false;
+            }
+            if (sandboxSecretKey && sandboxSecretKeys.has(sandboxSecretKey)) {
+                alert("Sandbox Secret Key must be unique.");
+                hasDuplicate = true;
+                return false;
+            }
+
+            // Add keys to the set
+            if (livePublicKey) livePublicKeys.add(livePublicKey);
+            if (liveSecretKey) liveSecretKeys.add(liveSecretKey);
+            if (sandboxPublicKey) sandboxPublicKeys.add(sandboxPublicKey);
+            if (sandboxSecretKey) sandboxSecretKeys.add(sandboxSecretKey);
+        });
+
+        if (hasDuplicate) {
+            event.preventDefault(); // Stop form submission
+        }
     });
 });
