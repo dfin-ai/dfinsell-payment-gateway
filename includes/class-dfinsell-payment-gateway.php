@@ -685,6 +685,49 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 	}
 
+	function check_for_sql_injection() {
+
+		$sql_injection_patterns = [
+			'/\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b(?![^{}]*})/i',
+			'/(\-\-|\#|\/\*|\*\/)/i',
+			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
+		];
+
+		$errors = []; // Store multiple errors
+
+		foreach ($_POST as $key => $value) {
+			if (is_string($value)) {
+				foreach ($sql_injection_patterns as $pattern) {
+					if (preg_match($pattern, $value)) {
+						// Remove "billing_" prefix if it exists
+						$field_name = isset($field_labels[$key]) 
+							? $field_labels[$key] 
+							: ucfirst(str_replace('_', ' ', preg_replace('/^billing_/', '', $key)));
+
+						// Log error for debugging
+						error_log("Potential SQL Injection Attempt - Key: $key, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
+
+						// Add error to array instead of stopping execution
+						$errors[] = __("Invalid input in field '$field_name'. Please remove SQL keywords and special characters.", 'dfinsell-payment-gateway');
+						
+						break; // Stop checking other patterns for this field
+					}
+				}
+			}
+		}
+
+		// Display all collected errors at once
+		if (!empty($errors)) {
+			foreach ($errors as $error) {
+				wc_add_notice($error, 'error');
+			}
+			return false;
+		}
+
+		return true;
+
+	}
+
 	/**
 	 * Validate the payment form.
 	 */
@@ -697,6 +740,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$nonce = isset($_POST['dfinsell_nonce']) ? sanitize_text_field(wp_unslash($_POST['dfinsell_nonce'])) : '';
 			if (empty($nonce) || !wp_verify_nonce($nonce, 'dfinsell_payment')) {
 				wc_add_notice(__('Nonce verification failed. Please try again.', 'dfinsell-payment-gateway'), 'error');
+				return false;
+			}
+
+			// Check for SQL injection attempts
+			if (!$this->check_for_sql_injection()) {
 				return false;
 			}
 
