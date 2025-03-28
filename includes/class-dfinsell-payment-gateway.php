@@ -90,7 +90,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	    $errors = array();
 	    $valid_accounts = array();
 
-	    if (isset($_POST['accounts']) && is_array($_POST['accounts'])) {
+	    // ✅ CHECK IF ACCOUNTS EXIST
+	    if (!isset($_POST['accounts']) || !is_array($_POST['accounts']) || empty($_POST['accounts'])) {
+	        $errors[] = __('You cannot delete all accounts. At least one valid payment account must be configured.', 'dfinsell-payment-gateway');
+	    } else {
 	        $normalized_index = 0;
 	        $unique_live_keys = [];
 	        $unique_sandbox_keys = [];
@@ -104,7 +107,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	            $sandbox_secret_key = sanitize_text_field($account['sandbox_secret_key'] ?? '');
 	            $has_sandbox = isset($account['has_sandbox']); // Checkbox handling
 
-	            // Ignore empty accounts
+	            // ✅ Ignore empty accounts
 	            if (empty($account_title) && empty($live_public_key) && empty($live_secret_key) && empty($sandbox_public_key) && empty($sandbox_secret_key)) {
 	                continue;
 	            }
@@ -115,7 +118,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	                continue;
 	            }
 
-	            // ✅ Validate live keys must be unique
+	            // ✅ Ensure live keys are unique
 	            $live_combined = $live_public_key . '|' . $live_secret_key;
 	            if (in_array($live_combined, $unique_live_keys)) {
 	                $errors[] = sprintf(__('Account "%s": Live Public Key and Live Secret Key must be unique.', 'dfinsell-payment-gateway'), $account_title);
@@ -123,12 +126,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	            }
 	            $unique_live_keys[] = $live_combined;
 
-	            // ✅ Validate live keys must be different
+	            // ✅ Ensure live keys are different
 	            if ($live_public_key === $live_secret_key) {
 	                $errors[] = sprintf(__('Account "%s": Live Public Key and Live Secret Key must be different.', 'dfinsell-payment-gateway'), $account_title);
 	            }
 
-	            // ✅ Sandbox Validation (only if sandbox is enabled)
+	            // ✅ Sandbox Validation
 	            if ($has_sandbox) {
 	                if (!empty($sandbox_public_key) && !empty($sandbox_secret_key)) {
 	                    // Sandbox keys must be unique
@@ -157,27 +160,26 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	            ];
 	            $normalized_index++;
 	        }
-
-	        // ✅ Ensure at least one valid account exists
-	        if (empty($valid_accounts)) {
-	            $errors[] = __('At least one valid payment account must be configured.', 'dfinsell-payment-gateway');
-	        } else {
-	            // ✅ Save valid accounts
-	            update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
-	        }
 	    }
 
-	    // ✅ Show errors if any
-	    if (!empty($errors)) {
+	    // ✅ Ensure at least one valid account exists
+	    if (empty($valid_accounts) && empty($errors)) {
+	        $errors[] = __('You cannot delete all accounts. At least one valid payment account must be configured.', 'dfinsell-payment-gateway');
+	    }
+
+	    // ✅ Stop saving if there are any errors
+	    if (empty($errors)) {
+	        update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
+	        $this->admin_notices->dfinsell_add_notice('settings_success', 'notice notice-success', __('Settings saved successfully.', 'dfinsell-payment-gateway'));
+	    } else {
 	        foreach ($errors as $error) {
 	            $this->admin_notices->dfinsell_add_notice('settings_error', 'notice notice-error', $error);
 	        }
-	    } else {
-	        $this->admin_notices->dfinsell_add_notice('settings_success', 'notice notice-success', __('Settings saved successfully.', 'dfinsell-payment-gateway'));
 	    }
 
 	    add_action('admin_notices', array($this->admin_notices, 'display_notices'));
 	}
+
 
 	/**
 	 * Initialize gateway settings form fields.
