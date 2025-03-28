@@ -58,7 +58,6 @@ jQuery(document).ready(function ($) {
         <div class="dfinsell-account">
             <div class="title-blog">
                 <h4>
-                    <i class="fa fa-user" aria-hidden="true"></i> 
                     <span class="account-name-display">Untitled Account</span>
                     &nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
                 </h4>
@@ -68,18 +67,23 @@ jQuery(document).ready(function ($) {
             </div>
 
             <div class="account-info" style="display: none;">
-                <div class="account-input">
-                    <label>Account Name</label>
-                    <input type="text" class="account-title" name="accounts[][title]" placeholder="Account Title">
-                </div>
+				<div class="add-blog title-priority">
+	                <div class="account-input account-name">
+	                    <label>Account Name</label>
+	                    <input type="text" class="account-title" name="accounts[][title]" placeholder="Account Title">
+	                </div>
+					<div class="account-input priority-name">
+                        <label>Priority</label>
+                        <input type="number" class="account-priority" name="accounts[][priority]" placeholder="Priority" min="1">
+                    </div>
+				</div>
                 <div class="add-blog">
                     <div class="account-input">
                         <label>Live Keys</label>
-                        <input type="text" class="live-public-key" name="accounts[][live_public_key]" placeholder="Live Public Key">
+                        <input type="text" class="live-public-key" name="accounts[][live_public_key]" placeholder="Public Key">
                     </div>
                     <div class="account-input">
-                        <label>&nbsp;</label>
-                        <input type="text" class="live-secret-key" name="accounts[][live_secret_key]" placeholder="Live Secret Key">
+                        <input type="text" class="live-secret-key" name="accounts[][live_secret_key]" placeholder="Secret Key">
                     </div>
                 </div>
 
@@ -92,11 +96,10 @@ jQuery(document).ready(function ($) {
                     <div class="add-blog">
                         <div class="account-input">
                             <label>Sandbox Keys</label>
-                        <input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Sandbox Public Key">
+                        <input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Public Key">
                         </div>
                         <div class="account-input">
-                            <label>&nbsp;</label>
-                            <input type="text" class="sandbox-secret-key" name="accounts[][sandbox_secret_key]" placeholder="Sandbox Secret Key">
+                            <input type="text" class="sandbox-secret-key" name="accounts[][sandbox_secret_key]" placeholder="Secret Key">
                         </div>
                     </div>
                 </div>

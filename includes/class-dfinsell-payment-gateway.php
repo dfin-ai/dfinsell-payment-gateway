@@ -101,6 +101,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	        foreach ($_POST['accounts'] as $index => $account) {
 	            // Sanitize input
 	            $account_title = sanitize_text_field($account['title'] ?? '');
+				$priority = isset($account['priority']) ? intval($account['priority']) : 1;
 	            $live_public_key = sanitize_text_field($account['live_public_key'] ?? '');
 	            $live_secret_key = sanitize_text_field($account['live_secret_key'] ?? '');
 	            $sandbox_public_key = sanitize_text_field($account['sandbox_public_key'] ?? '');
@@ -152,6 +153,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	            // Store valid account
 	            $valid_accounts[$normalized_index] = [
 	                'title'              => $account_title,
+					'priority'           => $priority,
 	                'live_public_key'    => $live_public_key,
 	                'live_secret_key'    => $live_secret_key,
 	                'sandbox_public_key' => $sandbox_public_key,
@@ -285,7 +287,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 							<div class="dfinsell-account" data-index="<?php echo $index; ?>">
 								<div class="title-blog">
 									<h4>
-										<i class="fa fa-user" aria-hidden="true"></i> 
 										<span class="account-name-display"><?php echo !empty($account['title']) ? esc_html($account['title']) : 'Untitled Account'; ?></span>
 										&nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
 									</h4>
@@ -295,18 +296,23 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 								</div>
 	
 								<div class="account-info">
-									<div class="account-input">
-										<label>Account Name</label>
-										<input type="text" class="account-title" name="accounts[<?php echo $index; ?>][title]" placeholder="Account Title" value="<?php echo esc_attr($account['title'] ?? ''); ?>">
+									<div class="add-blog title-priority">
+										<div class="account-input account-name">
+											<label>Account Name</label>
+											<input type="text" class="account-title" name="accounts[<?php echo $index; ?>][title]" placeholder="Account Title" value="<?php echo esc_attr($account['title'] ?? ''); ?>">
+										</div>
+										<div class="account-input priority-name">
+	                                        <label>Priority</label>
+	                                        <input type="number" class="account-priority" name="accounts[<?php echo $index; ?>][priority]" placeholder="Priority" value="<?php echo esc_attr($account['priority'] ?? '1'); ?>" min="1">
+	                                    </div>
 									</div>
 									<div class="add-blog">
 										<div class="account-input">
 											<label>Live Keys</label>
-											<input type="text" class="live-public-key" name="accounts[<?php echo $index; ?>][live_public_key]" placeholder="Live Public Key" value="<?php echo esc_attr($account['live_public_key'] ?? ''); ?>">
+											<input type="text" class="live-public-key" name="accounts[<?php echo $index; ?>][live_public_key]" placeholder="Public Key" value="<?php echo esc_attr($account['live_public_key'] ?? ''); ?>">
 										</div>
 										<div class="account-input">
-											<label>&nbsp;</label>
-											<input type="text" class="live-secret-key" name="accounts[<?php echo $index; ?>][live_secret_key]" placeholder="Live Secret Key" value="<?php echo esc_attr($account['live_secret_key'] ?? ''); ?>">
+											<input type="text" class="live-secret-key" name="accounts[<?php echo $index; ?>][live_secret_key]" placeholder="Secret Key" value="<?php echo esc_attr($account['live_secret_key'] ?? ''); ?>">
 										</div>
 									</div>
 	
@@ -319,11 +325,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 										<div class="add-blog">
 											<div class="account-input">
 												<label>Sandbox Keys</label>
-												<input type="text" class="sandbox-public-key" name="accounts[<?php echo $index; ?>][sandbox_public_key]" placeholder="Sandbox Public Key" value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
+												<input type="text" class="sandbox-public-key" name="accounts[<?php echo $index; ?>][sandbox_public_key]" placeholder="Public Key" value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
 											</div>
 											<div class="account-input">
-												<label>&nbsp;</label>
-												<input type="text" class="sandbox-secret-key" name="accounts[<?php echo $index; ?>][sandbox_secret_key]" placeholder="Sandbox Secret Key" value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
+												<input type="text" class="sandbox-secret-key" name="accounts[<?php echo $index; ?>][sandbox_secret_key]" placeholder="Secret Key" value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
 											</div>
 										</div>
 									</div>
