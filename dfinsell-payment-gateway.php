@@ -26,6 +26,9 @@ define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 // Include utility functions
 require_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/dfinsell-payment-gateway-utils.php';
 
+// Migrations functions
+include_once plugin_dir_path(__FILE__) . 'migration.php';
+
 // Autoload classes
 spl_autoload_register(function ($class) {
 	if (strpos($class, 'DFINSELL_PAYMENT_GATEWAY_') === 0) {

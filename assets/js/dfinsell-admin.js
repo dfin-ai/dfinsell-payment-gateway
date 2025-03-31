@@ -1,5 +1,5 @@
 jQuery(document).ready(function ($) {
-  // Sanitize the PAYMENT_CODE parameter
+     // Sanitize the PAYMENT_CODE parameter
   const PAYMENT_CODE = typeof params.PAYMENT_CODE === 'string' ? $.trim(params.PAYMENT_CODE) : '';
 
   function toggleSandboxFields() {
@@ -17,156 +17,225 @@ jQuery(document).ready(function ($) {
 
   $('#woocommerce_' + $.escapeSelector(PAYMENT_CODE) + '_sandbox').change(toggleSandboxFields);
 
-  // Function to validate accounts
-  function validateAccounts() {
-    $('.error-msg').remove(); // Clear existing error messages
-    let isValid = false;
-    let keyMap = new Map(); // Store keys with their type, account index, and value
-    let hasDuplicate = false;
-    let duplicateErrors = [];
-    let partialAccounts = [];
-
-    $('.dfinsell-account').each(function (index) {
-        let allFilled = true;
-        let anyFilled = false;
-
-        $(this).find('input').each(function () {
-            const value = $(this).val().trim();
-            const fieldClass = $(this).attr('class') || ''; // ✅ Fix: Ensure `fieldClass` is always a string
-
-            // Reset border before applying validation
-            $(this).css('border', '');
-
-            if (value === '') {
-                allFilled = false;
-            } else {
-                anyFilled = true;
-            }
-
-            // Identify the key type
-            let keyType = '';
-            if (fieldClass.includes('sandbox-public-key')) keyType = 'Sandbox Public Key';
-            else if (fieldClass.includes('sandbox-secret-key')) keyType = 'Sandbox Private Key';
-            else if (fieldClass.includes('live-public-key')) keyType = 'Live Public Key';
-            else if (fieldClass.includes('live-secret-key')) keyType = 'Live Private Key';
-
-            // Check for duplicate keys (ignore empty fields)
-            if (value !== '' && keyType !== '') {
-                if (keyMap.has(value)) {
-                    hasDuplicate = true;
-                    let firstAccount = keyMap.get(value).accountIndex + 1; // Convert 0-based to 1-based
-                    let firstKeyType = keyMap.get(value).keyType;
-
-
-                    let errorMsg = `Duplicate ${firstKeyType} detected in Account ${index + 1}. Please use unique keys.`;
-                    //let errorMsg = `Duplicate ${firstKeyType} found in Account ${firstAccount} and ${keyType} in Account ${index + 1}. Value: <strong>${value}</strong>`;
-                    duplicateErrors.push(errorMsg);
-                    $(this).css('border', '2px solid red'); // Highlight duplicate key
+    function updateAccountIndices() {
+        $(".dfinsell-account").each(function (index) {
+            $(this).attr("data-index", index);
+            $(this).find("input, select").each(function () {
+                let name = $(this).attr("name");
+                if (name) {
+                    name = name.replace(/\[.*?\]/, "[" + index + "]");
+                    $(this).attr("name", name);
                 }
-                keyMap.set(value, { accountIndex: index, keyType });
-            }
+            });
+        });
+    }
+
+    $(".account-info").hide();
+
+    $(document).on("click", ".account-toggle-btn", function () {
+        let accountInfo = $(this).closest(".dfinsell-account").find(".account-info");
+        accountInfo.slideToggle();
+        $(this).toggleClass("rotated");
+    });
+
+    $(document).on("input", ".account-title", function () {
+        let newTitle = $(this).val().trim() || "Untitled Account";
+        $(this).closest(".dfinsell-account").find(".account-name-display").text(newTitle);
+    });
+
+    /*$(document).on("change", ".sandbox-checkbox", function () {
+        let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
+        if ($(this).is(":checked")) {
+            sandboxContainer.show();
+        } else {
+            sandboxContainer.hide();
+            sandboxContainer.find("input").val("");
+        }
+    }); */
+
+    // ✅ Fix: Properly delete accounts
+    $(document).on("click", ".delete-account-btn", function () {
+        let $account = $(this).closest(".dfinsell-account");
+        let index = $account.attr("data-index");
+
+        // Mark deleted accounts (so they don't get submitted)
+        $account.find("input").each(function () {
+            $(this).attr("name", ""); // Remove name so it won't be submitted
         });
 
-        // Skip the first account from partial validation
-        if (index > 0 && anyFilled && !allFilled) {
-            partialAccounts.push(index + 1); // Store 1-based index of the incomplete account
-        }
+        $account.remove();
+        updateAccountIndices();
 
-        if (allFilled) {
-            isValid = true; // At least one fully filled account exists
+        if ($(".dfinsell-account").length === 0) {
+            $(".dfinsell-accounts-container").prepend('<div class="empty-account"> No any account added </div>');
         }
     });
 
-    if (hasDuplicate) {
-        $('.dfinsell-accounts-container').before(
-            `<p class="error-msg" style="color:red; font-weight:bold;">${duplicateErrors.join('<br>')}</p>`
-        );
+    $(document).on("click", ".dfinsell-add-account", function () {
+        let newAccountHtml = `
+        <div class="dfinsell-account">
+            <div class="title-blog">
+                <h4>
+                    <span class="account-name-display">Untitled Account</span>
+                    &nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
+                </h4>
+                <div class="action-button">
+                    <button type="button" class="delete-account-btn"><i class="fa fa-trash" aria-hidden="true"></i></button>
+                </div>
+            </div>
+
+            <div class="account-info" style="display: none;">
+				<div class="add-blog title-priority">
+	                <div class="account-input account-name">
+	                    <label>Account Name</label>
+	                    <input type="text" class="account-title" name="accounts[][title]" placeholder="Account Title">
+	                </div>
+					<div class="account-input priority-name">
+                        <label>Priority</label>
+                        <input type="number" class="account-priority" name="accounts[][priority]" placeholder="Priority" min="1">
+                    </div>
+				</div>
+                <div class="add-blog">
+                    <div class="account-input">
+                        <label>Live Keys</label>
+                        <input type="text" class="live-public-key" name="accounts[][live_public_key]" placeholder="Public Key">
+                    </div>
+                    <div class="account-input">
+                        <input type="text" class="live-secret-key" name="accounts[][live_secret_key]" placeholder="Secret Key">
+                    </div>
+                </div>
+
+                <div class="account-checkbox">
+                    <input type="checkbox" class="sandbox-checkbox" name="accounts[][has_sandbox]">
+                    Do you have the sandbox keys?
+                </div>
+
+                <div class="sandbox-key" style="display: none;">
+                    <div class="add-blog">
+                        <div class="account-input">
+                            <label>Sandbox Keys</label>
+                        <input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Public Key">
+                        </div>
+                        <div class="account-input">
+                            <input type="text" class="sandbox-secret-key" name="accounts[][sandbox_secret_key]" placeholder="Secret Key">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+        $(".dfinsell-accounts-container .empty-account").remove();
+        $(".dfinsell-add-account").closest(".add-account-btn").before(newAccountHtml);
+        updateAccountIndices();
+    });
+
+    function showErrorMessage(input, message) {
+        $(input).next(".error-message").remove(); // Remove existing error
+        $(input).after(`<div class="error-message" style="color: red; font-size: 12px;">${message}</div>`);
     }
 
-    if (!isValid) {
-        $('.dfinsell-accounts-container').before(
-            '<p class="error-msg" style="color:red; font-weight:bold;">Please fill all details in at least one account.</p>'
-        );
+    function clearErrorMessages() {
+        $(".error-message").remove();
     }
 
-    if (partialAccounts.length > 0) {
-        $('.dfinsell-accounts-container').before(
-            `<p class="error-msg" style="color:red; font-weight:bold;">Accounts ${partialAccounts.join(', ')} are partially filled. Please complete or remove them.</p>`
-        );
-        return false; // Prevent form submission
-    }
+    $(document).on("submit", "form", function (event) {
+        clearErrorMessages(); // Clear previous errors
+        let livePublicKeys = new Set();
+        let liveSecretKeys = new Set();
+        let sandboxPublicKeys = new Set();
+        let sandboxSecretKeys = new Set();
+        let hasErrors = false;
 
-    return isValid && !hasDuplicate;
-}
+        $(".dfinsell-account").each(function () {
+            let livePublicKey = $(this).find(".live-public-key");
+            let liveSecretKey = $(this).find(".live-secret-key");
+            let sandboxPublicKey = $(this).find(".sandbox-public-key");
+            let sandboxSecretKey = $(this).find(".sandbox-secret-key");
+            let sandboxCheckbox = $(this).find(".sandbox-checkbox");
+            let title = $(this).find(".account-title");
+            let priority = $(this).find(".account-priority");
 
+            let livePublicKeyVal = livePublicKey.val().trim();
+            let liveSecretKeyVal = liveSecretKey.val().trim();
+            let sandboxPublicKeyVal = sandboxPublicKey.val().trim();
+            let sandboxSecretKeyVal = sandboxSecretKey.val().trim();
+            let titleVal = title.val().trim();
+            let priorityVal = priority.val().trim();
 
+            if (!titleVal) {
+                showErrorMessage(title, "Title is required.");
+                hasErrors = true;
+            }
+            if (!priorityVal) {
+                showErrorMessage(priority, "Priority is required.");
+                hasErrors = true;
+            }
 
-  // ADD ACCOUNT FUNCTIONALITY
-  $('.dfinsell-add-account').on('click', function (e) {
-      e.preventDefault();
-      $('.error-msg').remove(); // Remove previous errors
+          
+            if (!livePublicKeyVal) {
+                showErrorMessage(livePublicKey, "Public Key is required.");
+                hasErrors = true;
+            }
+            if (!liveSecretKeyVal) {
+                showErrorMessage(liveSecretKey, "Secret Key is required.");
+                hasErrors = true;
+            }
 
-      const $container = $('.dfinsell-accounts-container');
-      const index = $container.find('.dfinsell-account').length;
-      const isActive = index === 0 || $container.find('.dfinsell-account input[name$="[status]"]:checked').length === 0;
-      const html = `
-          <div class="dfinsell-account ${isActive ? 'active-account' : 'inactive-account'}">
-            <h4>Account ${index + 1} </h4>
-            <input type="text" name="accounts[${index}][title]" class="account-title" placeholder="Account Title" >
+            // Live Keys are required
+            if (livePublicKeyVal && livePublicKeys.has(livePublicKeyVal)) {
+                showErrorMessage(livePublicKey, "Live Public Key must be unique.");
+                hasErrors = true;
+            } else if (livePublicKeyVal) {
+                livePublicKeys.add(livePublicKeyVal);
+            }
 
-          <h5>Sandbox Keys</h5>
-          <div class="add-blog">
-              <input type="text" name="accounts[${index}][sandbox_public_key]" class="sandbox-public-key" placeholder="Public Key" >
-              <input type="text" name="accounts[${index}][sandbox_secret_key]" class="sandbox-secret-key" placeholder="Private Key" >
-          </div>
-          <h5>Live Keys</h5>
-          <div class="add-blog">
-              <input type="text" name="accounts[${index}][live_public_key]" class="live-public-key" placeholder="Public Key" >
-              <input type="text" name="accounts[${index}][live_secret_key]" class="live-secret-key" placeholder="Private Key" >
-              <button class="button dfinsell-remove-account"><span>-</span></button>
-          </div>
-      </div>`;
+            if (liveSecretKeyVal && liveSecretKeys.has(liveSecretKeyVal)) {
+                showErrorMessage(liveSecretKey, "Live Secret Key must be unique.");
+                hasErrors = true;
+            } else if (liveSecretKeyVal) {
+                liveSecretKeys.add(liveSecretKeyVal);
+            }
 
-      $container.append(html);
-  });
+            if (sandboxPublicKeyVal && sandboxPublicKeys.has(sandboxPublicKeyVal)) {
+                showErrorMessage(sandboxPublicKey, "Sandbox Public Key must be unique.");
+                hasErrors = true;
+            } else if (sandboxPublicKeyVal) {
+                sandboxPublicKeys.add(sandboxPublicKeyVal);
+            }
 
-  // REMOVE ACCOUNT FUNCTIONALITY
-  $('.dfinsell-accounts-container').on('click', '.dfinsell-remove-account', function (e) {
-      e.preventDefault();
-      
-      $(this).closest('.dfinsell-account').remove(); // Remove the selected account
-      updateAccountIndexes(); // Call function to update indexes
-      validateAccounts(); // Revalidate after removal
-  });
+            if (sandboxSecretKeyVal && sandboxSecretKeys.has(sandboxSecretKeyVal)) {
+                showErrorMessage(sandboxSecretKey, "Sandbox Secret Key must be unique.");
+                hasErrors = true;
+            } else if (sandboxSecretKeyVal) {
+                sandboxSecretKeys.add(sandboxSecretKeyVal);
+            }
 
-  // Function to re-index accounts dynamically
-  function updateAccountIndexes() {
-      $('.dfinsell-account').each(function (index) {
-          // Update Account Title Numbering
-          $(this).find('h4').html(
-              `Account ${index + 1} ${index === 0 ? '<span class="active-indicator"> Active</span>' : ''}`
-          );
+            // ✅ Ensure sandbox keys are mandatory if the checkbox is checked
+            if (sandboxCheckbox.is(":checked")) {
+                if (!sandboxPublicKeyVal) {
+                    showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
+                    hasErrors = true;
+                }
+                if (!sandboxSecretKeyVal) {
+                    showErrorMessage(sandboxSecretKey, "Sandbox Secret Key is required.");
+                    hasErrors = true;
+                }
+            }
+        });
 
-          // Update input field names to match the new index
-          $(this).find('input').each(function () {
-              var nameAttr = $(this).attr('name');
-              if (nameAttr) {
-                  var updatedName = nameAttr.replace(/\[\d+\]/, `[${index}]`); // Fix regex to only replace digits
-                  $(this).attr('name', updatedName);
-              }
-          });
-      });
-  }
+        if (hasErrors) {
+            event.preventDefault(); // Stop form submission
+        }
+    });
 
-  // REAL-TIME INPUT VALIDATION
-  $('.dfinsell-accounts-container').on('input', 'input', function () {
-      validateAccounts();
-  });
-
-  // FORM SUBMISSION VALIDATION
-  $('form').on('submit', function (e) {
-      if (!validateAccounts()) {
-          e.preventDefault(); // Prevent submission if validation fails
-      }
-  });
+    $(document).on("change", ".sandbox-checkbox", function () {
+        let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
+        if ($(this).is(":checked")) {
+            sandboxContainer.show();
+        } else {
+            sandboxContainer.hide();
+            sandboxContainer.find("input").val("").next(".error-message").remove(); // Clear errors if unchecked
+        }
+    });
+    
 });

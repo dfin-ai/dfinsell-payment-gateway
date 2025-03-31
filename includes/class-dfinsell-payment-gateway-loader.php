@@ -186,27 +186,45 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	 */
 	public function dfinsell_check_payment_status($order_id)
 	{
-		// Get the order details
-		$order = wc_get_order($order_id);
+	    // Get the order details
+	    $order = wc_get_order($order_id);
 
-		if (!$order) {
-			return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
-		}
+	    if (!$order) {
+	        return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
+	    }
 
-		$payment_return_url = esc_url($order->get_checkout_order_received_url());
-		// Check the payment status
-		if ($order) {
-			if ($order->is_paid()) {
-				wp_send_json_success(['status' => 'success', 'redirect_url' => $payment_return_url]);
-			} elseif ($order->has_status('failed')) {
-				wp_send_json_success(['status' => 'failed', 'redirect_url' => $payment_return_url]);
-			}
-		}
+	    $payment_return_url = esc_url($order->get_checkout_order_received_url());
 
-		// Default to pending status
-		wp_send_json_success(['status' => 'pending']);
+	    // Determine order status
+	    if ($order->is_paid()) {
+	        wp_send_json_success(['status' => 'success', 'redirect_url' => $payment_return_url]);
+	        exit;
+	    } 
+	    
+	    if ($order->has_status('failed')) {
+	        wp_send_json_success(['status' => 'failed', 'redirect_url' => $payment_return_url]);
+	        exit;
+	    }
+
+	    if ($order->has_status(['on-hold', 'pending'])) {
+	        wp_send_json_success(['status' => 'pending', 'redirect_url' => $payment_return_url]);
+	        exit;
+	    }
+
+	    if ($order->has_status('canceled')) {
+	        wp_send_json_success(['status' => 'canceled', 'redirect_url' => $payment_return_url]);
+	        exit;
+	    }
+
+	    if ($order->has_status('refunded')) {
+	        wp_send_json_success(['status' => 'refunded', 'redirect_url' => $payment_return_url]);
+	        exit;
+	    }
+
+	    // Default response (unknown status)
+	    wp_send_json_success(['status' => 'unknown', 'redirect_url' => $payment_return_url]);
+	    exit;
 	}
-
 	
 	public function handle_popup_close() {
 		// Sanitize and unslash the 'security' value

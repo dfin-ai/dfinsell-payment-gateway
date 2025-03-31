@@ -39,14 +39,18 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$api_key = sanitize_text_field($api_key);
 
 		// Get DFinSell settings
-		$dfin_sell_settings = get_option('woocommerce_dfinsell_settings');
+		$dfin_sell_settings = get_option('woocommerce_dfinsell_payment_gateway_accounts');
+		$dfin_settings = get_option('woocommerce_dfinsell_settings');
 
-		if (!$dfin_sell_settings || empty($dfin_sell_settings['accounts'])) {
+		if (!$dfin_sell_settings || empty($dfin_sell_settings)) {
 			return false; // No accounts available
 		}
 
-		$accounts = $dfin_sell_settings['accounts'];
-		$sandbox = isset($dfin_sell_settings['sandbox']) && $dfin_sell_settings['sandbox'] === 'yes';
+		$accounts = $dfin_sell_settings;
+
+		wc_get_logger()->info('Suspicious activity detected from IP: ' . $ip_address, array('source' => 'dfinsell-payment-gateway'));
+		
+		$sandbox = isset($dfin_settings['sandbox']) && $dfin_settings['sandbox'] === 'yes';
 
 		foreach ($accounts as $account) {
 			$public_key = $sandbox ? sanitize_text_field($account['sandbox_public_key']) : sanitize_text_field($account['live_public_key']);
