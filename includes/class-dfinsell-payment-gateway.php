@@ -692,30 +692,35 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'/(\-\-|\#|\/\*|\*\/)/i',
 			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
 		];
-
+	
 		$errors = []; // Store multiple errors
+
+		// Get checkout fields dynamically
+		$checkout_fields = WC()->checkout()->get_checkout_fields();
 
 		foreach ($_POST as $key => $value) {
 			if (is_string($value)) {
 				foreach ($sql_injection_patterns as $pattern) {
 					if (preg_match($pattern, $value)) {
-						// Remove "billing_" prefix if it exists
-						$field_name = isset($field_labels[$key]) 
-							? $field_labels[$key] 
-							: ucfirst(str_replace('_', ' ', preg_replace('/^billing_/', '', $key)));
-
+						// Get the field label dynamically
+						$field_label = isset($checkout_fields['billing'][$key]['label']) ? $checkout_fields['billing'][$key]['label'] :
+									   (isset($checkout_fields['shipping'][$key]['label']) ? $checkout_fields['shipping'][$key]['label'] :
+									   (isset($checkout_fields['account'][$key]['label']) ? $checkout_fields['account'][$key]['label'] :
+									   (isset($checkout_fields['order'][$key]['label']) ? $checkout_fields['order'][$key]['label'] :
+									   ucfirst(str_replace('_', ' ', $key)))));
+	
 						// Log error for debugging
-						error_log("Potential SQL Injection Attempt - Key: $key, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
-
+						error_log("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
+	
 						// Add error to array instead of stopping execution
-						$errors[] = __("Invalid input in field '$field_name'. Please remove SQL keywords and special characters.", 'dfinsell-payment-gateway');
-						
+						$errors[] = __("Invalid input in field '$field_label'. Please remove SQL keywords and special characters.", 'dfinsell-payment-gateway');
+	
 						break; // Stop checking other patterns for this field
 					}
 				}
 			}
 		}
-
+	
 		// Display all collected errors at once
 		if (!empty($errors)) {
 			foreach ($errors as $error) {
@@ -723,7 +728,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 			return false;
 		}
-
+	
 		return true;
 
 	}
@@ -733,6 +738,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 */
 	public function validate_fields()
 	{
+		// Check for SQL injection attempts
+		if (!$this->check_for_sql_injection()) {
+			return false;
+		}
+
 		// Check if the consent checkbox setting is enabled
 		if ($this->get_option('show_consent_checkbox') === 'yes') {
 
@@ -740,11 +750,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$nonce = isset($_POST['dfinsell_nonce']) ? sanitize_text_field(wp_unslash($_POST['dfinsell_nonce'])) : '';
 			if (empty($nonce) || !wp_verify_nonce($nonce, 'dfinsell_payment')) {
 				wc_add_notice(__('Nonce verification failed. Please try again.', 'dfinsell-payment-gateway'), 'error');
-				return false;
-			}
-
-			// Check for SQL injection attempts
-			if (!$this->check_for_sql_injection()) {
 				return false;
 			}
 
