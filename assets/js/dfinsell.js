@@ -72,7 +72,7 @@ jQuery(function ($) {
 	  }
   
 	  // Disable the submit button immediately to prevent further clicks
-	  $button = $form.find('button[type="submit"]');
+	  $button = $form.find('button[type="submit"][name="woocommerce_checkout_place_order"]');
 	  originalButtonText = $button.text();
 	  $button.prop('disabled', true).text('Processing...');
   
