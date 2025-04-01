@@ -145,6 +145,7 @@ jQuery(document).ready(function ($) {
         let sandboxPublicKeys = new Set();
         let sandboxSecretKeys = new Set();
         let hasErrors = false;
+        let prioritySet = new Set(); // To track unique priority values
 
         $(".dfinsell-account").each(function () {
             let livePublicKey = $(this).find(".live-public-key");
@@ -170,6 +171,12 @@ jQuery(document).ready(function ($) {
                 showErrorMessage(priority, "Priority is required.");
                 hasErrors = true;
             }
+            else if (prioritySet.has(priorityVal)) {
+				showErrorMessage(priority, "Priority must be unique.");
+				hasErrors = true;
+			} else {
+				prioritySet.add(priorityVal);
+			}
 
           
             if (!livePublicKeyVal) {
