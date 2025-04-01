@@ -973,8 +973,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$accounts = $this->get_all_accounts();
 			
 			if (empty($accounts)) {
-				wc_get_logger()->warning('No accounts available.', ['source' => 'dfin_sell_payment_gateway']);
-				return $available_gateways;
+				//wc_get_logger()->warning('No accounts available. Hiding payment gateway.', ['source' => 'dfin_sell_payment_gateway']);
+				
+				unset($available_gateways[$gateway_id]); //  Unset gateway properly
+				WC()->session->set('dfin_gateway_status', 'hidden');
+				
+				return $available_gateways; //  Return updated list
 			}
 	
 			// Sort accounts by priority (higher priority first)
@@ -1003,7 +1007,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				// Cache key to avoid redundant API requests
 				$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
 				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
-	
+				wc_get_logger()->info('limit response.',$transaction_limit_response_data , ['source' => 'dfin_sell_payment_gateway']);
+					
 				if (!isset($transaction_limit_response_data['error'])) {
 					// At least one high-priority account is available
 					$all_high_priority_accounts_limited = false;
@@ -1013,7 +1018,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	
 			if ($all_high_priority_accounts_limited) {
 				if (!WC()->session->get('dfin_gateway_hidden_logged')) {
-					//wc_get_logger()->warning('All high-priority accounts have reached transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
+					wc_get_logger()->warning('All high-priority accounts have reached transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
 					WC()->session->set('dfin_gateway_hidden_logged', true);
 				}
 	
@@ -1023,8 +1028,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				WC()->session->set('dfin_gateway_status', 'visible');
 			}
 	
-			//  Force Refresh Payment Gateways
-			WC()->payment_gateways()->payment_gateways();
+		
 		}
 	
 		return $available_gateways;
