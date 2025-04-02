@@ -29,6 +29,7 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 = 1.1.0 (Beta) =
 * Added Multiple Payment Accounts: Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
+* Added special character validation on the checkout page to ensure secure data entry, preventing the use of unsupported or potentially harmful characters.
 
 = 1.0.10 =
 * Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
@@ -73,6 +74,7 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 == Upgrade Notice ==
 = 1.1.0 (Beta) =
 * Added Multiple Payment Accounts: Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
+* Added special character validation on the checkout page to ensure secure data entry, preventing the use of unsupported or potentially harmful characters.
 
 = 1.0.10 =
 * Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.

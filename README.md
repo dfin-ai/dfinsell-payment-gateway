@@ -146,6 +146,9 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 - **Multiple Account Selections:** 
   Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
 
+- **Special Character Validation**:
+  Special character validations have been added to the checkout page to ensure secure and proper data entry, preventing the use of potentially harmful or unsupported characters.
+
 ### Version 1.0.10
 
 - **Fixed Button Overlap on Checkout Page:** 
