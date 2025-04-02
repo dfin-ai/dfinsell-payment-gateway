@@ -143,11 +143,8 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ### Version 1.1.0 (Beta)
 
-- **Settings Page:** 
-  Save multiple accounts with priority order for seamless account management
-
-- **Checkout Page:** 
-  When the transaction limit is reached on an account, the system will automatically switch to the next available account based on the priority set in the settings page, ensuring uninterrupted payments.
+- **Multiple Account Selections:** 
+  Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
 
 ### Version 1.0.10
 
