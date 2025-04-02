@@ -468,7 +468,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 // **Ensure email is sent to the last failed account**
                 if ($last_failed_account) {
                     wc_get_logger()->info("Sending email to last failed account: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
-                    $this->send_account_switch_email($last_failed_account, $last_failed_account);
+                    $this->send_account_switch_email($last_failed_account, $account);
                 }
                 wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
                 return ['result' => 'fail'];
@@ -522,7 +522,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 } else {
                     // **No available accounts left, send email to the last failed account**
                     if ($last_failed_account) {
-                        $this->send_account_switch_email($last_failed_account, $last_failed_account);
+                        $this->send_account_switch_email($last_failed_account, $account);
                     }
                     wc_add_notice(__('All accounts have reached their transaction limit.', 'dfinsell-payment-gateway'), 'error');
                     return ['result' => 'fail'];
@@ -562,7 +562,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
                 if ($last_failed_account) {
                     //wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
-                    $this->send_account_switch_email($last_failed_account, $last_failed_account);
+                    $this->send_account_switch_email($last_failed_account, $account);
                 }
                 //$last_successful_account = $account;
                 // **Update Order Status**
