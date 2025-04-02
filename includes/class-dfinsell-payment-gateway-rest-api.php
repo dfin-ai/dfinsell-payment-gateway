@@ -48,8 +48,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 		$accounts = $dfin_sell_settings;
 
-		wc_get_logger()->info('Suspicious activity detected from IP: ' . $ip_address, array('source' => 'dfinsell-payment-gateway'));
-		
 		$sandbox = isset($dfin_settings['sandbox']) && $dfin_settings['sandbox'] === 'yes';
 
 		foreach ($accounts as $account) {
