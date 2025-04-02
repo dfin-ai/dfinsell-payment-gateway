@@ -28,8 +28,7 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 == Changelog ==
 
 = 1.1.0 (Beta) =
-*Settings Page: Save multiple accounts with priority order for seamless account management.
-*Payment Page:  When the transaction limit is reached on an account, the system will automatically switch to the next available account based on the priority set in the settings page, ensuring uninterrupted payments."   
+* Added Multiple Payment Accounts: Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
 
 = 1.0.10 =
 * Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
@@ -72,6 +71,11 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
+= 1.1.0 (Beta) =
+* Added Multiple Payment Accounts: Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
+
+= 1.0.10 =
+* Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
 
 = 1.0.9 =
 * Added Transaction Limits Handling: Now, the plugin is hidden if the transaction amount exceeds the supported range or if the limit is not set.
