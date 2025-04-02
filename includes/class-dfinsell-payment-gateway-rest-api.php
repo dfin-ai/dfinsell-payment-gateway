@@ -73,22 +73,22 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$api_order_status = isset($parameters['order_status']) ? sanitize_text_field($parameters['order_status']) : '';
 
 		// Log incoming request with sanitized parameters
-		$this->logger->info('DFin Sell API Request Received: ' . wp_json_encode($parameters, true), array('source' => 'dfin_sell_payment_gateway'));
+		$this->logger->info('DFin Sell API Request Received: ' . wp_json_encode($parameters, true), array('source' => 'dfinsell-payment-gateway'));
 
 		// Verify API key
 		if (!$this->dfinsell_verify_api_key(base64_decode($api_key))) {
-			$this->logger->error('Unauthorized access attempt.', array('source' => 'dfin_sell_payment_gateway'));
+			$this->logger->error('Unauthorized access attempt.', array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Unauthorized'], 401);
 		}
 
 		if ($order_id <= 0) {
-			$this->logger->error('Invalid order ID.', array('source' => 'dfin_sell_payment_gateway'));
+			$this->logger->error('Invalid order ID.', array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Invalid data'], 400);
 		}
 
 		$order = wc_get_order($order_id);
 		if (!$order) {
-			$this->logger->error('Order not found: ' . $order_id, array('source' => 'dfin_sell_payment_gateway'));
+			$this->logger->error('Order not found: ' . $order_id, array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Order not found'], 404);
 		}
 
@@ -100,14 +100,14 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 				$gateway = $payment_gateways[$gateway_id];
 				$order_status = sanitize_text_field($gateway->get_option('order_status', 'processing'));
 			} else {
-				$this->logger->error('Payment gateway not found.', array('source' => 'dfin_sell_payment_gateway'));
+				$this->logger->error('Payment gateway not found.', array('source' => 'dfinsell-payment-gateway'));
 				return new WP_REST_Response(['error' => 'Payment gateway not found'], 500);
 			}
 
 			// Validate the order status against allowed statuses
 			$allowed_statuses = wc_get_order_statuses();
 			if (!array_key_exists('wc-' . esc_html($order_status), $allowed_statuses)) {
-				$this->logger->error('Invalid order status: ' . esc_html($order_status), array('source' => 'dfin_sell_payment_gateway'));
+				$this->logger->error('Invalid order status: ' . esc_html($order_status), array('source' => 'dfinsell-payment-gateway'));
 				return new WP_REST_Response(['error' => 'Invalid order status'], 400);
 			}
 		} else {
@@ -123,10 +123,10 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 		if ($updated) {
 			$payment_return_url = esc_url($order->get_checkout_order_received_url());
-			$this->logger->info('Order status updated successfully: ' . esc_html($order_id), array('source' => 'dfin_sell_payment_gateway'));
+			$this->logger->info('Order status updated successfully: ' . esc_html($order_id), array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['success' => true, 'message' => 'Order status updated successfully', 'payment_return_url' => $payment_return_url], 200);
 		} else {
-			$this->logger->error('Failed to update order status: ' . esc_html($order_id), array('source' => 'dfin_sell_payment_gateway'));
+			$this->logger->error('Failed to update order status: ' . esc_html($order_id), array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Failed to update order status'], 500);
 		}
 	}

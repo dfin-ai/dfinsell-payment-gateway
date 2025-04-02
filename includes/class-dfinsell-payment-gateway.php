@@ -467,14 +467,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             if (!$account) {
                 // **Ensure email is sent to the last failed account**
                 if ($last_failed_account) {
-                    wc_get_logger()->info("Sending email to last failed account: '{$last_failed_account['title']}'", ['source' => 'dfin_sell_payment_gateway']);
+                    wc_get_logger()->info("Sending email to last failed account: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
                     $this->send_account_switch_email($last_failed_account, $last_failed_account);
                 }
                 wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
                 return ['result' => 'fail'];
             }
 
-            //wc_get_logger()->info("Using account '{$account['title']}' for payment.", ['source' => 'dfin_sell_payment_gateway']);
+            //wc_get_logger()->info("Using account '{$account['title']}' for payment.", ['source' => 'dfinsell-payment-gateway']);
             // Add order note mentioning account name
             $order->add_order_note(__('Processing payment using account: ', 'dfinsell-payment-gateway') . $account['title']);
 
@@ -501,7 +501,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             // **Handle Account Limit Error**
             if (isset($transaction_limit_data['error'])) {
                 $error_message = sanitize_text_field($transaction_limit_data['error']);
-                wc_get_logger()->error("Account '{$account['title']}' limit reached: $error_message", ['source' => 'dfin_sell_payment_gateway']);
+                wc_get_logger()->error("Account '{$account['title']}' limit reached: $error_message", ['source' => 'dfinsell-payment-gateway']);
 
                 $last_failed_account = $account;
                 // Switch to next available account
@@ -510,7 +510,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
                 // **Send Email Notification **
                 if ($new_account) {
-                    wc_get_logger()->info("Switching from '{$account['title']}' to '{$new_account['title']}' due to limit.", ['source' => 'dfin_sell_payment_gateway']);
+                    wc_get_logger()->info("Switching from '{$account['title']}' to '{$new_account['title']}' due to limit.", ['source' => 'dfinsell-payment-gateway']);
 
                     // Send email only to the previously failed account
                     if ($previous_account) {
@@ -532,7 +532,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             // **Proceed with Payment**
             $apiPath = '/api/request-payment';
             $url = esc_url($this->sip_protocol . $this->sip_host . $apiPath);
-            wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), ['source' => 'dfin_sell_payment_gateway']);
+			
+			$order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
+			$order->save();
+            wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), ['source' => 'dfinsell-payment-gateway']);
 
             $response = wp_remote_post($url, [
                 'method' => 'POST',
@@ -547,17 +550,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // **Handle Response**
             if (is_wp_error($response)) {
-                wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), ['source' => 'dfin_sell_payment_gateway']);
+                wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
                 wc_add_notice(__('Payment error: Unable to process.', 'dfinsell-payment-gateway'), 'error');
                 return ['result' => 'fail'];
             }
 
             $response_data = json_decode(wp_remote_retrieve_body($response), true);
-            wc_get_logger()->info('DFin Sell Payment Response: ' . json_encode($response_data), ['source' => 'dfin_sell_payment_gateway']);
+            wc_get_logger()->info('DFin Sell Payment Response: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
 
             if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
                 if ($last_failed_account) {
-                    wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfin_sell_payment_gateway']);
+                    //wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
                     $this->send_account_switch_email($last_failed_account, $last_failed_account);
                 }
                 //$last_successful_account = $account;
@@ -585,7 +588,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // **Handle Payment Failure**
             $error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Payment failed.', 'dfinsell-payment-gateway');
-            wc_get_logger()->error("Payment failed on account '{$account['title']}': $error_message", ['source' => 'dfin_sell_payment_gateway']);
+            wc_get_logger()->error("Payment failed on account '{$account['title']}': $error_message", ['source' => 'dfinsell-payment-gateway']);
             // **Add Order Note for Failed Payment**
             $order->add_order_note(
                 sprintf(
@@ -691,7 +694,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         $ip_address = sanitize_text_field($this->dfinsell_get_client_ip());
 
         if (empty($order_id)) {
-            wc_get_logger()->error('Order ID is missing or invalid.', ['source' => 'dfin_sell_payment_gateway']);
+            wc_get_logger()->error('Order ID is missing or invalid.', ['source' => 'dfinsell-payment-gateway']);
             return ['result' => 'fail'];
         }
 
@@ -706,7 +709,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         foreach ($meta_data_array as $key => $value) {
             $meta_data_array[$key] = sanitize_text_field($value); // Sanitize each field
             if (is_object($value) || is_resource($value)) {
-                wc_get_logger()->error('Invalid value for key ' . $key . ': ' . wp_json_encode($value), ['source' => 'dfin_sell_payment_gateway']);
+                wc_get_logger()->error('Invalid value for key ' . $key . ': ' . wp_json_encode($value), ['source' => 'dfinsell-payment-gateway']);
             }
         }
 
@@ -936,14 +939,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             $amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 
             if (!method_exists($this, 'get_all_accounts')) {
-                wc_get_logger()->error('Method get_all_accounts() is missing!', ['source' => 'dfin_sell_payment_gateway']);
+                wc_get_logger()->error('Method get_all_accounts() is missing!', ['source' => 'dfinsell-payment-gateway']);
                 return $available_gateways;
             }
 
             $accounts = $this->get_all_accounts();
 
             if (empty($accounts)) {
-                //wc_get_logger()->warning('No accounts available. Hiding payment gateway.', ['source' => 'dfin_sell_payment_gateway']);
+                //wc_get_logger()->warning('No accounts available. Hiding payment gateway.', ['source' => 'dfinsell-payment-gateway']);
 
                 unset($available_gateways[$gateway_id]); //  Unset gateway properly
                 WC()->session->set('dfin_gateway_status', 'hidden');
@@ -976,8 +979,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 // Cache key to avoid redundant API requests
                 $cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
                 $transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
-                wc_get_logger()->info('limit response.', $transaction_limit_response_data, ['source' => 'dfin_sell_payment_gateway']);
-
+                
                 if (!isset($transaction_limit_response_data['error'])) {
                     // At least one high-priority account is available
                     $all_high_priority_accounts_limited = false;
@@ -987,7 +989,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             if ($all_high_priority_accounts_limited) {
                 if (!WC()->session->get('dfin_gateway_hidden_logged')) {
-                    wc_get_logger()->warning('All high-priority accounts have reached transaction limits. Hiding gateway.', ['source' => 'dfin_sell_payment_gateway']);
+                    wc_get_logger()->warning('All high-priority accounts have reached transaction limits. Hiding gateway.', ['source' => 'dfinsell-payment-gateway']);
                     WC()->session->set('dfin_gateway_hidden_logged', true);
                 }
 
@@ -1153,7 +1155,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         ];
 
         // Log API request details
-        //wc_get_logger()->info('Request Data: ' . json_encode($emailData), ['source' => 'dfin_sell_payment_gateway']);
+        //wc_get_logger()->info('Request Data: ' . json_encode($emailData), ['source' => 'dfinsell-payment-gateway']);
 
         // Send data to DFinSell API
         $response = wp_remote_post($dfinSellApiUrl, [
@@ -1166,7 +1168,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         // Handle API response
         if (is_wp_error($response)) {
-            wc_get_logger()->error('Failed to send switch email: ' . $response->get_error_message(), ['source' => 'dfin_sell_payment_gateway']);
+            wc_get_logger()->error('Failed to send switch email: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
             return false;
         }
 
@@ -1176,17 +1178,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         // Check if authentication failed
         if ($response_code == 401 || $response_code == 403 || (!empty($response_data['error']) && strpos($response_data['error'], 'invalid credentials') !== false)) {
-            wc_get_logger()->error('Email Sending Failed : Authentication failed: Invalid API key or secret for old account', ['source' => 'dfin_sell_payment_gateway']);
+            wc_get_logger()->error('Email Sending Failed : Authentication failed: Invalid API key or secret for old account', ['source' => 'dfinsell-payment-gateway']);
             return false; // Stop further execution
         }
 
         // Check if the API response has errors
         if (!empty($response_data['error'])) {
-            wc_get_logger()->error('DFinSell API Error: ' . json_encode($response_data), ['source' => 'dfin_sell_payment_gateway']);
+            wc_get_logger()->error('DFinSell API Error: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
             return false;
         }
 
-        wc_get_logger()->info('Switch email successfully sent', ['source' => 'dfin_sell_payment_gateway']);
+       	wc_get_logger()->info("Switch email successfully sent to: '{$oldAccount['title']}'", ['source' => 'dfinsell-payment-gateway']);
         return true;
     }
 
@@ -1223,7 +1225,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // Try to acquire lock
             if ($this->acquire_lock($lock_key)) {
-                // wc_get_logger()->info("Selected account '{$account['title']}' for processing.", ['source' => 'dfin_sell_payment_gateway']);
+                // wc_get_logger()->info("Selected account '{$account['title']}' for processing.", ['source' => 'dfinsell-payment-gateway']);
                 return $account;
             }
         }

@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.2  
-**Stable tag:** 1.0.9 
+**Stable tag:** Beta   
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -80,9 +80,17 @@ For any issues or enhancement requests with this plugin, please contact the DFin
   Enter the API keys obtained from your DFin account into the respective fields:
   - Title: DFin Sell Payment Gateway
   - Description: Secure payments with DFin Sell Payment Gateway.
-  - Public Key: [Your Public Key]
-  - Secret Key: [Your Secret Key]
   - Order Status: Select `Processing` or `Completed` based on your preference.
+- **Manage Multiple Payment Accounts:**
+  - Scroll down to **Multiple Payment Accounts**.
+  - Click **Add New Account**.
+  - Fill in the following:
+    - **Account Name** (e.g., "Primary Account")
+    - **Priority** (Lower number = higher priority)
+    - **Live Public Key & Secret Key**
+    - **Enable Sandbox Mode** (if applicable)
+    - **Sandbox Public Key & Secret Key**
+  - The system automatically selects an account based on priority and availability.
 - **Enable or Disable Payment Option:**
   Check the box to enable DFin Sell Payment Gateway as a payment option.
 - **Save Changes:**
@@ -131,6 +139,19 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 The official documentation for this plugin is available at: [https://www.dfin.ai/api/docs/wordpress-plugin](https://www.dfin.ai/api/docs/wordpress-plugin)
 
 ## Changelog
+
+### Version Beta
+
+- **Settings Page:** 
+  Save multiple accounts with priority order for seamless account management
+
+- **Checkout Page:** 
+  When the transaction limit is reached on an account, the system will automatically switch to the next available account based on the priority set in the settings page, ensuring uninterrupted payments.
+
+### Version 1.0.10
+
+- **Fixed Button Overlap on Checkout Page:** 
+  Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
 
 ### Version 1.0.9
 

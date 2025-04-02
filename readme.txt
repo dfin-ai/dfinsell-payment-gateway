@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.0.9
+Stable tag: Beta 
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -26,6 +26,13 @@ This plugin integrates DFin Sell Payment Gateway with WooCommerce, enabling you 
 Visit the DFin website and log in to your account. Navigate to Developer Settings to generate or retrieve API keys.
 
 == Changelog ==
+
+= Beta =
+*Settings Page: Save multiple accounts with priority order for seamless account management.
+*Payment Page:  When the transaction limit is reached on an account, the system will automatically switch to the next available account based on the priority set in the settings page, ensuring uninterrupted payments."   
+
+= 1.0.10 =
+* Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
 
 = 1.0.9 =
 * Added Transaction Limits Handling: Hides the payment gateway if the transaction amount exceeds the supported range or if the limit is not set.
