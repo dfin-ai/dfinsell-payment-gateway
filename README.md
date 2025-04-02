@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.2  
-**Stable tag:** Beta   
+**Stable tag:** 1.1.0 (Beta)    
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -140,7 +140,7 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ## Changelog
 
-### Version Beta
+### Version 1.1.0 (Beta)
 
 - **Settings Page:** 
   Save multiple accounts with priority order for seamless account management
