@@ -685,11 +685,64 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 	}
 
+	function check_for_sql_injection() {
+
+		$sql_injection_patterns = [
+			'/\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b(?![^{}]*})/i',
+			'/(\-\-|\#|\/\*|\*\/)/i',
+			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
+		];
+	
+		$errors = []; // Store multiple errors
+
+		// Get checkout fields dynamically
+		$checkout_fields = WC()->checkout()->get_checkout_fields();
+
+		foreach ($_POST as $key => $value) {
+			if (is_string($value)) {
+				foreach ($sql_injection_patterns as $pattern) {
+					if (preg_match($pattern, $value)) {
+						// Get the field label dynamically
+						$field_label = isset($checkout_fields['billing'][$key]['label']) ? $checkout_fields['billing'][$key]['label'] :
+									   (isset($checkout_fields['shipping'][$key]['label']) ? $checkout_fields['shipping'][$key]['label'] :
+									   (isset($checkout_fields['account'][$key]['label']) ? $checkout_fields['account'][$key]['label'] :
+									   (isset($checkout_fields['order'][$key]['label']) ? $checkout_fields['order'][$key]['label'] :
+									   ucfirst(str_replace('_', ' ', $key)))));
+	
+						// Log error for debugging
+						error_log("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
+	
+						// Add error to array instead of stopping execution
+						$errors[] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
+	
+						break; // Stop checking other patterns for this field
+					}
+				}
+			}
+		}
+	
+		// Display all collected errors at once
+		if (!empty($errors)) {
+			foreach ($errors as $error) {
+				wc_add_notice($error, 'error');
+			}
+			return false;
+		}
+	
+		return true;
+
+	}
+
 	/**
 	 * Validate the payment form.
 	 */
 	public function validate_fields()
 	{
+		// Check for SQL injection attempts
+		if (!$this->check_for_sql_injection()) {
+			return false;
+		}
+
 		// Check if the consent checkbox setting is enabled
 		if ($this->get_option('show_consent_checkbox') === 'yes') {
 
