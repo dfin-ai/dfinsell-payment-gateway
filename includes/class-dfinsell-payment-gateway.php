@@ -686,18 +686,18 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	}
 
 	function check_for_sql_injection() {
-
+		
 		$sql_injection_patterns = [
 			'/\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b(?![^{}]*})/i',
 			'/(\-\-|\#|\/\*|\*\/)/i',
 			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
 		];
 	
-		$errors = []; // Store multiple errors
-
+		$errors = []; // Store unique errors
+	
 		// Get checkout fields dynamically
 		$checkout_fields = WC()->checkout()->get_checkout_fields();
-
+	
 		foreach ($_POST as $key => $value) {
 			if (is_string($value)) {
 				foreach ($sql_injection_patterns as $pattern) {
@@ -712,8 +712,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 						// Log error for debugging
 						error_log("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
 	
-						// Add error to array instead of stopping execution
-						$errors[] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
+						// Store error uniquely based on field label
+						$errors[$field_label] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
 	
 						break; // Stop checking other patterns for this field
 					}
@@ -721,7 +721,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 		}
 	
-		// Display all collected errors at once
+		// Display all unique errors at once
 		if (!empty($errors)) {
 			foreach ($errors as $error) {
 				wc_add_notice($error, 'error');
@@ -730,7 +730,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 	
 		return true;
-
+	
 	}
 
 	/**
