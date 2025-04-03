@@ -1246,18 +1246,28 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         // Try to insert a lock row in the database
         $inserted = $wpdb->query(
             $wpdb->prepare(
-                "INSERT INTO wp_options (option_name, option_value, autoload)
-				VALUES (%s, %s, 'no')
-				ON DUPLICATE KEY UPDATE option_value = %s",
-                $lock_key,
-                time() + $lock_timeout,
-                time() + $lock_timeout
-            )
-        );
-
-        // If insert/update was successful, lock is acquired
-        return $inserted !== false;
-    }
+                "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
+                 VALUES (%s, %s, 'no')
+                 ON DUPLICATE KEY UPDATE option_value = %s",
+                 $lock_key,
+                 time() + $lock_timeout,
+                 time() + $lock_timeout
+             )
+         );
+     
+         if ($inserted === false) {
+             wc_get_logger()->error(
+                 "DB Error: " . $wpdb->last_error, 
+                 ['source' => 'dfinsell-payment-gateway']
+             );
+             return false; // Lock acquisition failed
+         }
+     
+         wc_get_logger()->info("Lock acquired for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
+     
+         return true;
+     }
+     
 
     /**
      * Release a lock after payment processing is complete.
@@ -1265,7 +1275,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
     private function release_lock($lock_key)
     {
         global $wpdb;
-        $wpdb->query($wpdb->prepare("DELETE FROM wp_options WHERE option_name = %s", $lock_key));
+        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $lock_key));
+        
+            wc_get_logger()->info("Released lock for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
     }
 
     function check_for_sql_injection()
