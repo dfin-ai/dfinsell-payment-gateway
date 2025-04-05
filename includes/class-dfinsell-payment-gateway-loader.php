@@ -306,8 +306,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			
 			$payment_return_url = esc_url($order->get_checkout_order_received_url());
 
-			wc_get_logger()->info("transaction_status :".$response_data['transaction_status'], ['source' => 'dfinsell-payment-gateway']);
-
+			
 			if(isset($response_data['transaction_status'])){
 				// Handle transaction status from API
 				switch ($response_data['transaction_status']) {

@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.7  
-**Stable tag:** 1.1.1 (Beta)    
+**Stable tag:** 1.1.2 (Beta)    
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -140,7 +140,10 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 The official documentation for this plugin is available at: [https://www.dfin.ai/api/docs/wordpress-plugin](https://www.dfin.ai/api/docs/wordpress-plugin)
 
 ## Changelog
+### Version 1.1.2 (Beta)
 
+- **Unpaid order redirection issue** 
+  Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
 ### Version 1.1.1 (Beta)
 
 - **Minor Fix: Payment Lock Mechanism** 
