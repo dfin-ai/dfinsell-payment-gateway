@@ -131,6 +131,7 @@ jQuery(function ($) {
 				data: {
 					action: 'popup_closed_event',
 					order_id: orderId,
+					payment_link:sanitizedPaymentLink,
 					security: dfinsell_params.dfinsell_nonce, // Ensure this is valid
 				},
 				dataType: 'json',

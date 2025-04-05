@@ -533,7 +533,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             $apiPath = '/api/request-payment';
             $url = esc_url($this->sip_protocol . $this->sip_host . $apiPath);
 			
-			$order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
+			$order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
 			$order->save();
             wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), ['source' => 'dfinsell-payment-gateway']);
 
@@ -685,7 +685,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 [
                     'order_id' => $order_id, // Include order ID or any other identifier
                     'key' => $order->get_order_key(),
-                    'nonce' => wp_create_nonce('dfin_sell_payment_nonce'), // Create a nonce for verification
+                    'nonce' => wp_create_nonce('dfinsell_payment_nonce'), // Create a nonce for verification
                     'mode' => 'wp',
                 ],
                 $this->dfinsell_get_return_url_base() // Use the updated base URL method
@@ -1096,24 +1096,33 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
     }
 
     private function get_all_accounts()
-    {
-        $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
-        $valid_accounts = [];
+	{
+	    $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
 
-        foreach ($accounts as $account) {
-            // If in sandbox mode, ensure sandbox keys are available
-            if ($this->sandbox) {
-                if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
-                    $valid_accounts[] = $account;
-                }
-            } else {
-                $valid_accounts[] = $account;
-            }
-        }
+	    // Try to unserialize if it's a string
+	    if (is_string($accounts)) {
+	        $unserialized = maybe_unserialize($accounts);
+	        $accounts = is_array($unserialized) ? $unserialized : [];
+	    }
 
-        $this->accounts = $valid_accounts;
-        return $this->accounts;
-    }
+	    $valid_accounts = [];
+
+		if(!empty($accounts)){
+		    foreach ($accounts as $account) {
+		        if ($this->sandbox) {
+		            if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
+		                $valid_accounts[] = $account;
+		            }
+		        } else {
+		            $valid_accounts[] = $account;
+		        }
+		    }
+		}
+
+	    $this->accounts = $valid_accounts;
+	    return $this->accounts;
+	}
+
 
     function dfinsell_enqueue_admin_styles($hook)
     {
@@ -1202,9 +1211,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         // Fetch all accounts ordered by priority
         $settings = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
-        if (empty($settings)) {
-            return false;
-        }
+		
+        if (is_string($settings)) {
+			$settings = maybe_unserialize($settings);
+		}
+	
+		if (!is_array($settings)) {
+			return false;
+		}
 
         // Filter out used accounts
         $available_accounts = array_filter($settings, function ($account) use ($used_accounts) {
