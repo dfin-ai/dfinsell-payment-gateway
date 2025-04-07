@@ -168,6 +168,7 @@ jQuery(function ($) {
 			  url: dfinsell_params.ajax_url,
 			  data: {
 				action: 'check_payment_status',
+				payment_link:sanitizedPaymentLink,
 				order_id: orderId,
 				security: dfinsell_params.dfinsell_nonce,
 			  },
