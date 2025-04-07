@@ -142,12 +142,9 @@ jQuery(function ($) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						if (response.data.redirect_url.includes('undefined')) {
-							console.log('Redirection blocked: URL contains "undefined".');
-							return false; // Prevent redirection
-						} else {
-							window.location.href = response.data.redirect_url; // Proceed with redirection
-						}
+						
+						window.location.href = response.data.redirect_url; // Proceed with redirection
+						
 						
 					  }
 					  isPollingActive = false; // Reset polling active flag after completion
@@ -182,12 +179,9 @@ jQuery(function ($) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  if (response.data.redirect_url.includes('undefined')) {
-					console.log('Redirection blocked: URL contains "undefined".');
-					return false; // Prevent redirection
-				} else {
+				  
 					window.location.href = response.data.redirect_url; // Proceed with redirection
-				}
+				
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
