@@ -239,17 +239,17 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		// Get the order ID from the request
 		$order_id = isset($_POST['order_id']) ? sanitize_text_field(wp_unslash($_POST['order_id'])) : null;
 
-		$payment_link = isset($_POST['payment_link']) ? sanitize_text_field(wp_unslash($_POST['payment_link'])) : '';
-	
-		// Validate order ID
-		if (!$payment_link) {
-			wp_send_json_error(['message' => 'Payment link is missing']);
-			wp_die();
-		}
-	
 		// Validate order ID
 		if (!$order_id) {
 			wp_send_json_error(['message' => 'Order ID is missing.']);
+			wp_die();
+		}
+
+		$payment_link = isset($_POST['payment_link']) ? sanitize_text_field(wp_unslash($_POST['payment_link'])) : '';
+	
+		// Validate Payment link
+		if (!$payment_link) {
+			wp_send_json_error(['message' => 'Payment link is missing']);
 			wp_die();
 		}
 	

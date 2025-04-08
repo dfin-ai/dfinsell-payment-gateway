@@ -142,11 +142,10 @@ jQuery(function ($) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						
-						window.location.href = response.data.redirect_url; // Proceed with redirection
-						
-						
-					  }
+						if (response.data && response.data.redirect_url) {
+							window.location.href = response.data.redirect_url; // Proceed with redirection
+						}
+					}
 					  isPollingActive = false; // Reset polling active flag after completion
 				},
 				error: function (xhr, status, error) {
@@ -168,7 +167,6 @@ jQuery(function ($) {
 			  url: dfinsell_params.ajax_url,
 			  data: {
 				action: 'check_payment_status',
-				payment_link:sanitizedPaymentLink,
 				order_id: orderId,
 				security: dfinsell_params.dfinsell_nonce,
 			  },
@@ -180,13 +178,15 @@ jQuery(function ($) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  
-					window.location.href = response.data.redirect_url; // Proceed with redirection
-				
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
+				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
+				  }
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  window.location.href = statusResponse.data.redirect_url;
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
+					window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
+				   }
 				}
 				isPollingActive = false; // Reset polling active flag after completion
 			  },

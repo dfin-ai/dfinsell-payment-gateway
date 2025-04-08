@@ -1321,8 +1321,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                                         : ucfirst(str_replace('_', ' ', $key)))));
 
                         // Log error for debugging
-                        error_log("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
-
+                        wc_get_logger()->info("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR'], ['source' => 'dfinsell-payment-gateway']);
                         // Add error to array instead of stopping execution
                         $errors[] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
 
