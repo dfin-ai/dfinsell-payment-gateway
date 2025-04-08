@@ -142,9 +142,7 @@ jQuery(function ($) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						if (response.data && response.data.redirect_url) {
-							window.location.href = response.data.redirect_url; // Proceed with redirection
-						}
+						window.location.href = response.data.redirect_url; // Proceed with redirection
 					}
 					  isPollingActive = false; // Reset polling active flag after completion
 				},
@@ -178,15 +176,11 @@ jQuery(function ($) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  if (statusResponse.data && statusResponse.data.redirect_url) {
 				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
-				  }
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  if (statusResponse.data && statusResponse.data.redirect_url) {
-					window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
-				   }
+				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
 				}
 				isPollingActive = false; // Reset polling active flag after completion
 			  },
