@@ -565,8 +565,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     $this->send_account_switch_email($last_failed_account, $account);
                 }
                 //$last_successful_account = $account;
+                // Save pay_id to order meta
+                $pay_id = $response_data['data']['pay_id'] ?? '';
+                if (!empty($pay_id)) {
+                    $order->update_meta_data('_dfinsell_pay_id', $pay_id);
+                }
+
                 // **Update Order Status**
                 $order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
+                
 
                 // **Add Order Note (If Not Exists)**
                 // translators: %s represents the account title.

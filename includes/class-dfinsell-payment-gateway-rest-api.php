@@ -90,6 +90,15 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			return new WP_REST_Response(['error' => 'Order not found'], 404);
 		}
 
+		$pay_id = isset($parameters['pay_id']) ? sanitize_text_field($parameters['pay_id']) : '';
+		//Get uuid from WP
+		$uu_pay_id = $order->get_meta('_dfinsell_pay_id');
+
+		if ($uu_pay_id != $pay_id) {
+			$this->logger->error('Pay ID mismatch: ' . $pay_id, array('source' => 'dfinsell-payment-gateway'));
+			return new WP_REST_Response(['error' => 'Pay ID mismatch'], 400);
+		}
+
 		if ($api_order_status == 'completed' && in_array($order->get_status(), ['pending', 'failed'])) {
 			// Get the configured order status from the payment gateway settings
 			$gateway_id = 'dfinsell';
