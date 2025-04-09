@@ -112,9 +112,7 @@ jQuery(function ($) {
 		'paymentPopup',
 		'width=' + width + ',height=' + height + ',scrollbars=yes,top=' + top + ',left=' + left
 	  );
-	  
-		//  NEW FLAG to prevent duplicate redirect
-		let statusHandled = false;
+  
 	  if (!popupWindow || popupWindow.closed || typeof popupWindow.closed === 'undefined') {
 		// Redirect to the payment link if popup was blocked
 		window.location.href = sanitizedPaymentLink;
@@ -125,27 +123,25 @@ jQuery(function ($) {
 			clearInterval(popupInterval);
 			clearInterval(paymentStatusInterval);
 			isPollingActive = false; // Reset polling active flag when popup closes
-			console.log('statusHandled',statusHandled);
-			  //  Only call popup_closed_event if status wasn't already handled
-			  if (!statusHandled) {
-				$.ajax({
+			
+			// API call when popup closes
+			$.ajax({
 				type: 'POST',
 				url: dfinsell_params.ajax_url, // Ensure this is localized correctly
 				data: {
 					action: 'popup_closed_event',
 					order_id: orderId,
-					payment_link: sanitizedPaymentLink,
+					payment_link:sanitizedPaymentLink,
 					security: dfinsell_params.dfinsell_nonce, // Ensure this is valid
 				},
 				dataType: 'json',
 				cache: false,
 				processData: true,
-				async: true,
+				async: true, // Change to true for better performance
 				success: function (response) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						console.log('data -popupclosed:',response);
 						if (response.data && response.data.redirect_url) {
 							setTimeout(() => {
 								window.location.href = response.data.redirect_url;
@@ -157,16 +153,15 @@ jQuery(function ($) {
 				error: function (xhr, status, error) {
 					console.error("AJAX Error: ", error);
 				},
-				complete: function () {
+				complete:function(){
 					resetButton();
 				}
-				});
-		    }
+			});
 		  }
 		}, 500);
-
+  
 		// Start polling only if it's not already active
-         if (!isPollingActive) {
+		if (!isPollingActive) {
 		  isPollingActive = true;
 		  
 		  paymentStatusInterval = setInterval(function () {
@@ -183,25 +178,28 @@ jQuery(function ($) {
 			  processData: true,
 			  async: true,
 			  success: function (statusResponse) {
-				
-			    if (statusResponse.data.status === 'success' || statusResponse.data.status === 'failed') {
-					console.log('coming inside');
+				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-					isPollingActive = false;
-	  
-					//  Mark status handled to avoid duplicate popup closed call
-					statusHandled = true;
-	  
-					if (statusResponse.data && statusResponse.data.redirect_url) {
-					  setTimeout(() => {
+				
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
+					setTimeout(() => {
 						window.location.href = statusResponse.data.redirect_url;
 					}, 100);
-					}
 				  }
-			}
+				} else if (statusResponse.data.status === 'failed') {
+				  clearInterval(paymentStatusInterval);
+				  clearInterval(popupInterval);
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
+					setTimeout(() => {
+						window.location.href = statusResponse.data.redirect_url;
+					}, 100);
+				   }
+				}
+				isPollingActive = false; // Reset polling active flag after completion
+			  },
 			});
-        }, 5000);
+		  }, 5000);
 		}
 	  }
 	}
