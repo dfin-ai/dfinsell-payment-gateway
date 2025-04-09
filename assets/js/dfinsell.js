@@ -137,12 +137,17 @@ jQuery(function ($) {
 				dataType: 'json',
 				cache: false,
 				processData: true,
-				async: false, // Change to true for better performance
+				async: true, // Change to true for better performance
 				success: function (response) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						window.location.href = response.data.redirect_url; // Proceed with redirection
+						console.log('data -popupclosed:',response);
+						if (response.data && response.data.redirect_url) {
+							setTimeout(() => {
+								window.location.href = response.data.redirect_url;
+							}, 100); // Proceed with redirection
+						}
 					}
 					  isPollingActive = false; // Reset polling active flag after completion
 				},
@@ -159,6 +164,7 @@ jQuery(function ($) {
 		// Start polling only if it's not already active
 		if (!isPollingActive) {
 		  isPollingActive = true;
+		  
 		  paymentStatusInterval = setInterval(function () {
 			$.ajax({
 			  type: 'POST',
@@ -171,16 +177,26 @@ jQuery(function ($) {
 			  dataType: 'json',
 			  cache: false,
 			  processData: true,
-			  async: false,
+			  async: true,
 			  success: function (statusResponse) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
+				  console.log('data -sucess:',statusResponse);
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
+					setTimeout(() => {
+						window.location.href = statusResponse.data.redirect_url;
+					}, 100);
+				  }
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
+				  console.log('data -failed:',statusResponse);
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
+					setTimeout(() => {
+						window.location.href = statusResponse.data.redirect_url;
+					}, 100);
+				   }
 				}
 				isPollingActive = false; // Reset polling active flag after completion
 			  },
