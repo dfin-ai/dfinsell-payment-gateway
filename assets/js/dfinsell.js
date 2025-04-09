@@ -142,7 +142,6 @@ jQuery(function ($) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						console.log('data -popupclosed:',response);
 						if (response.data && response.data.redirect_url) {
 							setTimeout(() => {
 								window.location.href = response.data.redirect_url;
@@ -182,7 +181,7 @@ jQuery(function ($) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  console.log('data -sucess:',statusResponse);
+				
 				  if (statusResponse.data && statusResponse.data.redirect_url) {
 					setTimeout(() => {
 						window.location.href = statusResponse.data.redirect_url;
@@ -191,7 +190,6 @@ jQuery(function ($) {
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  console.log('data -failed:',statusResponse);
 				  if (statusResponse.data && statusResponse.data.redirect_url) {
 					setTimeout(() => {
 						window.location.href = statusResponse.data.redirect_url;

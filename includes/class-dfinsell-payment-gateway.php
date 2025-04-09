@@ -473,6 +473,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
                 return ['result' => 'fail'];
             }
+            $lock_key = $account['lock_key'] ?? null;
 
             //wc_get_logger()->info("Using account '{$account['title']}' for payment.", ['source' => 'dfinsell-payment-gateway']);
             // Add order note mentioning account name
@@ -502,7 +503,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             if (isset($transaction_limit_data['error'])) {
                 $error_message = sanitize_text_field($transaction_limit_data['error']);
                 wc_get_logger()->error("Account '{$account['title']}' limit reached: $error_message", ['source' => 'dfinsell-payment-gateway']);
-				$this->release_lock($lock_key);
+                if (!empty($lock_key)) {
+                    $this->release_lock($lock_key);
+                }
+    
                 $last_failed_account = $account;
                 // Switch to next available account
                 $used_accounts[] = $account['title'];
@@ -551,7 +555,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             // **Handle Response**
             if (is_wp_error($response)) {
                 wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
-                $this->release_lock($lock_key);
+                if (!empty($lock_key)) {
+                    $this->release_lock($lock_key);
+                }    
 				wc_add_notice(__('Payment error: Unable to process.', 'dfinsell-payment-gateway'), 'error');
                 return ['result' => 'fail'];
             }
@@ -587,7 +593,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 if (!array_filter($existing_notes, fn($note) => trim(wp_strip_all_tags($note->comment_content)) === trim($new_note))) {
                     $order->add_order_note($new_note, false, true);
                 }
-                $this->release_lock("dfinsell_lock_{$account['title']}");
+              
+
+                if (!empty($lock_key)) {
+                    $this->release_lock($lock_key);
+                }
                 return [
                     'payment_link' => esc_url($response_data['data']['payment_link']),
                     'result' => 'success',
@@ -609,7 +619,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // Add WooCommerce error notice
             wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . $error_message, 'error');
-			$this->release_lock("dfinsell_lock_{$account['title']}");
+            if (!empty($lock_key)) {
+                $this->release_lock($lock_key);
+            }
             return ['result' => 'fail'];
         }
     }
@@ -1247,6 +1259,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // Try to acquire lock
             if ($this->acquire_lock($lock_key)) {
+                $account['lock_key'] = $lock_key; 
                 // wc_get_logger()->info("Selected account '{$account['title']}' for processing.", ['source' => 'dfinsell-payment-gateway']);
                 return $account;
             }
