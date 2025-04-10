@@ -92,9 +92,9 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 		$pay_id = isset($parameters['pay_id']) ? sanitize_text_field($parameters['pay_id']) : '';
 		//Get uuid from WP
-		$uu_pay_id = $order->get_meta('_dfinsell_pay_id');
+		$payment_token = $order->get_meta('_dfinsell_pay_id');
 
-		if ($uu_pay_id != $pay_id) {
+		if ($payment_token != $pay_id) {
 			$this->logger->error('Pay ID mismatch: ' . $pay_id, array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Pay ID mismatch'], 400);
 		}

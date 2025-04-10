@@ -255,10 +255,10 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		}
 
 		//Get uuid from WP
-		$uu_pay_id = $order->get_meta('_dfinsell_pay_id');
+		$payment_token = $order->get_meta('_dfinsell_pay_id');
 		wc_get_logger()->info("response open close case  :".print_r([
-			'uuid' => $uu_pay_id,
-			'decrypted' => base64_decode($uu_pay_id),
+			'uuid' => $payment_token,
+			'decrypted' => base64_decode($payment_token),
 		],true), ['source' => 'dfinsell-payment-gateway']);
 	
 		// Proceed only if the order status is 'pending'
@@ -267,7 +267,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
 			$response = wp_remote_post($transactionStatusApiUrl, [
 				'method'    => 'POST',
-				'body'      => wp_json_encode(['order_id' => $order_id,'uu_pay_id' => $uu_pay_id]),
+				'body'      => wp_json_encode(['order_id' => $order_id,'payment_token' => $payment_token]),
 				'headers'   => [
 					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $security,
