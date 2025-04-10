@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-	exit; // Exit if accessed directly.
+    exit(); // Exit if accessed directly.
 }
 // Include the configuration file
 require_once plugin_dir_path(__FILE__) . 'config.php';
@@ -275,7 +275,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Rate-limiting configuration
 		$window_size = 30; // 30 seconds
-		$max_requests = 5;  // Max 5 requests in the last 30 seconds
+		$max_requests = 100;  // Max 5 requests in the last 30 seconds
 
 		// Get the current timestamp
 		$timestamp = time();
@@ -386,7 +386,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
 		$order->save();
 
-		wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), array('source' => 'dfin_sell_payment_gateway'));
+		wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), array('source' => 'dfinsell-payment-gateway'));
 
 		// Send the data to the API
 		$response = wp_remote_post($cleanUrl, array(
@@ -403,7 +403,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Log the essential response data
 		if (is_wp_error($response)) {
 			// Log the error message
-			wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfin_sell_payment_gateway'));
+			wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfinsell-payment-gateway'));
 			wc_add_notice(__('Payment error: Unable to process payment.', 'dfinsell-payment-gateway') . ' ' . $response->get_error_message(), 'error');
 			return array('result' => 'fail');
 		} else {
@@ -413,7 +413,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			// Log the response code and body
 			wc_get_logger()->info(
 				sprintf('DFin Sell Payment Response: Code: %d, Body: %s', $response_code, $response_body),
-				array('source' => 'dfin_sell_payment_gateway')
+				array('source' => 'dfinsell-payment-gateway')
 			);
 		}
 		$response_data = json_decode($response_body, true);
@@ -422,6 +422,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			isset($response_data['status']) && $response_data['status'] === 'success' &&
 			isset($response_data['data']['payment_link']) && !empty($response_data['data']['payment_link'])
 		) {
+
+			 // Save pay_id to order meta
+			 $pay_id = $response_data['data']['pay_id'] ?? '';
+			 if (!empty($pay_id)) {
+				 $order->update_meta_data('_dfinsell_pay_id', $pay_id);
+			 }
 			// Update the order status
 			$order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
 
@@ -685,11 +691,64 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 	}
 
+	function check_for_sql_injection() {
+
+		$sql_injection_patterns = [
+			'/\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b(?![^{}]*})/i',
+			'/(\-\-|\#|\/\*|\*\/)/i',
+			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
+		];
+
+		$errors = []; // Store unique errors
+
+		// Get checkout fields dynamically
+		$checkout_fields = WC()->checkout()->get_checkout_fields();
+
+		foreach ($_POST as $key => $value) {
+			if (is_string($value)) {
+				foreach ($sql_injection_patterns as $pattern) {
+					if (preg_match($pattern, $value)) {
+						// Get the field label dynamically
+						$field_label = isset($checkout_fields['billing'][$key]['label']) ? $checkout_fields['billing'][$key]['label'] :
+									   (isset($checkout_fields['shipping'][$key]['label']) ? $checkout_fields['shipping'][$key]['label'] :
+									   (isset($checkout_fields['account'][$key]['label']) ? $checkout_fields['account'][$key]['label'] :
+									   (isset($checkout_fields['order'][$key]['label']) ? $checkout_fields['order'][$key]['label'] :
+									   ucfirst(str_replace('_', ' ', $key)))));
+
+						// Log error for debugging
+						error_log("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR']);
+
+						// Store error uniquely based on field label
+						$errors[$field_label] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
+
+						break; // Stop checking other patterns for this field
+					}
+				}
+			}
+		}
+
+		// Display all unique errors at once
+		if (!empty($errors)) {
+			foreach ($errors as $error) {
+				wc_add_notice($error, 'error');
+			}
+			return false;
+		}
+
+		return true;
+
+	}
+
 	/**
 	 * Validate the payment form.
 	 */
 	public function validate_fields()
 	{
+		// Check for SQL injection attempts
+		if (!$this->check_for_sql_injection()) {
+			return false;
+		}
+
 		// Check if the consent checkbox setting is enabled
 		if ($this->get_option('show_consent_checkbox') === 'yes') {
 
