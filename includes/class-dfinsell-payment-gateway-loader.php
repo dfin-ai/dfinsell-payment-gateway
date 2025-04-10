@@ -256,11 +256,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		//Get uuid from WP
 		$payment_token = $order->get_meta('_dfinsell_pay_id');
-		wc_get_logger()->info("response open close case  :".print_r([
-			'uuid' => $payment_token,
-			'decrypted' => base64_decode($payment_token),
-		],true), ['source' => 'dfinsell-payment-gateway']);
-	
+		
 		// Proceed only if the order status is 'pending'
 		if ($order->get_status() === 'pending') {
 			// Call the DFin Sell to update status

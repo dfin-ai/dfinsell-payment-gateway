@@ -131,21 +131,17 @@ jQuery(function ($) {
 				data: {
 					action: 'popup_closed_event',
 					order_id: orderId,
-					payment_link:sanitizedPaymentLink,
 					security: dfinsell_params.dfinsell_nonce, // Ensure this is valid
 				},
 				dataType: 'json',
 				cache: false,
 				processData: true,
-				async: true, // Change to true for better performance
 				success: function (response) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
 						if (response.data && response.data.redirect_url) {
-							setTimeout(() => {
 								window.location.href = response.data.redirect_url;
-							}, 100); // Proceed with redirection
 						}
 					}
 					  isPollingActive = false; // Reset polling active flag after completion
@@ -163,7 +159,6 @@ jQuery(function ($) {
 		// Start polling only if it's not already active
 		if (!isPollingActive) {
 		  isPollingActive = true;
-		  
 		  paymentStatusInterval = setInterval(function () {
 			$.ajax({
 			  type: 'POST',
@@ -176,24 +171,18 @@ jQuery(function ($) {
 			  dataType: 'json',
 			  cache: false,
 			  processData: true,
-			  async: true,
 			  success: function (statusResponse) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				
 				  if (statusResponse.data && statusResponse.data.redirect_url) {
-					setTimeout(() => {
 						window.location.href = statusResponse.data.redirect_url;
-					}, 100);
 				  }
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
 				  if (statusResponse.data && statusResponse.data.redirect_url) {
-					setTimeout(() => {
 						window.location.href = statusResponse.data.redirect_url;
-					}, 100);
 				   }
 				}
 				isPollingActive = false; // Reset polling active flag after completion
@@ -254,6 +243,5 @@ jQuery(function ($) {
 	  }
 	  $('.dfinsell-loader-background, .dfinsell-loader').hide();
 	}
-
   });
   
