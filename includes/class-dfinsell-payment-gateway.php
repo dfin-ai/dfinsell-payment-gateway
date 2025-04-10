@@ -425,7 +425,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         // **Rate Limiting**
         $window_size = 30; // 30 seconds
-        $max_requests = 5;
+        $max_requests = 100;
         $timestamp_key = "rate_limit_{$ip_address}_timestamps";
         $request_timestamps = get_transient($timestamp_key) ?: [];
 
