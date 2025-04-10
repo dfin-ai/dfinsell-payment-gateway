@@ -48,6 +48,14 @@ jQuery(function ($) {
   
 	// Initial binding of the form submit handler
 	bindCheckoutHandler();
+
+	// Remove WooCommerce errors when your method is selected
+	$('form.checkout').on('change', 'input[name="payment_method"]', function () {
+		const selected = $(this).val();
+		if (selected === dfinsell_params.payment_method) {
+			$('.woocommerce-error, .wc-block-components-notice-banner').remove();
+		}
+	});
   
 	// Function to handle form submission
 	function handleFormSubmit(e) {
@@ -137,17 +145,12 @@ jQuery(function ($) {
 				dataType: 'json',
 				cache: false,
 				processData: true,
-				async: true, // Change to true for better performance
+				async: true,
 				success: function (response) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
-						console.log('data -popupclosed:',response);
-						if (response.data && response.data.redirect_url) {
-							setTimeout(() => {
-								window.location.href = response.data.redirect_url;
-							}, 100); // Proceed with redirection
-						}
+						window.location.href = response.data.redirect_url; // Proceed with redirection
 					}
 					  isPollingActive = false; // Reset polling active flag after completion
 				},
@@ -164,7 +167,6 @@ jQuery(function ($) {
 		// Start polling only if it's not already active
 		if (!isPollingActive) {
 		  isPollingActive = true;
-		  
 		  paymentStatusInterval = setInterval(function () {
 			$.ajax({
 			  type: 'POST',
@@ -182,21 +184,11 @@ jQuery(function ($) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  console.log('data -sucess:',statusResponse);
-				  if (statusResponse.data && statusResponse.data.redirect_url) {
-					setTimeout(() => {
-						window.location.href = statusResponse.data.redirect_url;
-					}, 100);
-				  }
+				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
-				  console.log('data -failed:',statusResponse);
-				  if (statusResponse.data && statusResponse.data.redirect_url) {
-					setTimeout(() => {
-						window.location.href = statusResponse.data.redirect_url;
-					}, 100);
-				   }
+				  window.location.href = statusResponse.data.redirect_url; // Proceed with redirection
 				}
 				isPollingActive = false; // Reset polling active flag after completion
 			  },
@@ -208,7 +200,7 @@ jQuery(function ($) {
   
 	function handleResponse(response, $form) {
 	  $('.dfinsell-loader-background, .dfinsell-loader').hide();
-	  $('.wc_er').remove();
+	 // $('.wc_er').remove();
   
 	  try {
 		if (response.result === 'success') {
@@ -226,28 +218,35 @@ jQuery(function ($) {
 	}
   
 	function handleError($form) {
-	  $('.wc_er').remove();
-	  $form.prepend('<div class="wc_er">An error occurred during checkout. Please try again.</div>');
-	  $('html, body').animate(
-		{
-		  scrollTop: $('.wc_er').offset().top - 300,
-		},
-		500
-	  );
-	  resetButton();
-	}
+		var $errorContainer = $form.find('.dfinsell-error-wrap');
+		if (!$errorContainer.length) {
+		  $errorContainer = $('<div class="dfinsell-error-wrap"></div>');
+		  $form.prepend($errorContainer);
+		}
+		$errorContainer.html('<div class="dfinsell-error">An error occurred during checkout. Please try again.</div>');
+		scrollToError($errorContainer);
+		resetButton();
+	  }
   
-	function displayError(err, $form) {
-	  $('.wc_er').remove();
-	  $form.prepend('<div class="wc_er">' + err + '</div>');
-	  $('html, body').animate(
-		{
-		  scrollTop: $('.wc_er').offset().top - 300,
-		},
-		500
-	  );
-	  resetButton();
+  function displayError(err, $form) {
+	var $errorContainer = $form.find('.dfinsell-error-wrap');
+	if (!$errorContainer.length) {
+	  $errorContainer = $('<div class="dfinsell-error-wrap"></div>');
+	  $form.prepend($errorContainer);
 	}
+	$errorContainer.html('<div class="dfinsell-error">' + $('<div>').text(err).html() + '</div>');
+	scrollToError($errorContainer);
+	resetButton();
+  }
+  
+  function scrollToError($el) {
+	if ($el && $el.length) {
+	  $('html, body').animate({
+		scrollTop: $el.offset().top - 300,
+	  }, 500);
+	}
+  }	  
+	  
   
 	function resetButton() {
 	  isSubmitting = false;
