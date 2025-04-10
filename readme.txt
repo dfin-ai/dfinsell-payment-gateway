@@ -72,6 +72,12 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 == Upgrade Notice ==
 
+= 1.0.11 =
+* Implemented unique payment token handling for orders to prevent duplicate payment processing and enhance order reliability.
+
+= 1.0.10 =
+* Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
+
 = 1.0.9 =
 * Added Transaction Limits Handling: Now, the plugin is hidden if the transaction amount exceeds the supported range or if the limit is not set.
 * Enhanced Error Messages: Plugin version information is included in error messages to help with troubleshooting.
