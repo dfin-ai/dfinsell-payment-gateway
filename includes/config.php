@@ -3,5 +3,4 @@
 
 // Determine SIP protocol based on the site's protocol
 define('SIP_PROTOCOL', is_ssl() ? 'https://' : 'http://');
-// define('SIP_HOST', 'sell-dev.dfin.ai');
-define('SIP_HOST', 'dfin-sell.lcl');
+define('SIP_HOST', 'sell.dfin.ai');
