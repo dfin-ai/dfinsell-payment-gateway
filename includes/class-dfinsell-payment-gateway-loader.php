@@ -235,6 +235,8 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			wp_send_json_error(['message' => 'Order not found in WordPress.']);
 			wp_die();
 		}
+		//Get uuid from WP
+		$payment_token = $order->get_meta('_dfinsell_pay_id');
 	
 		// Proceed only if the order status is 'pending'
 		if ($order->get_status() === 'pending') {
@@ -242,13 +244,14 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
 			$response = wp_remote_post($transactionStatusApiUrl, [
 				'method'    => 'POST',
-				'body'      => wp_json_encode(['order_id' => $order_id]),
+				'body'      => wp_json_encode(['order_id' => $order_id,'payment_token' => $payment_token]),
 				'headers'   => [
 					'Content-Type'  => 'application/json',
 					'Authorization' => 'Bearer ' . $security,
 				],
 				'timeout'   => 15,
 			]);
+			wc_get_logger()->info("response from the popup close event :".json_encode($response), ['source' => 'dfinsell-payment-gateway']);
 	
 			// Check for errors in the API request
 			if (is_wp_error($response)) {

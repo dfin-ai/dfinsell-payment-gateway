@@ -1,6 +1,6 @@
 <?php
 if (!defined('ABSPATH')) {
-	exit; // Exit if accessed directly.
+    exit(); // Exit if accessed directly.
 }
 // Include the configuration file
 require_once plugin_dir_path(__FILE__) . 'config.php';
@@ -386,7 +386,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$order->update_meta_data('_order_origin', 'dfin_sell_payment_gateway');
 		$order->save();
 
-		wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), array('source' => 'dfin_sell_payment_gateway'));
+		wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), array('source' => 'dfinsell-payment-gateway'));
 
 		// Send the data to the API
 		$response = wp_remote_post($cleanUrl, array(
@@ -403,7 +403,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Log the essential response data
 		if (is_wp_error($response)) {
 			// Log the error message
-			wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfin_sell_payment_gateway'));
+			wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), array('source' => 'dfinsell-payment-gateway'));
 			wc_add_notice(__('Payment error: Unable to process payment.', 'dfinsell-payment-gateway') . ' ' . $response->get_error_message(), 'error');
 			return array('result' => 'fail');
 		} else {
@@ -413,7 +413,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			// Log the response code and body
 			wc_get_logger()->info(
 				sprintf('DFin Sell Payment Response: Code: %d, Body: %s', $response_code, $response_body),
-				array('source' => 'dfin_sell_payment_gateway')
+				array('source' => 'dfinsell-payment-gateway')
 			);
 		}
 		$response_data = json_decode($response_body, true);
@@ -422,6 +422,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			isset($response_data['status']) && $response_data['status'] === 'success' &&
 			isset($response_data['data']['payment_link']) && !empty($response_data['data']['payment_link'])
 		) {
+
+			 // Save pay_id to order meta
+			 $pay_id = $response_data['data']['pay_id'] ?? '';
+			 if (!empty($pay_id)) {
+				 $order->update_meta_data('_dfinsell_pay_id', $pay_id);
+			 }
 			// Update the order status
 			$order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
 
