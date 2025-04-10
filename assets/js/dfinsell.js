@@ -136,14 +136,15 @@ jQuery(function ($) {
 				dataType: 'json',
 				cache: false,
 				processData: true,
-				async: false, // Change to true for better performance
 				success: function (response) {
 					if (response.success === true) {
 						clearInterval(paymentStatusInterval);
 						clearInterval(popupInterval);
+						if (response.data && response.data.redirect_url) {
 						window.location.href = response.data.redirect_url;
-					  }
-					  isPollingActive = false; // Reset polling active flag after completion
+						}
+					}
+					isPollingActive = false; // Reset polling active flag after completion
 				},
 				error: function (xhr, status, error) {
 					console.error("AJAX Error: ", error);
@@ -170,16 +171,19 @@ jQuery(function ($) {
 			  dataType: 'json',
 			  cache: false,
 			  processData: true,
-			  async: false,
 			  success: function (statusResponse) {
 				if (statusResponse.data.status === 'success') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
 				  window.location.href = statusResponse.data.redirect_url;
+				  }
 				} else if (statusResponse.data.status === 'failed') {
 				  clearInterval(paymentStatusInterval);
 				  clearInterval(popupInterval);
+				  if (statusResponse.data && statusResponse.data.redirect_url) {
 				  window.location.href = statusResponse.data.redirect_url;
+				   }
 				}
 				isPollingActive = false; // Reset polling active flag after completion
 			  },
