@@ -137,6 +137,9 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 - **Unique Payment Token Handling:**  
   Implemented unique payment token support for orders to prevent duplicate payment processing and ensure more reliable order submissions.
 
+- **Special Character Validation**:
+  Special character validations have been added to the checkout page to ensure secure and proper data entry, preventing the use of potentially harmful or unsupported characters.
+
 ### Version 1.0.10
 
 - **Fixed Button Overlap on Checkout Page:** 
