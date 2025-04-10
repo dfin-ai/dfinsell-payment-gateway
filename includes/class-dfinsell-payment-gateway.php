@@ -275,7 +275,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Rate-limiting configuration
 		$window_size = 30; // 30 seconds
-		$max_requests = 5;  // Max 5 requests in the last 30 seconds
+		$max_requests = 100;  // Max 5 requests in the last 30 seconds
 
 		// Get the current timestamp
 		$timestamp = time();
@@ -748,7 +748,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		if (!$this->check_for_sql_injection()) {
 			return false;
 		}
-		
+
 		// Check if the consent checkbox setting is enabled
 		if ($this->get_option('show_consent_checkbox') === 'yes') {
 
