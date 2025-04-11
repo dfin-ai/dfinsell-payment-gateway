@@ -307,104 +307,104 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         $active_account = get_option('dfinsell_active_account', 0); // Store active account ID
 
         ob_start();
-        ?>
-		<tr valign="top">
-			<th scope="row" class="titledesc">
-				<label><?php echo esc_html($data['title']); ?></label>
-			</th>
-			<td class="forminp">
-				<div class="dfinsell-accounts-container">
-					<?php if (empty($option_value)): ?>
+?>
+        <tr valign="top">
+            <th scope="row" class="titledesc">
+                <label><?php echo esc_html($data['title']); ?></label>
+            </th>
+            <td class="forminp">
+                <div class="dfinsell-accounts-container">
+                    <?php if (empty($option_value)): ?>
 						<div class="empty-account"><?php esc_html_e('No accounts available. Please add one to continue.', 'dfinsell-payment-gateway'); ?></div>
-					<?php else: ?>
-						<?php foreach (array_values($option_value) as $index => $account): ?>
-							<div class="dfinsell-account" data-index="<?php echo esc_attr($index); ?>">
-								<div class="title-blog">
-									<h4>
-										<span class="account-name-display">
-											<?php echo !empty($account['title']) ? esc_html($account['title']) : esc_html__('Untitled Account', 'dfinsell-payment-gateway'); ?>
-										</span>
-										&nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
-									</h4>
-									<div class="action-button">
-										<button type="button" class="delete-account-btn">
-											<i class="fa fa-trash" aria-hidden="true"></i>
-										</button>
-									</div>
-								</div>
-	
-								<div class="account-info">
-									<div class="add-blog title-priority">
-										<div class="account-input account-name">
-											<label><?php esc_html_e('Account Name', 'dfinsell-payment-gateway'); ?></label>
-											<input type="text" class="account-title" 
-												name="accounts[<?php echo esc_attr($index); ?>][title]" 
-												placeholder="<?php esc_attr_e('Account Title', 'dfinsell-payment-gateway'); ?>"
-												value="<?php echo esc_attr($account['title'] ?? ''); ?>">
-										</div>
-										<div class="account-input priority-name">
-											<label><?php esc_html_e('Priority', 'dfinsell-payment-gateway'); ?></label>
-											<input type="number" class="account-priority"
-												name="accounts[<?php echo esc_attr($index); ?>][priority]"
-												placeholder="<?php esc_attr_e('Priority', 'dfinsell-payment-gateway'); ?>"
-												value="<?php echo esc_attr($account['priority'] ?? '1'); ?>" min="1">
-										</div>
-									</div>
-	
-									<div class="add-blog">
-										<div class="account-input">
-											<label><?php esc_html_e('Live Keys', 'dfinsell-payment-gateway'); ?></label>
-											<input type="text" class="live-public-key"
-												name="accounts[<?php echo esc_attr($index); ?>][live_public_key]"
-												placeholder="<?php esc_attr_e('Public Key', 'dfinsell-payment-gateway'); ?>"
-												value="<?php echo esc_attr($account['live_public_key'] ?? ''); ?>">
-										</div>
-										<div class="account-input">
-											<input type="text" class="live-secret-key"
-												name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]"
-												placeholder="<?php esc_attr_e('Secret Key', 'dfinsell-payment-gateway'); ?>"
-												value="<?php echo esc_attr($account['live_secret_key'] ?? ''); ?>">
-										</div>
-									</div>
-	
-									<div class="account-checkbox">
-										<input type="checkbox" class="sandbox-checkbox"
-											name="accounts[<?php echo esc_attr($index); ?>][has_sandbox]"
-											<?php checked(!empty($account['sandbox_public_key'])); ?>>
-										<?php esc_html_e('Do you have the sandbox keys?', 'dfinsell-payment-gateway'); ?>
-									</div>
-	
+                    <?php else: ?>
+                        <?php foreach (array_values($option_value) as $index => $account): ?>
+                            <div class="dfinsell-account" data-index="<?php echo esc_attr($index); ?>">
+                                <div class="title-blog">
+                                    <h4>
+                                        <span class="account-name-display">
+                                            <?php echo !empty($account['title']) ? esc_html($account['title']) : esc_html__('Untitled Account', 'dfinsell-payment-gateway'); ?>
+                                        </span>
+                                        &nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
+                                    </h4>
+                                    <div class="action-button">
+                                        <button type="button" class="delete-account-btn">
+                                            <i class="fa fa-trash" aria-hidden="true"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="account-info">
+                                    <div class="add-blog title-priority">
+                                        <div class="account-input account-name">
+                                            <label><?php esc_html_e('Account Name', 'dfinsell-payment-gateway'); ?></label>
+                                            <input type="text" class="account-title"
+                                                name="accounts[<?php echo esc_attr($index); ?>][title]"
+                                                placeholder="<?php esc_attr_e('Account Title', 'dfinsell-payment-gateway'); ?>"
+                                                value="<?php echo esc_attr($account['title'] ?? ''); ?>">
+                                        </div>
+                                        <div class="account-input priority-name">
+                                            <label><?php esc_html_e('Priority', 'dfinsell-payment-gateway'); ?></label>
+                                            <input type="number" class="account-priority"
+                                                name="accounts[<?php echo esc_attr($index); ?>][priority]"
+                                                placeholder="<?php esc_attr_e('Priority', 'dfinsell-payment-gateway'); ?>"
+                                                value="<?php echo esc_attr($account['priority'] ?? '1'); ?>" min="1">
+                                        </div>
+                                    </div>
+
+                                    <div class="add-blog">
+                                        <div class="account-input">
+                                            <label><?php esc_html_e('Live Keys', 'dfinsell-payment-gateway'); ?></label>
+                                            <input type="text" class="live-public-key"
+                                                name="accounts[<?php echo esc_attr($index); ?>][live_public_key]"
+                                                placeholder="<?php esc_attr_e('Public Key', 'dfinsell-payment-gateway'); ?>"
+                                                value="<?php echo esc_attr($account['live_public_key'] ?? ''); ?>">
+                                        </div>
+                                        <div class="account-input">
+                                            <input type="text" class="live-secret-key"
+                                                name="accounts[<?php echo esc_attr($index); ?>][live_secret_key]"
+                                                placeholder="<?php esc_attr_e('Secret Key', 'dfinsell-payment-gateway'); ?>"
+                                                value="<?php echo esc_attr($account['live_secret_key'] ?? ''); ?>">
+                                        </div>
+                                    </div>
+
+                                    <div class="account-checkbox">
+                                        <input type="checkbox" class="sandbox-checkbox"
+                                            name="accounts[<?php echo esc_attr($index); ?>][has_sandbox]"
+                                            <?php checked(!empty($account['sandbox_public_key'])); ?>>
+                                        <?php esc_html_e('Do you have the sandbox keys?', 'dfinsell-payment-gateway'); ?>
+                                    </div>
+
 									<div class="sandbox-key" style="<?php echo empty($account['sandbox_public_key']) ? 'display: none;' : ''; ?>">
-										<div class="add-blog">
-											<div class="account-input">
-												<label><?php esc_html_e('Sandbox Keys', 'dfinsell-payment-gateway'); ?></label>
-												<input type="text" class="sandbox-public-key"
-													name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]"
-													placeholder="<?php esc_attr_e('Public Key', 'dfinsell-payment-gateway'); ?>"
-													value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
-											</div>
-											<div class="account-input">
-												<input type="text" class="sandbox-secret-key"
-													name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]"
-													placeholder="<?php esc_attr_e('Secret Key', 'dfinsell-payment-gateway'); ?>"
-													value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
-						<?php endforeach; ?>
-					<?php endif; ?>
-					<?php wp_nonce_field('dfinsell_accounts_nonce_action', 'dfinsell_accounts_nonce'); ?>
-					<div class="add-account-btn">
-						<button type="button" class="button dfinsell-add-account">
-							<span>+</span> <?php esc_html_e('Add Account', 'dfinsell-payment-gateway'); ?>
-						</button>
-					</div>
-				</div>
-			</td>
-		</tr>
-		<?php return ob_get_clean();
+                                        <div class="add-blog">
+                                            <div class="account-input">
+                                                <label><?php esc_html_e('Sandbox Keys', 'dfinsell-payment-gateway'); ?></label>
+                                                <input type="text" class="sandbox-public-key"
+                                                    name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]"
+                                                    placeholder="<?php esc_attr_e('Public Key', 'dfinsell-payment-gateway'); ?>"
+                                                    value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
+                                            </div>
+                                            <div class="account-input">
+                                                <input type="text" class="sandbox-secret-key"
+                                                    name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]"
+                                                    placeholder="<?php esc_attr_e('Secret Key', 'dfinsell-payment-gateway'); ?>"
+                                                    value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                    <?php wp_nonce_field('dfinsell_accounts_nonce_action', 'dfinsell_accounts_nonce'); ?>
+                    <div class="add-account-btn">
+                        <button type="button" class="button dfinsell-add-account">
+                            <span>+</span> <?php esc_html_e('Add Account', 'dfinsell-payment-gateway'); ?>
+                        </button>
+                    </div>
+                </div>
+            </td>
+        </tr>
+<?php return ob_get_clean();
     }
 
     /**
@@ -506,7 +506,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
                 }
-    
+
                 $last_failed_account = $account;
                 // Switch to next available account
                 $used_accounts[] = $account['title'];
@@ -536,9 +536,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             // **Proceed with Payment**
             $apiPath = '/api/request-payment';
             $url = esc_url($this->sip_protocol . $this->sip_host . $apiPath);
-			
-			$order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
-			$order->save();
+
+            $order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
+            $order->save();
             wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), ['source' => 'dfinsell-payment-gateway']);
 
             $response = wp_remote_post($url, [
@@ -557,8 +557,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
-                }    
-				wc_add_notice(__('Payment error: Unable to process.', 'dfinsell-payment-gateway'), 'error');
+                }
+                wc_add_notice(__('Payment error: Unable to process.', 'dfinsell-payment-gateway'), 'error');
                 return ['result' => 'fail'];
             }
 
@@ -579,7 +579,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
                 // **Update Order Status**
                 $order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
-                
+
 
                 // **Add Order Note (If Not Exists)**
                 // translators: %s represents the account title.
@@ -593,7 +593,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 if (!array_filter($existing_notes, fn($note) => trim(wp_strip_all_tags($note->comment_content)) === trim($new_note))) {
                     $order->add_order_note($new_note, false, true);
                 }
-              
+
 
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
@@ -999,7 +999,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 // Cache key to avoid redundant API requests
                 $cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
                 $transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
-                
+
                 if (!isset($transaction_limit_response_data['error'])) {
                     // At least one high-priority account is available
                     $all_high_priority_accounts_limited = false;
@@ -1115,32 +1115,32 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
     }
 
     private function get_all_accounts()
-	{
-	    $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
+    {
+        $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
 
-	    // Try to unserialize if it's a string
-	    if (is_string($accounts)) {
-	        $unserialized = maybe_unserialize($accounts);
-	        $accounts = is_array($unserialized) ? $unserialized : [];
-	    }
+        // Try to unserialize if it's a string
+        if (is_string($accounts)) {
+            $unserialized = maybe_unserialize($accounts);
+            $accounts = is_array($unserialized) ? $unserialized : [];
+        }
 
-	    $valid_accounts = [];
+        $valid_accounts = [];
 
 		if(!empty($accounts)){
-		    foreach ($accounts as $account) {
-		        if ($this->sandbox) {
-		            if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
-		                $valid_accounts[] = $account;
-		            }
-		        } else {
-		            $valid_accounts[] = $account;
-		        }
-		    }
-		}
+            foreach ($accounts as $account) {
+                if ($this->sandbox) {
+                    if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
+                        $valid_accounts[] = $account;
+                    }
+                } else {
+                    $valid_accounts[] = $account;
+                }
+            }
+        }
 
-	    $this->accounts = $valid_accounts;
-	    return $this->accounts;
-	}
+        $this->accounts = $valid_accounts;
+        return $this->accounts;
+    }
 
 
     function dfinsell_enqueue_admin_styles($hook)
@@ -1217,7 +1217,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             return false;
         }
 
-       	wc_get_logger()->info("Switch email successfully sent to: '{$oldAccount['title']}'", ['source' => 'dfinsell-payment-gateway']);
+        wc_get_logger()->info("Switch email successfully sent to: '{$oldAccount['title']}'", ['source' => 'dfinsell-payment-gateway']);
         return true;
     }
 
@@ -1230,14 +1230,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         // Fetch all accounts ordered by priority
         $settings = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
-		
+
         if (is_string($settings)) {
-			$settings = maybe_unserialize($settings);
-		}
-	
-		if (!is_array($settings)) {
-			return false;
-		}
+            $settings = maybe_unserialize($settings);
+        }
+
+        if (!is_array($settings)) {
+            return false;
+        }
 
         // Filter out used accounts
         $available_accounts = array_filter($settings, function ($account) use ($used_accounts) {
@@ -1259,7 +1259,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // Try to acquire lock
             if ($this->acquire_lock($lock_key)) {
-                $account['lock_key'] = $lock_key; 
+                $account['lock_key'] = $lock_key;
                 // wc_get_logger()->info("Selected account '{$account['title']}' for processing.", ['source' => 'dfinsell-payment-gateway']);
                 return $account;
             }
@@ -1283,25 +1283,25 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
                  VALUES (%s, %s, 'no')
                  ON DUPLICATE KEY UPDATE option_value = %s",
-                 $lock_key,
-                 time() + $lock_timeout,
-                 time() + $lock_timeout
-             )
-         );
-     
-         if ($inserted === false) {
-             wc_get_logger()->error(
-                 "DB Error: " . $wpdb->last_error, 
-                 ['source' => 'dfinsell-payment-gateway']
-             );
-             return false; // Lock acquisition failed
-         }
-     
-         wc_get_logger()->info("Lock acquired for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
-     
-         return true;
-     }
-     
+                $lock_key,
+                time() + $lock_timeout,
+                time() + $lock_timeout
+            )
+        );
+
+        if ($inserted === false) {
+            wc_get_logger()->error(
+                "DB Error: " . $wpdb->last_error,
+                ['source' => 'dfinsell-payment-gateway']
+            );
+            return false; // Lock acquisition failed
+        }
+
+        wc_get_logger()->info("Lock acquired for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
+
+        return true;
+    }
+
 
     /**
      * Release a lock after payment processing is complete.
@@ -1310,13 +1310,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
     {
         global $wpdb;
         $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $lock_key));
-        
-            wc_get_logger()->info("Released lock for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
+
+        wc_get_logger()->info("Released lock for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
     }
 
     function check_for_sql_injection()
     {
-        $sql_injection_patterns = ['/\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b(?![^{}]*})/i', '/(\-\-|\#|\/\*|\*\/)/i', '/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'];
+        $sql_injection_patterns = ['/\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\b(?![^{}]*})/i', '/(\-\-|\#|\/\*|\*\/)/i', '/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'];
 
         $errors = []; // Store multiple errors
 
