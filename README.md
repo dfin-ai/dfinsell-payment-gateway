@@ -134,6 +134,14 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ### Version 1.0.12
 
+- **Blank screen issue:**  
+  Fixed an issue where a blank screen appeared when placing an order from the order history page.
+
+- **Special Character Validation Fix**:
+  Improved validation for special characters in specific checkout fields to prevent incorrect form submissions.
+
+### Version 1.0.11
+
 - **Unique Payment Token Handling:**  
   Implemented unique payment token support for orders to prevent duplicate payment processing and ensure more reliable order submissions.
 
