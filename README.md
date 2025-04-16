@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.2  
-**Stable tag:** 1.0.11  
+**Stable tag:** 1.0.12  
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -131,6 +131,14 @@ For any issues or enhancement requests with this plugin, please contact the DFin
 The official documentation for this plugin is available at: [https://www.dfin.ai/api/docs/wordpress-plugin](https://www.dfin.ai/api/docs/wordpress-plugin)
 
 ## Changelog
+
+### Version 1.0.12
+
+- **Blank screen issue:**  
+  Fixed an issue where a blank screen appeared when placing an order from the order history page.
+
+- **Special Character Validation Fix**:
+  Improved validation for special characters in specific checkout fields to prevent incorrect form submissions.
 
 ### Version 1.0.11
 
