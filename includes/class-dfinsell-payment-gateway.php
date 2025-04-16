@@ -599,7 +599,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     $this->release_lock($lock_key);
                 }
                 return [
-                    'payment_link' => esc_url($response_data['data']['payment_link']),
+                    'redirect' => esc_url($response_data['data']['payment_link']),
                     'result' => 'success',
                 ];
             }
@@ -1315,50 +1315,63 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
     }
 
     function check_for_sql_injection()
-    {
-        $sql_injection_patterns = ['/\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER)\b(?![^{}]*})/i', '/(\-\-|\#|\/\*|\*\/)/i', '/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'];
-
-        $errors = []; // Store multiple errors
-
-        // Get checkout fields dynamically
-        $checkout_fields = WC()
-            ->checkout()
-            ->get_checkout_fields();
-
-        foreach ($_POST as $key => $value) {
-            if (is_string($value)) {
-                foreach ($sql_injection_patterns as $pattern) {
-                    if (preg_match($pattern, $value)) {
-                        // Get the field label dynamically
-                        $field_label = isset($checkout_fields['billing'][$key]['label'])
-                            ? $checkout_fields['billing'][$key]['label']
-                            : (isset($checkout_fields['shipping'][$key]['label'])
-                                ? $checkout_fields['shipping'][$key]['label']
-                                : (isset($checkout_fields['account'][$key]['label'])
-                                    ? $checkout_fields['account'][$key]['label']
-                                    : (isset($checkout_fields['order'][$key]['label'])
-                                        ? $checkout_fields['order'][$key]['label']
-                                        : ucfirst(str_replace('_', ' ', $key)))));
-
-                        // Log error for debugging
-                        wc_get_logger()->info("Potential SQL Injection Attempt - Field: $field_label, Value: $value, IP: " . $_SERVER['REMOTE_ADDR'], ['source' => 'dfinsell-payment-gateway']);
-                        // Add error to array instead of stopping execution
-                        $errors[] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
-
-                        break; // Stop checking other patterns for this field
-                    }
-                }
-            }
-        }
-
-        // Display all collected errors at once
-        if (!empty($errors)) {
-            foreach ($errors as $error) {
-                wc_add_notice($error, 'error');
-            }
-            return false;
-        }
-
-        return true;
-    }
+	{
+		$sql_injection_patterns = [
+			'/\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\b(?![^{}]*})/i',
+			'/(\-\-|\#|\/\*|\*\/)/i',
+			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
+		];
+	
+		$safe_keys = [
+			'order_comments', 'remarks',
+			'billing_address_1', 'billing_address_2',
+			'billing_city', 'billing_state', 'billing_postcode',
+			'shipping_address_1', 'shipping_address_2',
+			'shipping_city', 'shipping_state', 'shipping_postcode'
+		];
+	
+		$errors = [];
+		$checkout_fields = WC()->checkout()->get_checkout_fields();
+	
+		foreach ($_POST as $key => $value) {
+			// Skip WooCommerce attribution/session tracking fields
+			if (strpos($key, 'wc_order_attribution_') === 0) {
+				continue;
+			}
+	
+			// Skip safe fields
+			if (in_array($key, $safe_keys)) {
+				continue;
+			}
+	
+			if (is_string($value)) {
+				foreach ($sql_injection_patterns as $pattern) {
+					if (preg_match($pattern, $value)) {
+						$field_label = isset($checkout_fields['billing'][$key]['label'])
+							? $checkout_fields['billing'][$key]['label']
+							: (isset($checkout_fields['shipping'][$key]['label'])
+								? $checkout_fields['shipping'][$key]['label']
+								: (isset($checkout_fields['account'][$key]['label'])
+									? $checkout_fields['account'][$key]['label']
+									: (isset($checkout_fields['order'][$key]['label'])
+										? $checkout_fields['order'][$key]['label']
+										: ucfirst(str_replace('_', ' ', $key)))));
+	
+						$errors[] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
+	
+						break;
+					}
+				}
+			}
+		}
+	
+		if (!empty($errors)) {
+			foreach ($errors as $error) {
+				wc_add_notice($error, 'error');
+			}
+			return false;
+		}
+	
+		return true;
+	}
 }
