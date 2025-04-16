@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.1.3 (Beta)  
+Stable tag: 1.1.4 (Beta)  
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -26,6 +26,10 @@ This plugin integrates DFin Sell Payment Gateway with WooCommerce, enabling you 
 Visit the DFin website and log in to your account. Navigate to Developer Settings to generate or retrieve API keys.
 
 == Changelog ==
+
+= 1.1.4 (Beta) =
+* Fixed blank screen issue during order placement.
+* Improved special character validation across form fields.
 
 = 1.1.3 (Beta) =
 * Implemented unique payment token handling for orders to prevent duplicate payment processing and enhance order reliability.
@@ -81,6 +85,10 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
+= 1.1.4 (Beta) =
+* Fixed blank screen issue during order placement.
+* Improved special character validation across form fields.
+
 = 1.1.3 (Beta) =
 * Implemented unique payment token handling for orders to prevent duplicate payment processing and enhance order reliability.
 
