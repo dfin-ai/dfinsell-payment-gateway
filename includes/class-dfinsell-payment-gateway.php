@@ -594,6 +594,94 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     $order->add_order_note($new_note, false, true);
                 }
               
+				// =========================== / start code for payment link / ================= 
+				global $wpdb;
+
+				$table_name = $wpdb->prefix . 'order_payment_link';
+				$order_id   = $order->get_id();
+				$uuid    = sanitize_text_field($response_data['data']['pay_uuid']);
+				error_log("this is uuid '$uuid' ");
+				// ========================== Check if table exists, create if not ==========================
+				if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+					require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+					$charset_collate = $wpdb->get_charset_collate();
+
+					$sql = "CREATE TABLE $table_name (
+						id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+						order_id BIGINT(20) UNSIGNED NOT NULL,
+						uuid TEXT NOT NULL,
+						created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+						updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+						PRIMARY KEY (id),
+						INDEX (order_id)
+					) ENGINE=InnoDB $charset_collate;";
+
+					dbDelta($sql);
+
+					error_log("DFinSell: Table '$table_name' was not found — created it successfully.");
+				}
+				error_log("DFinSell: Checking existing links for order ID $order_id");
+
+
+
+				try {
+					// Check if existing payment links exist
+					$existing_uuid = $wpdb->get_results($wpdb->prepare(
+						"SELECT * FROM $table_name WHERE order_id = %d ORDER BY id DESC",
+						$order_id
+					));
+
+					if (!empty($existing_uuid)) {
+						$old_uuid = $existing_uuid[0]->uuid;
+
+						// Call cancel API before inserting new
+						$apiPath = '/api/cancel-order-link';
+						$url = SIP_PROTOCOL . SIP_HOST . $apiPath;
+						$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
+
+						$response = wp_remote_post($cleanUrl, array(
+							'method'    => 'POST',
+							'timeout'   => 30,
+							'body'      => json_encode(array(
+								'order_id'       => $order_id,
+								'order_uuid'  => $old_uuid,
+								'status'         => 'canceled'
+							)),
+							'headers'   => array(
+								'Content-Type'  => 'application/json',
+							),
+							'sslverify' => true,
+						));
+
+						if (is_wp_error($response)) {
+							error_log(' Cancel API Error: ' . $response->get_error_message());
+						} else {
+							error_log(' Cancel API Response: ' . print_r(wp_remote_retrieve_body($response), true));
+						}
+					}
+
+					// $last_order_time = isset($existing_links[0]) ? (int)$existing_links[0]->order_time : 0;
+					// $new_order_time = $last_order_time + 1;
+
+					$inserted = $wpdb->insert(
+						$table_name,
+						[
+							'order_id' => $order_id,
+							'uuid' => $uuid,
+						],
+						['%d', '%s']
+					);
+
+					if ($inserted !== false) {
+						error_log(" DFinSell: Inserted new payment link for order ID $order_id ");
+					} else {
+						error_log(" DFinSell: Failed to insert uuid — WPDB error: " . $wpdb->last_error);
+					}
+				} catch (Exception $e) {
+					error_log(" DFinSell: Exception during payment link handling: " . $e->getMessage());
+				}
+				// =====================/ end code for payment link /
 
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
