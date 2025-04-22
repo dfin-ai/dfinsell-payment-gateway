@@ -178,7 +178,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                         }
                     }
                 }
-
+				// Add the 'status' field, defaulting to 'active' for new accounts
+				$status = isset($account['status']) ? sanitize_text_field($account['status']) : 'active';
                 // Store valid account
                 $valid_accounts[$normalized_index] = [
                     'title' => $account_title,
@@ -188,6 +189,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     'sandbox_public_key' => $sandbox_public_key,
                     'sandbox_secret_key' => $sandbox_secret_key,
                     'has_sandbox' => $has_sandbox ? 'on' : 'off',
+					'status' => $status, // New accounts will have 'status' set to 'active'
                 ];
                 $normalized_index++;
             }
@@ -319,6 +321,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     <?php else: ?>
                         <?php foreach (array_values($option_value) as $index => $account): ?>
                             <div class="dfinsell-account" data-index="<?php echo esc_attr($index); ?>">
+							<input type="hidden" name="accounts[<?php echo esc_attr($index); ?>][status]"
+							value="<?php echo esc_attr($account['status'] ?? ''); ?>">
                                 <div class="title-blog">
                                     <h4>
                                         <span class="account-name-display">
@@ -1128,13 +1132,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		if(!empty($accounts)){
             foreach ($accounts as $account) {
+			if (isset($account['status']) && $account['status'] === 'active') {
                 if ($this->sandbox) {
                     if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
                         $valid_accounts[] = $account;
                     }
                 } else {
-                    $valid_accounts[] = $account;
+                    if (!empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
+                        $valid_accounts[] = $account;
+                    }
                 }
+			}
             }
         }
 
@@ -1239,10 +1247,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             return false;
         }
 
-        // Filter out used accounts
-        $available_accounts = array_filter($settings, function ($account) use ($used_accounts) {
-            return !in_array($account['title'], $used_accounts);
-        });
+      // Filter out used accounts and check if account is active
+		$available_accounts = array_filter($settings, function ($account) use ($used_accounts) {
+			return !in_array($account['title'], $used_accounts) && isset($account['status']) && $account['status'] === 'active';
+		});
 
         if (empty($available_accounts)) {
             return false;
