@@ -295,55 +295,43 @@ jQuery(document).ready(function($) {
             }
         });
     });
+jQuery(document).ready(function($) {
+    // Function to update all account statuses
+    function updateAccountStatuses() {
+        var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked');
 
-    document.addEventListener('DOMContentLoaded', function () {
-    // Attach event listeners to all sandbox checkboxes
-    document.querySelectorAll('.sandbox-checkbox').forEach(function (checkbox) {
-        checkbox.addEventListener('change', function () {
-            const accountContainer = this.closest('.dfinsell-account');
-            const liveStatus = accountContainer.querySelector('.live-status');
-            const sandboxStatus = accountContainer.querySelector('.sandbox-status');
-            const statusLabel = accountContainer.querySelector('.status-label');
+        $('.dfinsell-account').each(function() {
+            var $account = $(this);
+            var liveStatus = $account.find('input[name$="[live_status]"]').val();
+            var sandboxStatus = $account.find('input[name$="[sandbox_status]"]').val();
 
-            if (this.checked) {
-                // Sandbox enabled
-                if (sandboxStatus && statusLabel) {
-                    statusLabel.className = 'status-label sandbox-status ' + sandboxStatus.textContent.trim().toLowerCase().replace('status: ', '');
-                    statusLabel.textContent = sandboxStatus.textContent;
-                }
+            var $statusLabel = $account.find('.account-status-label');
+
+            if (sandboxEnabled) {
+                // Update class and text for sandbox mode
+                $statusLabel
+                    .removeClass('live-status invalid active inactive')
+                    .addClass('sandbox-status ' + sandboxStatus.toLowerCase())
+                    .text('Status: ' + sandboxStatus);
             } else {
-                // Live enabled
-                if (liveStatus && statusLabel) {
-                    statusLabel.className = 'status-label live-status ' + liveStatus.textContent.trim().toLowerCase().replace('status: ', '');
-                    statusLabel.textContent = liveStatus.textContent;
-                }
+                // Update class and text for live mode
+                $statusLabel
+                    .removeClass('sandbox-status invalid active inactive')
+                    .addClass('live-status ' + liveStatus.toLowerCase())
+                    .text('Status: ' + liveStatus);
             }
         });
-    });
-});
-
-$(document).on("change", 'input[name="woocommerce_dfinsell_sandbox"]', function () {
-
-    alert("Sdds");
-    // Get the closest .dfinsell-account container for the current checkbox
-    var accountContainer = $(this).closest(".dfinsell-account");
-
-    // Get the hidden fields for live_status and sandbox_status
-    var liveStatus = accountContainer.find('input[name^="accounts"][name$="[live_status]"]').val();
-    var sandboxStatus = accountContainer.find('input[name^="accounts"][name$="[sandbox_status]"]').val();
-    
-    // Get the status label container for live and sandbox statuses
-    var statusLabel = accountContainer.find(".status-label");
-
-    // Check if the checkbox is checked (sandbox mode enabled)
-    if ($(this).is(":checked")) {
-        // If sandbox is checked, show the sandbox status
-        statusLabel.text("Status: " + sandboxStatus).removeClass('live-status').addClass('sandbox-status');
-    } else {
-        // If sandbox is unchecked, show the live status
-        statusLabel.text("Status: " + liveStatus).removeClass('sandbox-status').addClass('live-status');
     }
+
+    // When checkbox is changed, update statuses
+    $('#woocommerce_dfinsell_sandbox').on('change', function() {
+        updateAccountStatuses();
+    });
+
+    // Optional: Update once on page load also (in case something is missed)
+   // updateAccountStatuses();
 });
+
 
 });
 

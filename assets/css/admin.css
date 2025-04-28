@@ -148,7 +148,7 @@
     margin-top: 5px;
 }
 
-.status-label {
+.status-label ,.account-status-label{
     display: inline-block;
     padding: 3px 8px;
     border-radius: 4px;
@@ -158,10 +158,10 @@
     color: #fff;
 }
 
-.status-label.active {
+.status-label.active,.account-status-label {
     background-color: #28a745; /* Green */
 }
 
-.status-label.inactive ,.status-label.invalid{
+.status-label.inactive ,.status-label.invalid,.account-status-label.inactive ,.account-status-label.invalid{
     background-color: #dc3545; /* Red */
 }

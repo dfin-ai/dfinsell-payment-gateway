@@ -316,7 +316,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         
         ob_start();
 
-        print_r($data);
         
 ?>
         <tr valign="top">
@@ -356,8 +355,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                                    
                                
                                     <div class="action-button">
-                                    <div class="account-status" style="float: right;">
-                                    <span class="status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
+                                    <div class="account-status-block" style="float: right;">
+                                    <span class="account-status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
                                         <?php
                                             echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? ''));
                                         ?>
