@@ -44,6 +44,9 @@ DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
 add_action('woocommerce_cancel_unpaid_order', 'cancel_unpaid_order_action');
 
 function cancel_unpaid_order_action($order_id) {
+	wc_get_logger()->info("check for cancel order", ['source' => 'dfinsell-payment-gateway']);
+
+                  
 	global $wpdb;
     if (!$order_id) {
         error_log('Error: Order ID is missing.');
