@@ -129,3 +129,39 @@
 	justify-content: space-between;
 	word-break: break-word;
 }
+
+#dfinsell-sync-accounts{
+	border-radius: 5px;
+    background: #0A0B21;
+    color: #F5F5F5;
+    font-size: 15px !important;
+    margin: 20px 0;
+    max-width: 204px !important;
+    width: 100%;
+    padding: 11px !important;
+    border: 1px solid #0A0B21;
+    height: 42px !important;
+    line-height: 19px !important;
+}
+
+.account-status {
+    margin-top: 5px;
+}
+
+.status-label {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+    margin-right: 5px;
+    color: #fff;
+}
+
+.status-label.active {
+    background-color: #28a745; /* Green */
+}
+
+.status-label.inactive ,.status-label.invalid{
+    background-color: #dc3545; /* Red */
+}

@@ -246,3 +246,105 @@ jQuery(document).ready(function ($) {
     });
     
 });
+
+jQuery(document).ready(function($) {
+    $('#dfinsell-sync-accounts').on('click', function(e) {
+        e.preventDefault();
+        
+        var $button = $(this);
+        var $status = $('#dfinsell-sync-status');
+        var originalButtonText = $button.text();
+        
+        // Set loading state
+        $button.prop('disabled', true);
+        $button.html('<span class="spinner is-active" style="float: none; margin: 0;"></span> Syncing...');
+        $status.removeClass('error success').text('Syncing accounts...').show();
+        
+        $.ajax({
+            url: dfinsell_ajax_object.ajax_url,
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'dfinsell_manual_sync',
+                nonce: dfinsell_ajax_object.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    $status.addClass('success').text(response.data.message || 'Sync completed successfully!');
+                    
+                    // Refresh the page after 2 seconds to show updated statuses
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    $status.addClass('error').text(response.data.message || 'Sync failed. Please try again.');
+                }
+            },
+            error: function(xhr, status, error) {
+                var errorMessage = 'AJAX Error: ';
+                if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                    errorMessage += xhr.responseJSON.data.message;
+                } else {
+                    errorMessage += error;
+                }
+                $status.addClass('error').text(errorMessage);
+            },
+            complete: function() {
+                $button.prop('disabled', false);
+                $button.text(originalButtonText);
+            }
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function () {
+    // Attach event listeners to all sandbox checkboxes
+    document.querySelectorAll('.sandbox-checkbox').forEach(function (checkbox) {
+        checkbox.addEventListener('change', function () {
+            const accountContainer = this.closest('.dfinsell-account');
+            const liveStatus = accountContainer.querySelector('.live-status');
+            const sandboxStatus = accountContainer.querySelector('.sandbox-status');
+            const statusLabel = accountContainer.querySelector('.status-label');
+
+            if (this.checked) {
+                // Sandbox enabled
+                if (sandboxStatus && statusLabel) {
+                    statusLabel.className = 'status-label sandbox-status ' + sandboxStatus.textContent.trim().toLowerCase().replace('status: ', '');
+                    statusLabel.textContent = sandboxStatus.textContent;
+                }
+            } else {
+                // Live enabled
+                if (liveStatus && statusLabel) {
+                    statusLabel.className = 'status-label live-status ' + liveStatus.textContent.trim().toLowerCase().replace('status: ', '');
+                    statusLabel.textContent = liveStatus.textContent;
+                }
+            }
+        });
+    });
+});
+
+$(document).on("change", 'input[name="woocommerce_dfinsell_sandbox"]', function () {
+
+    alert("Sdds");
+    // Get the closest .dfinsell-account container for the current checkbox
+    var accountContainer = $(this).closest(".dfinsell-account");
+
+    // Get the hidden fields for live_status and sandbox_status
+    var liveStatus = accountContainer.find('input[name^="accounts"][name$="[live_status]"]').val();
+    var sandboxStatus = accountContainer.find('input[name^="accounts"][name$="[sandbox_status]"]').val();
+    
+    // Get the status label container for live and sandbox statuses
+    var statusLabel = accountContainer.find(".status-label");
+
+    // Check if the checkbox is checked (sandbox mode enabled)
+    if ($(this).is(":checked")) {
+        // If sandbox is checked, show the sandbox status
+        statusLabel.text("Status: " + sandboxStatus).removeClass('live-status').addClass('sandbox-status');
+    } else {
+        // If sandbox is unchecked, show the live status
+        statusLabel.text("Status: " + liveStatus).removeClass('sandbox-status').addClass('live-status');
+    }
+});
+
+});
+
+

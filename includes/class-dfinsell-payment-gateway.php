@@ -179,7 +179,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     }
                 }
 				// Add the 'status' field, defaulting to 'active' for new accounts
-				$status = isset($account['status']) ? sanitize_text_field($account['status']) : 'active';
+				$sandbox_status = isset($account['sandbox_status']) ? sanitize_text_field($account['sandbox_status']) : 'active';
+                $live_status = isset($account['live_status']) ? sanitize_text_field($account['live_status']) : 'active';
                 // Store valid account
                 $valid_accounts[$normalized_index] = [
                     'title' => $account_title,
@@ -189,7 +190,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     'sandbox_public_key' => $sandbox_public_key,
                     'sandbox_secret_key' => $sandbox_secret_key,
                     'has_sandbox' => $has_sandbox ? 'on' : 'off',
-					'status' => $status, // New accounts will have 'status' set to 'active'
+					'sandbox_status' => $sandbox_status,
+                    'live_status' => $live_status,
                 ];
                 $normalized_index++;
             }
@@ -304,33 +306,63 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
     public function generate_accounts_repeater_html($key, $data)
     {
+        
         $option_value = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
         $option_value = maybe_unserialize($option_value);
         $active_account = get_option('dfinsell_active_account', 0); // Store active account ID
-
+        $global_settings = get_option('woocommerce_dfinsell_settings', []);
+        $global_settings = maybe_unserialize($global_settings);
+        $sandbox_enabled = !empty($global_settings['sandbox']) && $global_settings['sandbox'] === 'yes';
+        
         ob_start();
+
+        print_r($data);
+        
 ?>
         <tr valign="top">
             <th scope="row" class="titledesc">
                 <label><?php echo esc_html($data['title']); ?></label>
             </th>
             <td class="forminp">
+            <div class="sync-accounts-container">
+            <button type="button" class="dfinsell-sync-accounts" id="dfinsell-sync-accounts">
+                <?php esc_html_e( 'Sync Accounts', 'dfinsell-payment-gateway' ); ?>
+            </button>
+             <span id="dfinsell-sync-status" style="margin-left: 10px;"></span>
+            </div>
                 <div class="dfinsell-accounts-container">
                     <?php if (empty($option_value)): ?>
 						<div class="empty-account"><?php esc_html_e('No accounts available. Please add one to continue.', 'dfinsell-payment-gateway'); ?></div>
                     <?php else: ?>
                         <?php foreach (array_values($option_value) as $index => $account): ?>
+                            <?php
+                                $live_status = (!empty($account['live_status'])) ? $account['live_status'] : '';
+                                $sandbox_status = (!empty($account['sandbox_status'])) ? $account['sandbox_status'] : '';
+                            ?>
                             <div class="dfinsell-account" data-index="<?php echo esc_attr($index); ?>">
-							<input type="hidden" name="accounts[<?php echo esc_attr($index); ?>][status]"
-							value="<?php echo esc_attr($account['status'] ?? ''); ?>">
+							<input type="hidden" name="accounts[<?php echo esc_attr($index); ?>][live_status]"
+							value="<?php echo esc_attr($account['live_status'] ?? ''); ?>">
+                            <input type="hidden" name="accounts[<?php echo esc_attr($index); ?>][sandbox_status]"
+							value="<?php echo esc_attr($account['sandbox_status'] ?? ''); ?>">
                                 <div class="title-blog">
+                                    
                                     <h4>
+                                        
                                         <span class="account-name-display">
                                             <?php echo !empty($account['title']) ? esc_html($account['title']) : esc_html__('Untitled Account', 'dfinsell-payment-gateway'); ?>
                                         </span>
                                         &nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
                                     </h4>
+                                   
+                               
                                     <div class="action-button">
+                                    <div class="account-status" style="float: right;">
+                                    <span class="status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
+                                        <?php
+                                            echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? ''));
+                                        ?>
+                                    </span>
+                                </div>
                                         <button type="button" class="delete-account-btn">
                                             <i class="fa fa-trash" aria-hidden="true"></i>
                                         </button>
@@ -356,7 +388,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                                     </div>
 
                                     <div class="add-blog">
-                                        <div class="account-input">
+                                    <div class="account-status" style=" float: right;">
+                                <span class="status-label live-status <?php echo strtolower($live_status); ?>">
+                                    <?php echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($live_status); ?>
+                                </span>
+                            
+                            </div>
+                                             <div class="account-input">
                                             <label><?php esc_html_e('Live Keys', 'dfinsell-payment-gateway'); ?></label>
                                             <input type="text" class="live-public-key"
                                                 name="accounts[<?php echo esc_attr($index); ?>][live_public_key]"
@@ -380,6 +418,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 									<div class="sandbox-key" style="<?php echo empty($account['sandbox_public_key']) ? 'display: none;' : ''; ?>">
                                         <div class="add-blog">
+                                        <div class="account-status" style=" float: right;">
+   
+                                            <span class="status-label sandbox-status <?php echo strtolower($sandbox_status); ?>">
+                                                <?php echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_status); ?>
+                                            </span>
+                                        </div>
                                             <div class="account-input">
                                                 <label><?php esc_html_e('Sandbox Keys', 'dfinsell-payment-gateway'); ?></label>
                                                 <input type="text" class="sandbox-public-key"
@@ -927,16 +971,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         // Register and enqueue your script
         wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), ['jquery'], filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
-        wp_enqueue_style(
-            'dfinsell-admin-style',
-            plugins_url('assets/css/admin-style.css', __DIR__), // This ensures correct path
-            [],
-            '1.0.0'
-        );
+       
 
         // Localize the script to pass parameters
         wp_localize_script('dfinsell-admin-script', 'params', [
             'PAYMENT_CODE' => $this->id,
+        ]);
+        wp_localize_script('dfinsell-admin-script', 'dfinsell_ajax_object', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce'    => wp_create_nonce('dfinsell_sync_nonce'),
         ]);
     }
 
@@ -1128,28 +1171,34 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             $accounts = is_array($unserialized) ? $unserialized : [];
         }
 
-        $valid_accounts = [];
 
-		if(!empty($accounts)){
+        $valid_accounts = [];
+    
+        if (!empty($accounts)) {
             foreach ($accounts as $account) {
-			if (isset($account['status']) && $account['status'] === 'active') {
+                // If in sandbox mode, check sandbox status and keys
                 if ($this->sandbox) {
-                    if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
-                        $valid_accounts[] = $account;
+                    if (isset($account['sandbox_status']) && $account['sandbox_status'] === 'active') {
+                        if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
+                            $valid_accounts[] = $account;
+                        }
                     }
-                } else {
-                    if (!empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
-                        $valid_accounts[] = $account;
+                } 
+                // If in live mode, check live status and keys
+                else {
+                    if (isset($account['live_status']) && $account['live_status'] === 'active') {
+                        if (!empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
+                            $valid_accounts[] = $account;
+                        }
                     }
                 }
-			}
             }
-        }
+        }    
 
         $this->accounts = $valid_accounts;
         return $this->accounts;
     }
-
+   
 
     function dfinsell_enqueue_admin_styles($hook)
     {
@@ -1246,17 +1295,24 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         if (!is_array($settings)) {
             return false;
         }
-
-      // Filter out used accounts and check if account is active
-		$available_accounts = array_filter($settings, function ($account) use ($used_accounts) {
-			return !in_array($account['title'], $used_accounts) && isset($account['status']) && $account['status'] === 'active';
-		});
-
+    
+        $mode = $this->sandbox ? 'sandbox' : 'live';
+        $status_key = $mode . '_status';
+        $public_key = $mode . '_public_key';
+        $secret_key = $mode . '_secret_key';
+    
+        // Filter out used accounts and check correct mode status & keys
+        $available_accounts = array_filter($settings, function ($account) use ($used_accounts, $status_key, $public_key, $secret_key) {
+            return !in_array($account['title'], $used_accounts)
+                && isset($account[$status_key]) && $account[$status_key] === 'active'
+                && !empty($account[$public_key]) && !empty($account[$secret_key]);
+        });
+    
         if (empty($available_accounts)) {
             return false;
         }
-
-        // Sort by priority (lower value = higher priority)
+    
+        // Sort by priority (lower number = higher priority)
         usort($available_accounts, function ($a, $b) {
             return $a['priority'] <=> $b['priority'];
         });
@@ -1268,7 +1324,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             // Try to acquire lock
             if ($this->acquire_lock($lock_key)) {
                 $account['lock_key'] = $lock_key;
-                // wc_get_logger()->info("Selected account '{$account['title']}' for processing.", ['source' => 'dfinsell-payment-gateway']);
                 return $account;
             }
         }

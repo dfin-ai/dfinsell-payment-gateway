@@ -13,7 +13,9 @@ function dfinsell_migrate_old_settings() {
     $live_secret_key = $old_settings['secret_key'] ?? '';
     $sandbox_public_key = $old_settings['sandbox_public_key'] ?? '';
     $sandbox_secret_key = $old_settings['sandbox_secret_key'] ?? '';
-
+    $live_status = isset($old_settings['status']) ? $old_settings['status'] : 'active';
+    $sandbox_status = isset($old_settings['status']) ? $old_settings['status'] : 'active';
+  
     // ✅ If no keys exist, do not migrate
     if (empty($live_public_key) && empty($live_secret_key) && empty($sandbox_public_key) && empty($sandbox_secret_key)) {
         return; // Skip migration if all keys are missing
@@ -28,7 +30,9 @@ function dfinsell_migrate_old_settings() {
             'live_secret_key' => $live_secret_key,
             'sandbox_public_key' => $sandbox_public_key,
             'sandbox_secret_key' => $sandbox_secret_key,
-            'has_sandbox' => $sandbox_enabled ? 'on' : 'off'
+            'has_sandbox' => $sandbox_enabled ? 'on' : 'off',
+            'live_status' =>  $live_status,
+            'sandbox_status' =>  $sandbox_status,
         ]
     ];
 
