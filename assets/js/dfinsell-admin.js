@@ -304,7 +304,9 @@ jQuery(document).ready(function($) {
             var $account = $(this);
             var liveStatus = $account.find('input[name$="[live_status]"]').val();
             var sandboxStatus = $account.find('input[name$="[sandbox_status]"]').val();
-
+            if (!sandboxStatus) {
+                sandboxStatus = 'unknown';
+            }
             var $statusLabel = $account.find('.account-status-label');
 
             if (sandboxEnabled) {
@@ -312,13 +314,13 @@ jQuery(document).ready(function($) {
                 $statusLabel
                     .removeClass('live-status invalid active inactive')
                     .addClass('sandbox-status ' + sandboxStatus.toLowerCase())
-                    .text('Status: ' + sandboxStatus);
+                    .text('Sandbox account status: ' + sandboxStatus);
             } else {
                 // Update class and text for live mode
                 $statusLabel
                     .removeClass('sandbox-status invalid active inactive')
                     .addClass('live-status ' + liveStatus.toLowerCase())
-                    .text('Status: ' + liveStatus);
+                    .text('live account status: ' + liveStatus);
             }
         });
     }

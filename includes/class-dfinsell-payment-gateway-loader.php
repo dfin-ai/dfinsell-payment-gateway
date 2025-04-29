@@ -371,20 +371,24 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 
 public function dfinsell_add_cron_interval($schedules) {
-	$schedules['every_minute'] = array(
-		'interval' => 60,
-		'display'  => __('Every Minute')
-	);
-	return $schedules;
+    $schedules['every_two_hours'] = array(
+        'interval' => 2 * 60 * 60, // 2 hours in seconds = 7200
+        'display'  => __('Every Two Hours')
+    );
+    return $schedules;
 }
 
 function activate_cron_job() {
-	
-	wc_get_logger()->info("activate cron job function", ['source' => 'dfinsell-payment-gateway']);
-	
-    if (!wp_next_scheduled('dfinsell_cron_event')) {
-        wp_schedule_event(time(), 'every_minute', 'dfinsell_cron_event');
+    wc_get_logger()->info("activate cron job function", ['source' => 'dfinsell-payment-gateway']);
+
+    // Clear existing scheduled event if it exists
+    $timestamp = wp_next_scheduled('dfinsell_cron_event');
+    if ($timestamp) {
+        wp_unschedule_event($timestamp, 'dfinsell_cron_event');
     }
+
+    // Schedule with new interval
+    wp_schedule_event(time(), 'every_two_hours', 'dfinsell_cron_event');
 }
 
  function deactivate_cron_job()

@@ -162,6 +162,6 @@
     background-color: #28a745; /* Green */
 }
 
-.status-label.inactive ,.status-label.invalid,.account-status-label.inactive ,.account-status-label.invalid{
+.status-label.inactive ,.status-label.invalid,.account-status-label.inactive ,.account-status-label.invalid ,.account-status-label.unknown{
     background-color: #dc3545; /* Red */
 }

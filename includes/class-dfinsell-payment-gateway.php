@@ -190,7 +190,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                     'sandbox_public_key' => $sandbox_public_key,
                     'sandbox_secret_key' => $sandbox_secret_key,
                     'has_sandbox' => $has_sandbox ? 'on' : 'off',
-					'sandbox_status' => $sandbox_status,
+					'sandbox_status' => $has_sandbox ? $sandbox_status :'',
                     'live_status' => $live_status,
                 ];
                 $normalized_index++;
@@ -206,6 +206,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         if (empty($errors)) {
             update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
             $this->admin_notices->dfinsell_add_notice('settings_success', 'notice notice-success', __('Settings saved successfully.', 'dfinsell-payment-gateway'));
+            if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
+                $loader = DFINSELL_PAYMENT_GATEWAY_Loader::get_instance(); // Use the static method
+                if (method_exists($loader, 'handle_cron_event')) {
+                    $loader->handle_cron_event(); // Perform sync immediately
+                }
+            }
         } else {
             foreach ($errors as $error) {
                 $this->admin_notices->dfinsell_add_notice('settings_error', 'notice notice-error', $error);
@@ -336,7 +342,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                         <?php foreach (array_values($option_value) as $index => $account): ?>
                             <?php
                                 $live_status = (!empty($account['live_status'])) ? $account['live_status'] : '';
-                                $sandbox_status = (!empty($account['sandbox_status'])) ? $account['sandbox_status'] : '';
+                                $sandbox_status = (!empty($account['sandbox_status'])) ? $account['sandbox_status'] : 'unknown';
                             ?>
                             <div class="dfinsell-account" data-index="<?php echo esc_attr($index); ?>">
 							<input type="hidden" name="accounts[<?php echo esc_attr($index); ?>][live_status]"
@@ -358,8 +364,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                                     <div class="account-status-block" style="float: right;">
                                     <span class="account-status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
                                         <?php
-                                            echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? ''));
-                                        ?>
+                                       if ($sandbox_enabled) {
+                                        echo esc_html__('Sandbox Account Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_status);
+                                    } else {
+                                        echo esc_html__('Live Account Status: ', 'dfinsell-payment-gateway') . esc_html($live_status);
+                                    }?>
                                     </span>
                                 </div>
                                         <button type="button" class="delete-account-btn">
