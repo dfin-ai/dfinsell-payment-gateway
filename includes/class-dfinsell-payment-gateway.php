@@ -387,12 +387,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                                     </div>
 
                                     <div class="add-blog">
-                                    <div class="account-status" style=" float: right;">
-                                <span class="status-label live-status <?php echo strtolower($live_status); ?>">
-                                    <?php echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($live_status); ?>
-                                </span>
-                            
-                            </div>
+                                  
                                              <div class="account-input">
                                             <label><?php esc_html_e('Live Keys', 'dfinsell-payment-gateway'); ?></label>
                                             <input type="text" class="live-public-key"
@@ -417,12 +412,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 									<div class="sandbox-key" style="<?php echo empty($account['sandbox_public_key']) ? 'display: none;' : ''; ?>">
                                         <div class="add-blog">
-                                        <div class="account-status" style=" float: right;">
-   
-                                            <span class="status-label sandbox-status <?php echo strtolower($sandbox_status); ?>">
-                                                <?php echo esc_html__('Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_status); ?>
-                                            </span>
-                                        </div>
+                                        
                                             <div class="account-input">
                                                 <label><?php esc_html_e('Sandbox Keys', 'dfinsell-payment-gateway'); ?></label>
                                                 <input type="text" class="sandbox-public-key"
