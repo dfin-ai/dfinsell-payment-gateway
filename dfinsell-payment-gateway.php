@@ -80,7 +80,7 @@ function cancel_unpaid_order_action($order_id) {
 			//$order->reduce_order_stock(); // Release the stock
 			wc_reduce_stock_levels($order_id);
 		}
-		// ========================== start code for payment link ==========================
+		// ========================== start code for expiring payment link ==========================
 		//  Get latest payment URL for this order from custom table
 		$table_name = $wpdb->prefix . 'order_payment_link';
 
@@ -93,9 +93,11 @@ function cancel_unpaid_order_action($order_id) {
 			error_log("DFinSell: No uuid found for order ID $order_id.");
 			return;
 		}
-		$uuid = $latest_uuid->uuid;
+		$encoded_uuid_from_db = $latest_uuid->uuid ;
 
-		error_log("DFinSell: Found latest uuid for order $order_id: $uuid");
+		
+
+		error_log("DFinSell: Found latest encoded uuid for order $order_id: $encoded_uuid_from_db");
 
 		// Call cancel API before inserting new
 		$apiPath = '/api/cancel-order-link';
@@ -110,7 +112,7 @@ function cancel_unpaid_order_action($order_id) {
 			'timeout'   => 30,
 			'body'      => json_encode(array(
 				'order_id'       => $order_id,
-				'order_uuid'  => $uuid,
+				'order_uuid'  => $encoded_uuid_from_db,
 				'status'         => 'canceled'
 			)),
 			'headers'   => array(
@@ -126,7 +128,7 @@ function cancel_unpaid_order_action($order_id) {
 		} else {
 			error_log(' Cancel API Response: ' . print_r(wp_remote_retrieve_body($response), true));;
 		}
-		// ==============/ end code for payment login / =============================
+		// ==============/ end code for payment link expirty / =============================
 
 	}
 }

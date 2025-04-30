@@ -593,14 +593,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 if (!array_filter($existing_notes, fn($note) => trim(wp_strip_all_tags($note->comment_content)) === trim($new_note))) {
                     $order->add_order_note($new_note, false, true);
                 }
-              
 				// =========================== / start code for payment link / ================= 
 				global $wpdb;
 
 				$table_name = $wpdb->prefix . 'order_payment_link';
 				$order_id   = $order->get_id();
-				$uuid    = sanitize_text_field($response_data['data']['pay_uuid']);
+				$uuid = sanitize_text_field($response_data['data']['pay_id']) ;
 				error_log("this is uuid '$uuid' ");
+				$json_data = json_encode($response_data);
+				error_log("this is json_data '$json_data' ");
+				
 				// ========================== Check if table exists, create if not ==========================
 				if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
 					require_once ABSPATH . 'wp-admin/includes/upgrade.php';
@@ -634,6 +636,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 					if (!empty($existing_uuid)) {
 						$old_uuid = $existing_uuid[0]->uuid;
+						$encodeed_uuid_from_db = $old_uuid;
 
 						// Call cancel API before inserting new
 						$apiPath = '/api/cancel-order-link';
@@ -645,7 +648,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 							'timeout'   => 30,
 							'body'      => json_encode(array(
 								'order_id'       => $order_id,
-								'order_uuid'  => $old_uuid,
+								'order_uuid'  => $encodeed_uuid_from_db,
 								'status'         => 'canceled'
 							)),
 							'headers'   => array(
@@ -682,6 +685,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					error_log(" DFinSell: Exception during payment link handling: " . $e->getMessage());
 				}
 				// =====================/ end code for payment link /
+              
 
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
