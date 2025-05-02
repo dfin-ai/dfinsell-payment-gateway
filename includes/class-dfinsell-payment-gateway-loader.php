@@ -403,8 +403,15 @@ public function handle_cron_event()
     wc_get_logger()->info("Cron started", ['source' => 'dfinsell-payment-gateway']);
 
     $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts');
+	if (is_string($accounts)) {
+		$unserialized = maybe_unserialize($accounts);
+		$accounts = is_array($unserialized) ? $unserialized : [];
+	}
+	wc_get_logger()->info('DFin Sell all acounts foy sync: ' . wp_json_encode($accounts), ['source' => 'dfinsell-payment-gateway']);
+
+       
     if (!$accounts || !is_array($accounts)) {
-        wc_get_logger()->info("No accounts found or invalid format", ['source' => 'dfinsell-payment-gateway']);
+        wc_get_logger()->info("No accounts found or invalid format:".$accounts , ['source' => 'dfinsell-payment-gateway']);
         return;
     }
 

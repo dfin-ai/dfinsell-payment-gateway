@@ -1,44 +1,80 @@
 <?php
 
 function dfinsell_migrate_old_settings() {
-    $old_settings = get_option('woocommerce_dfinsell_settings');
+    // First, check if beta option exists
+    $beta_accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts');
 
-    if (!$old_settings || !is_array($old_settings)) {
-        return; // No old settings found, skip migration.
+    if ($beta_accounts) {
+        $beta_accounts = maybe_unserialize($beta_accounts);
+
+        if (is_array($beta_accounts) && !empty($beta_accounts)) {
+            // Enhance each account to ensure all required keys exist
+            $enhanced_accounts = array_map(function ($account) {
+                $account['live_status'] = $account['live_status'] ?? 'active';
+                $account['sandbox_status'] = $account['sandbox_status'] ?? 'active';
+                $account['has_sandbox'] = (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) ? 'on' : 'off';
+                $account['priority'] = $account['priority'] ?? 1;
+                $account['title'] = $account['title'] ?? 'Default Account';
+                return $account;
+            }, $beta_accounts);
+
+            // Save updated accounts back
+            update_option('woocommerce_dfinsell_payment_gateway_accounts', serialize($enhanced_accounts));
+            dfinsell_trigger_sync();
+            return; // Migration complete for beta
+        }
     }
 
-    // Extract keys from old settings
-    $sandbox_enabled = isset($old_settings['sandbox']) && $old_settings['sandbox'] === 'yes';
+    // Fallback to legacy `woocommerce_dfinsell_settings`
+    $old_settings = get_option('woocommerce_dfinsell_settings');
+    $old_settings = maybe_unserialize($old_settings);
+    if (!$old_settings || !is_array($old_settings)) {
+        return; // Nothing to migrate
+    }
+
+    // Extract old settings
     $live_public_key = $old_settings['public_key'] ?? '';
     $live_secret_key = $old_settings['secret_key'] ?? '';
     $sandbox_public_key = $old_settings['sandbox_public_key'] ?? '';
     $sandbox_secret_key = $old_settings['sandbox_secret_key'] ?? '';
-    $live_status = isset($old_settings['status']) ? $old_settings['status'] : 'active';
-    $sandbox_status = isset($old_settings['status']) ? $old_settings['status'] : 'active';
-  
-    // ✅ If no keys exist, do not migrate
+    $sandbox_enabled = isset($old_settings['sandbox']) && $old_settings['sandbox'] === 'yes';
+    
+    $has_sandbox = (!empty($sandbox_public_key) && !empty($sandbox_secret_key)) ? 'on' : 'off';
+    $live_status = 'active';
+    $sandbox_status = $sandbox_enabled ? 'active' : 'inactive';
+
     if (empty($live_public_key) && empty($live_secret_key) && empty($sandbox_public_key) && empty($sandbox_secret_key)) {
-        return; // Skip migration if all keys are missing
+        return; // No keys to migrate
     }
 
-    // Create an array for the single account
     $new_accounts = [
         [
             'title' => 'Default Account',
-            'priority' => 1, // Default priority for a single account
+            'priority' => 1,
             'live_public_key' => $live_public_key,
             'live_secret_key' => $live_secret_key,
             'sandbox_public_key' => $sandbox_public_key,
             'sandbox_secret_key' => $sandbox_secret_key,
-            'has_sandbox' => $sandbox_enabled ? 'on' : 'off',
-            'live_status' =>  $live_status,
-            'sandbox_status' =>  $sandbox_status,
+            'has_sandbox' => $has_sandbox,
+            'live_status' => $live_status,
+            'sandbox_status' => $sandbox_status,
         ]
     ];
 
-    // Save the migrated data
     update_option('woocommerce_dfinsell_payment_gateway_accounts', serialize($new_accounts));
+    dfinsell_trigger_sync();
 }
+
+
+function dfinsell_trigger_sync() {
+    if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
+        $loader = DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
+        if (method_exists($loader, 'handle_cron_event')) {
+            $loader->handle_cron_event();
+        }
+    }
+}
+
 
 // Hook migration to plugin activation
 register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_migrate_old_settings');

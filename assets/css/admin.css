@@ -130,19 +130,6 @@
 	word-break: break-word;
 }
 
-#dfinsell-sync-accounts{
-	border-radius: 5px;
-    background: #0A0B21;
-    color: #F5F5F5;
-    font-size: 15px !important;
-    margin: 20px 0;
-    max-width: 204px !important;
-    width: 100%;
-    padding: 11px !important;
-    border: 1px solid #0A0B21;
-    height: 42px !important;
-    line-height: 19px !important;
-}
 
 .account-status {
     margin-top: 5px;
@@ -164,4 +151,26 @@
 
 .status-label.inactive ,.status-label.invalid,.account-status-label.inactive ,.account-status-label.invalid ,.account-status-label.unknown{
     background-color: #dc3545; /* Red */
+}
+
+.dfinsell-sync-account{
+	text-align: right;
+	margin-bottom: 15px !important;
+}
+.dfinsell-sync-account button{
+	border: 1px solid #8264D7;
+	color: #8264D7;
+	background: #8264D717;
+	border-radius: 4px;
+	padding: 7px 10px;
+	font-size: 14px;
+	font-weight: 500;
+	cursor: pointer;
+}
+
+.dfinsell-sync-account .success{
+	color: #28A745 !important;
+}
+.dfinsell-sync-account .error{
+	color: #dc3545; 
 }
