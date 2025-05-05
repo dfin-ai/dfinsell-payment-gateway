@@ -451,7 +451,7 @@ public function handle_cron_event()
         return;
     }
 
-    $url = esc_url($this->sip_protocol . $this->sip_host . '/api/update-stripe-status');
+    $url = esc_url($this->sip_protocol . $this->sip_host . '/api/sync-account-status');
     $response = wp_remote_post($url, [
         'headers' => [
             'Content-Type'  => 'application/json',
