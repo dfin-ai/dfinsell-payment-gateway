@@ -430,10 +430,7 @@ public function handle_cron_event()
                 'mode'         => 'live',
             ];
 
-            // Use the first live account's key for Bearer token
-            if (!$bearerToken && !empty($account['live_public_key'])) {
-                $bearerToken = $account['live_public_key'];
-            }
+
         }
 
         if ($isSandboxEnabled && !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
@@ -446,16 +443,12 @@ public function handle_cron_event()
         }
     }
 
-    if (!$bearerToken) {
-        wc_get_logger()->info("No live account found to use as Bearer token", ['source' => 'dfinsell-payment-gateway']);
-        return;
-    }
+
 
     $url = esc_url($this->sip_protocol . $this->sip_host . '/api/sync-account-status');
     $response = wp_remote_post($url, [
         'headers' => [
             'Content-Type'  => 'application/json',
-            'Authorization' => 'Bearer ' . sanitize_text_field($bearerToken),
         ],
         'body' => json_encode(['accounts' => $accountsData]),
         'timeout' => 15,
