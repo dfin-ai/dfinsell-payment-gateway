@@ -468,7 +468,7 @@ public function handle_cron_event()
 
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body, true);
-    wc_get_logger()->info('DFin Sell Payment Response: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
+    wc_get_logger()->info('DFin Sell sync account Response: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
 
     $updated = false;
     if (!empty($response_data['statuses'])) {

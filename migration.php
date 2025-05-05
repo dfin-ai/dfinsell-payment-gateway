@@ -70,6 +70,7 @@ function dfinsell_trigger_sync() {
     if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
         $loader = DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
         if (method_exists($loader, 'handle_cron_event')) {
+            wc_get_logger()->info('DFin Sell sync account for migrations', ['source' => 'dfinsell-payment-gateway']);
             $loader->handle_cron_event();
         }
     }
