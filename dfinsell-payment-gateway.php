@@ -50,7 +50,7 @@ function cancel_unpaid_order_action($order_id) {
 		wc_get_logger()->error('Cancel order Error: Order ID is missing.', ['source' => 'dfinsell-payment-gateway']);
         return;
     }
-    wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' . print_r($order_id, true), ['source' => 'dfinsell-payment-gateway']);
+    wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' .$order_id, ['source' => 'dfinsell-payment-gateway']);
 
 	$order = wc_get_order($order_id);
 	if (!$order_id || !is_numeric($order_id)) {
@@ -89,16 +89,10 @@ function cancel_unpaid_order_action($order_id) {
 		));
 
 		if (!$latest_uuid) {
-			wc_get_logger()->error('DFinSell: No uuid found for order ID-'.  $order_id, ['source' => 'dfinsell-payment-gateway']);
+			wc_get_logger()->error('No Record found for order ID-'.  $order_id, ['source' => 'dfinsell-payment-gateway']);
 			return;
 		}
 		$encoded_uuid_from_db = $latest_uuid->uuid ;
-
-		
-
-
-		wc_get_logger()->info("DFinSell: Found latest encoded uuid for order " . $order_id .$encoded_uuid_from_db,  ['source' => 'dfinsell-payment-gateway']);
-
 
 		// Call cancel API before inserting new
 		$apiPath = '/api/cancel-order-link';
