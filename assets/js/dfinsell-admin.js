@@ -148,14 +148,22 @@ jQuery(document).ready(function ($) {
     }
     $(document).on("submit", "form", function (event) {
         clearErrorMessages(); // Clear previous errors
-        let livePublicKeys = new Set();
-        let liveSecretKeys = new Set();
-        let sandboxPublicKeys = new Set();
-        let sandboxSecretKeys = new Set();
+    
+        let allKeys = new Set(); // Global key uniqueness check
+        let prioritySet = new Set(); // For unique priority
         let hasErrors = false;
-        let prioritySet = new Set(); // To track unique priority values
-
-         $(".dfinsell-account").each(function () {
+    
+        // Helper for uniqueness validation
+        function validateKeyUniqueness(inputField, keyValue, label) {
+            if (allKeys.has(keyValue)) {
+                showErrorMessage(inputField, `${label} must be unique across all accounts and key types.`);
+                hasErrors = true;
+            } else {
+                allKeys.add(keyValue);
+            }
+        }
+    
+        $(".dfinsell-account").each(function () {
             let livePublicKey = $(this).find(".live-public-key");
             let liveSecretKey = $(this).find(".live-secret-key");
             let sandboxPublicKey = $(this).find(".sandbox-public-key");
@@ -171,13 +179,13 @@ jQuery(document).ready(function ($) {
             let titleVal = title.val().trim();
             let priorityVal = priority.val().trim();
     
-            // Check for empty title
+            // Title required
             if (!titleVal) {
                 showErrorMessage(title, "Title is required.");
                 hasErrors = true;
             }
     
-            // Check for empty or duplicate priority
+            // Priority required & unique
             if (!priorityVal) {
                 showErrorMessage(priority, "Priority is required.");
                 hasErrors = true;
@@ -188,7 +196,7 @@ jQuery(document).ready(function ($) {
                 prioritySet.add(priorityVal);
             }
     
-            // Check for empty live keys
+            // Live keys required
             if (!livePublicKeyVal) {
                 showErrorMessage(livePublicKey, "Live Public Key is required.");
                 hasErrors = true;
@@ -198,68 +206,43 @@ jQuery(document).ready(function ($) {
                 hasErrors = true;
             }
     
-            // Live Keys uniqueness check
-            if (livePublicKeyVal && livePublicKeys.has(livePublicKeyVal)) {
-                showErrorMessage(livePublicKey, "Live Public Key must be unique across all accounts.");
+            // Validate all key uniqueness globally
+            if (livePublicKeyVal) {
+                validateKeyUniqueness(livePublicKey, livePublicKeyVal, "Live Public Key");
+            }
+            if (liveSecretKeyVal) {
+                validateKeyUniqueness(liveSecretKey, liveSecretKeyVal, "Live Secret Key");
+            }
+            if (sandboxPublicKeyVal) {
+                validateKeyUniqueness(sandboxPublicKey, sandboxPublicKeyVal, "Sandbox Public Key");
+            }
+            if (sandboxSecretKeyVal) {
+                validateKeyUniqueness(sandboxSecretKey, sandboxSecretKeyVal, "Sandbox Secret Key");
+            }
+    
+            // Same-account live key mismatch
+            if (livePublicKeyVal && liveSecretKeyVal && livePublicKeyVal === liveSecretKeyVal) {
+                showErrorMessage(liveSecretKey, "Live Secret Key must be different from Live Public Key.");
                 hasErrors = true;
-            } else if (livePublicKeyVal) {
-                livePublicKeys.add(livePublicKeyVal);
             }
     
-            if (liveSecretKeyVal && liveSecretKeys.has(liveSecretKeyVal)) {
-                showErrorMessage(liveSecretKey, "Live Secret Key must be unique across all accounts.");
+            // Same-account sandbox key mismatch
+            if (sandboxPublicKeyVal && sandboxSecretKeyVal && sandboxPublicKeyVal === sandboxSecretKeyVal) {
+                showErrorMessage(sandboxSecretKey, "Sandbox Public Key and Sandbox Secret Key must be different.");
                 hasErrors = true;
-            } else if (liveSecretKeyVal) {
-                liveSecretKeys.add(liveSecretKeyVal);
             }
     
-            // Check if Live Public Key and Live Secret Key are not the same
-            if (livePublicKeyVal && liveSecretKeyVal) {
-                if (livePublicKeyVal === liveSecretKeyVal) {
-                    showErrorMessage(liveSecretKey, "Live Secret Key must be different from Live Public Key.");
-                    hasErrors = true;
-                }
-            }
-    
-            // Sandbox Keys uniqueness check across all accounts
-            if (sandboxPublicKeyVal && sandboxPublicKeys.has(sandboxPublicKeyVal)) {
-                showErrorMessage(sandboxPublicKey, "Sandbox Public Key must be unique across all accounts.");
+            // Live vs sandbox mismatch check
+            if (livePublicKeyVal && sandboxPublicKeyVal && livePublicKeyVal === sandboxPublicKeyVal) {
+                showErrorMessage(sandboxPublicKey, "Live Public Key and Sandbox Public Key must be different.");
                 hasErrors = true;
-            } else if (sandboxPublicKeyVal) {
-                sandboxPublicKeys.add(sandboxPublicKeyVal);
             }
-    
-            if (sandboxSecretKeyVal && sandboxSecretKeys.has(sandboxSecretKeyVal)) {
-                showErrorMessage(sandboxSecretKey, "Sandbox Secret Key must be unique across all accounts.");
+            if (liveSecretKeyVal && sandboxSecretKeyVal && liveSecretKeyVal === sandboxSecretKeyVal) {
+                showErrorMessage(sandboxSecretKey, "Live Secret Key and Sandbox Secret Key must be different.");
                 hasErrors = true;
-            } else if (sandboxSecretKeyVal) {
-                sandboxSecretKeys.add(sandboxSecretKeyVal);
             }
     
-            // Check if Live Keys and Sandbox Keys are not the same
-            if (livePublicKeyVal && sandboxPublicKeyVal) {
-                if (livePublicKeyVal === sandboxPublicKeyVal) {
-                    showErrorMessage(sandboxPublicKey, "Live Public Key and Sandbox Public Key must be different.");
-                    hasErrors = true;
-                }
-            }
-    
-            if (liveSecretKeyVal && sandboxSecretKeyVal) {
-                if (liveSecretKeyVal === sandboxSecretKeyVal) {
-                    showErrorMessage(sandboxSecretKey, "Live Secret Key and Sandbox Secret Key must be different.");
-                    hasErrors = true;
-                }
-            }
-    
-            // Sandbox keys should not be the same as each other (for the same account)
-            if (sandboxPublicKeyVal && sandboxSecretKeyVal) {
-                if (sandboxPublicKeyVal === sandboxSecretKeyVal) {
-                    showErrorMessage(sandboxSecretKey, "Sandbox Public Key and Sandbox Secret Key must be different.");
-                    hasErrors = true;
-                }
-            }
-    
-            // Ensure sandbox keys are mandatory if the checkbox is checked
+            // Sandbox fields required if checkbox checked
             if (sandboxCheckbox.is(":checked")) {
                 if (!sandboxPublicKeyVal) {
                     showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
@@ -273,8 +256,8 @@ jQuery(document).ready(function ($) {
         });
     
         if (hasErrors) {
-            console.log("Form blocked due to errors.");
-            event.preventDefault(); // Stop form submission
+            console.log("Form blocked due to validation errors.");
+            event.preventDefault();
             $(this).find('[type="submit"]').removeClass('is-busy');
         } else {
             console.log("Form passed validation.");
