@@ -53,23 +53,28 @@ jQuery(document).ready(function ($) {
         }
     }); */
 
-    // ✅ Fix: Properly delete accounts
     $(document).on("click", ".delete-account-btn", function () {
+        const $accounts = $(".dfinsell-account");
+    
+        // Remove any previous error message
+        $(".delete-account-error").remove();
+    
+        if ($accounts.length === 1) {
+            // Append inline error message before the account block
+            $accounts.first().before('<div class="delete-account-error" style="color: red; margin-bottom: 10px;">At least one account must be present.</div>');
+            return;
+        }
+    
         let $account = $(this).closest(".dfinsell-account");
-        let index = $account.attr("data-index");
-
-        // Mark deleted accounts (so they don't get submitted)
+    
+        // Remove account
         $account.find("input").each(function () {
-            $(this).attr("name", ""); // Remove name so it won't be submitted
+            $(this).attr("name", ""); // Prevent form submission
         });
-
         $account.remove();
         updateAccountIndices();
-
-        if ($(".dfinsell-account").length === 0) {
-            $(".dfinsell-accounts-container").prepend('<div class="empty-account"> No any account added </div>');
-        }
     });
+    
 
     $(document).on("click", ".dfinsell-add-account", function () {
         let newAccountHtml = `
@@ -149,6 +154,7 @@ jQuery(document).ready(function ($) {
         let sandboxSecretKeys = new Set();
         let hasErrors = false;
         let prioritySet = new Set(); // To track unique priority values
+
          $(".dfinsell-account").each(function () {
             let livePublicKey = $(this).find(".live-public-key");
             let liveSecretKey = $(this).find(".live-secret-key");
@@ -269,6 +275,7 @@ jQuery(document).ready(function ($) {
         if (hasErrors) {
             console.log("Form blocked due to errors.");
             event.preventDefault(); // Stop form submission
+            $(this).find('[type="submit"]').removeClass('is-busy');
         } else {
             console.log("Form passed validation.");
         }
@@ -288,9 +295,9 @@ jQuery(document).ready(function ($) {
         }
     });
     
-});
 
-jQuery(document).ready(function($) {
+
+
     $('#dfinsell-sync-accounts').on('click', function(e) {
         e.preventDefault();
         
@@ -338,7 +345,7 @@ jQuery(document).ready(function($) {
             }
         });
     });
-jQuery(document).ready(function($) {
+
     // Function to update all account statuses
     function updateAccountStatuses() {
         var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked');
@@ -375,7 +382,7 @@ jQuery(document).ready(function($) {
 
     // Optional: Update once on page load also (in case something is missed)
    // updateAccountStatuses();
-});
+
 
 // Function to capitalize the first letter
 function capitalizeFirstLetter(str) {

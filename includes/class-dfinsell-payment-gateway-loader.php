@@ -407,8 +407,7 @@ public function handle_cron_event()
 		$unserialized = maybe_unserialize($accounts);
 		$accounts = is_array($unserialized) ? $unserialized : [];
 	}
-	wc_get_logger()->info('DFin Sell all acounts foy sync: ' . wp_json_encode($accounts), ['source' => 'dfinsell-payment-gateway']);
-
+	
        
     if (!$accounts || !is_array($accounts)) {
         wc_get_logger()->info("No accounts found or invalid format:".$accounts , ['source' => 'dfinsell-payment-gateway']);
