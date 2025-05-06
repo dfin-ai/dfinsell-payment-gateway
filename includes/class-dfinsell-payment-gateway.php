@@ -499,7 +499,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         // **Sandbox Mode Handling**
         if ($this->sandbox) {
-            $test_note = __('This is a test order in sandbox mode.', 'dfinsell-payment-gateway');
+            $test_note = __('This is a test order processed in sandbox mode.', 'dfinsell-payment-gateway');
             $existing_notes = get_comments(['post_id' => $order->get_id(), 'type' => 'order_note', 'approve' => 'approve']);
 
             if (!array_filter($existing_notes, fn($note) => trim($note->comment_content) === trim($test_note))) {
@@ -525,7 +525,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             //wc_get_logger()->info("Using account '{$account['title']}' for payment.", ['source' => 'dfinsell-payment-gateway']);
             // Add order note mentioning account name
-            $order->add_order_note(__('Processing payment using account: ', 'dfinsell-payment-gateway') . $account['title']);
+            $order->add_order_note(__('Processing Payment Via: ', 'dfinsell-payment-gateway') . $account['title']);
 
             // **Prepare API Data**
             $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
@@ -633,7 +633,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 // translators: %s represents the account title.
                 $new_note = sprintf(
                     /* translators: %s represents the account title. */
-                    esc_html__('Payment initiated via DFin Sell Payment Gateway. Awaiting customer action. Gateway using account: %s', 'dfinsell-payment-gateway'),
+                    esc_html__('Payment initiated via DFin Sell. Awaiting your completion ( %s )', 'dfinsell-payment-gateway'),
                     esc_html($account['title'])
                 );
                 $existing_notes = $order->get_customer_order_notes();

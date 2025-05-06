@@ -121,7 +121,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			$order_status = $order->get_status();
 		}
 
-		$updated = $order->update_status($order_status, __('Order status updated via API', 'dfinsell-payment-gateway'));
+		$updated = $order->update_status($order_status, __('Order status updated via API from pending to processing', 'dfinsell-payment-gateway'));
 
 		if (WC()->cart) {
 			// Remove cart
