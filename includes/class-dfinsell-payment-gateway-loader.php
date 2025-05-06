@@ -54,6 +54,16 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('wp_ajax_nopriv_popup_closed_event', array($this, 'handle_popup_close'));
 
 		register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_activation_check');
+
+		// Schedule the cron job on plugin activation
+		register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, [$this, 'activate_cron_job']);
+
+		// Clear the cron job on plugin deactivation
+		register_deactivation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, [$this, 'deactivate_cron_job']);
+		add_action('wp_ajax_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
+        //add_action('wp_ajax_nopriv_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
+		add_filter('cron_schedules' , [$this, 'dfinsell_add_cron_interval']);
+		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
 	}
 	
 
@@ -329,4 +339,182 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	
 		wp_die();
 	}
+
+	/*** Add custom cron schedules.*/
+	public function dfinsell_add_cron_interval($schedules) {
+		$schedules['every_two_hours'] = array(
+			'interval' => 2 * 60 * 60, // 2 hours in seconds = 7200
+			'display'  => __('Every Two Hours')
+		);
+		return $schedules;
+	}
+
+	function activate_cron_job() {
+		wc_get_logger()->info("activate cron job function", ['source' => 'dfinsell-payment-gateway']);
+
+		// Clear existing scheduled event if it exists
+		$timestamp = wp_next_scheduled('dfinsell_cron_event');
+		if ($timestamp) {
+			wp_unschedule_event($timestamp, 'dfinsell_cron_event');
+		}
+
+		// Schedule with new interval
+		wp_schedule_event(time(), 'every_two_hours', 'dfinsell_cron_event');
+	}
+
+	function deactivate_cron_job()
+	{
+		wc_get_logger()->info("deactivate cron job function", ['source' => 'dfinsell-payment-gateway']);
+		wp_clear_scheduled_hook('dfinsell_cron_event');
+	}
+
+
+	public function handle_cron_event()
+{
+	wc_get_logger()->info("Cron started", ['source' => 'dfinsell-payment-gateway']);
+
+	$accounts = get_option('woocommerce_dfinsell_settings');
+	
+		$unserialized = maybe_unserialize($accounts);
+		$account = is_array($unserialized) ? $unserialized : [];
+	
+
+	wc_get_logger()->info('DFin Sell all accounts for sync: ' . wp_json_encode($accounts), ['source' => 'dfinsell-payment-gateway']);
+
+	if (!$account || !is_array($account)) {
+		wc_get_logger()->info("No accounts found or invalid format", ['source' => 'dfinsell-payment-gateway']);
+		return;
+	}
+
+	$accountsData = [];
+
+
+		
+
+		if (!empty($account['public_key']) && !empty($account['secret_key'])) {
+			$accountsData[] = [
+				'public_key'   => $account['public_key'],
+				'secret_key'   => $account['secret_key'],
+				'mode'         => 'live',
+			];
+		}
+		
+		if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
+			$accountsData[] = [
+				'public_key'   => $account['sandbox_public_key'],
+				'secret_key'   => $account['sandbox_secret_key'],
+				'mode'         => 'sandbox',
+			];
+		}
+	
+
+	$url = esc_url($this->sip_protocol . $this->sip_host . '/api/sync-account-status');
+
+	$response = wp_remote_post($url, [
+		'headers' => [
+			'Content-Type' => 'application/json',
+		],
+		'body' => json_encode(['accounts' => $accountsData]),
+		'timeout' => 15,
+	]);
+
+	if (is_wp_error($response)) {
+		wc_get_logger()->info("API error for bulk request.", ['source' => 'dfinsell-payment-gateway']);
+		return;
+	}
+
+	$response_body = wp_remote_retrieve_body($response);
+	$response_data = json_decode($response_body, true);
+	wc_get_logger()->info('DFin Sell sync account Response: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
+
+	$updated = false;
+	if (!empty($response_data['statuses'])) {
+		foreach ($response_data['statuses'] as $statusData) {
+			
+			if (
+				isset($statusData['mode'], $statusData['public_key'], $statusData['status']) &&
+				!empty($statusData['status'])
+			) {
+			
+					if (
+						$statusData['mode'] === 'live' &&
+						$account['public_key'] === $statusData['public_key']
+					) {
+					
+						$account['live_status'] = $statusData['status'];
+						
+						$updated = true;
+					}
+
+					if (
+						$statusData['mode'] === 'sandbox' &&
+						$account['sandbox_public_key'] === $statusData['public_key']
+					) {
+						$account['sandbox_status'] = $statusData['status'];
+						$updated = true;
+					}
+				
+			}
+		}
+	}
+
+	if ($updated) {
+		update_option('woocommerce_dfinsell_settings', $account); 
+		wc_get_logger()->info("Cron updated account statuses.", ['source' => 'dfinsell-payment-gateway']);
+	} else {
+		wc_get_logger()->info("Cron ran but no statuses were updated", ['source' => 'dfinsell-payment-gateway']);
+	}
 }
+
+
+	function dfinsell_manual_sync_callback() {
+		
+		// Verify nonce first
+		if (!check_ajax_referer('dfinsell_sync_nonce', 'nonce', false)) {
+			wc_get_logger()->error('Nonce verification failed', ['source' => 'dfinsell-payment-gateway']);
+			wp_send_json_error([
+				'message' => __('Security check failed. Please refresh the page and try again.', 'dfinsell-payment-gateway')
+			], 400);
+			wp_die();
+		}
+
+		// Check user capabilities
+		if (!current_user_can('manage_woocommerce')) {
+			wc_get_logger()->error('Permission denied for user: ' . get_current_user_id(), ['source' => 'dfinsell-payment-gateway']);
+			wp_send_json_error([
+				'message' => __('You do not have permission to perform this action.', 'dfinsell-payment-gateway')
+			], 403);
+			wp_die();
+		}
+
+		wc_get_logger()->info("Manual sync initiated by user: " . get_current_user_id(), ['source' => 'dfinsell-payment-gateway']);
+		
+		try {
+			// Start output buffering to capture any unexpected output
+			ob_start();
+			
+			$this->handle_cron_event();
+			$output = ob_get_clean();
+			
+			if (!empty($output)) {
+				wc_get_logger()->notice("Unexpected output during sync: " . $output, ['source' => 'dfinsell-payment-gateway']);
+			}
+			
+			wp_send_json_success([
+				'message' => __('Accounts synchronized successfully.', 'dfinsell-payment-gateway'),
+				'timestamp' => current_time('mysql')
+			]);
+			
+		} catch (Exception $e) {
+			wc_get_logger()->error("Sync error: " . $e->getMessage(), ['source' => 'dfinsell-payment-gateway']);
+			wp_send_json_error([
+				'message' => __('Sync failed: ', 'dfinsell-payment-gateway') . $e->getMessage(),
+				'code' => $e->getCode()
+			], 500);
+		}
+		
+		wp_die(); // Always include this
+		}
+
+
+	}

@@ -21,6 +21,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $secret_key;
 	private $sandbox_secret_key;
 	private $sandbox_public_key;
+    private $sandbox_status;
+    private $live_status;
 
 	private $admin_notices;
 
@@ -48,6 +50,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->method_title = __('DFin Sell Payment Gateway', 'dfinsell-payment-gateway');
 		$this->method_description = __('This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security.', 'dfinsell-payment-gateway');
 
+
+        add_action('woocommerce_admin_field_dfinsell_sync_account', array($this, 'render_dfinsell_sync_account_field'));
+
 		// Load the settings
 		$this->dfinsell_init_form_fields();
 		$this->init_settings();
@@ -59,6 +64,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->sandbox = 'yes' === sanitize_text_field($this->get_option('sandbox')); // Use boolean
 		$this->public_key                 = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('public_key')) : sanitize_text_field($this->get_option('sandbox_public_key'));
 		$this->secret_key                = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('secret_key')) : sanitize_text_field($this->get_option('sandbox_secret_key'));
+        $this->sandbox_status = !empty($this->get_option('sandbox_status')) 
+        ? $this->get_option('sandbox_status') : 'active';
+        $this->live_status = !empty($this->get_option('live_status')) 
+        ? $this->get_option('live_status') : 'active';
 
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'dfinsell_process_admin_options'));
@@ -75,7 +84,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		add_filter('woocommerce_admin_order_preview_line_items', array($this, 'dfinsell_add_custom_label_to_order_row'), 10, 2);
 
 		add_filter('woocommerce_available_payment_gateways',  array($this, 'hide_custom_payment_gateway_conditionally'));
-	}
+        add_action('woocommerce_admin_field_dfinsell_sync_html', array($this, 'dfinsell_render_sync_html_field'));
+    }
 
 	private function get_api_url($endpoint)
 	{
@@ -94,6 +104,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		$secret_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_secret_key')) : sanitize_text_field($this->get_option('secret_key'));
 		$public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
+
+        $sandbox_status =   sanitize_text_field($this->get_option('sandbox_status')) ?  sanitize_text_field($this->get_option('sandbox_status')): 'active';
+        $live_status =  sanitize_text_field($this->get_option('live_status'))  ? sanitize_text_field($this->get_option('live_status')) : 'active';
 
 		// Initialize error tracking
 		$errors = array();
@@ -120,6 +133,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				$errors[] = $api_key_error;
 			}
 		}
+        
 
 		// Display all errors
 		if (!empty($errors)) {
@@ -128,6 +142,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 			add_action('admin_notices', array($this->admin_notices, 'display_notices'));
 		}
+
+        if (empty($errors)) {
+        if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
+            $loader = DFINSELL_PAYMENT_GATEWAY_Loader::get_instance(); // Use the static method
+            if (method_exists($loader, 'handle_cron_event')) {
+                $loader->handle_cron_event(); // Perform sync immediately
+            }
+        }
+    }
 	}
 
 	/**
@@ -143,6 +166,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 */
 	public function dfinsell_get_form_fields()
 	{
+       
 		$form_fields = array(
 			'enabled' => array(
 				'title' => __('Enable/Disable', 'dfinsell-payment-gateway'),
@@ -185,6 +209,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'description' => __('Place the payment gateway in sandbox mode using sandbox API keys (real payments will not be taken).', 'dfinsell-payment-gateway'),
 				'default'     => 'no',
 			),
+            'accounts' => [
+                'title' => __('Payment Accounts', 'dfinsell-payment-gateway'),
+                'type' => 'accounts_repeater', // Custom field type for dynamic accounts
+                'description' => __('Add multiple payment accounts dynamically.', 'dfinsell-payment-gateway'),
+            ],
+          
+
+          
 			'sandbox_public_key'  => array(
 				'title'       => __('Sandbox Public Key', 'dfinsell-payment-gateway'),
 				'type'        => 'text',
@@ -346,7 +378,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Prepare data for the API request
 		$data = $this->dfinsell_prepare_payment_data($order);
+        if(sanitize_text_field($data['status']) !='active'){
+          
+        wc_add_notice(
+            __('Payment error: ', 'dfinsell-payment-gateway') . "Dfin Sell payment method is currently unavailable.  account status  is . $status",
+            'error'
+        );
 
+        return array('result' => 'fail');
+        }
 		$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 
 		// Send the data to the API
@@ -453,6 +493,104 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					true              // Mark as private
 				);
 			}
+            // =========================== / start code for payment link / ================= 
+            global $wpdb;
+
+            $table_name = $wpdb->prefix . 'order_payment_link';
+            $order_id   = $order->get_id();
+            $uuid = sanitize_text_field($response_data['data']['pay_id']) ;
+
+            $json_data = json_encode($response_data);
+            wc_get_logger()->info("Order Payment link data: $json_data", ['source' => 'dfinsell-payment-gateway']);
+
+
+            // ========================== Check if table exists, create if not ==========================
+            if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") != $table_name) {
+                require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+                $charset_collate = $wpdb->get_charset_collate();
+
+                $sql = "CREATE TABLE $table_name (
+                    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+                    order_id BIGINT(20) UNSIGNED NOT NULL,
+                    uuid TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (id),
+                    INDEX (order_id)
+                ) ENGINE=InnoDB $charset_collate;";
+
+                dbDelta($sql);
+
+            }
+
+             try {
+                // Check if existing payment links exist
+                $existing_uuid = $wpdb->get_results($wpdb->prepare(
+                    "SELECT * FROM $table_name WHERE order_id = %d ORDER BY id DESC",
+                    $order_id
+                ));
+
+                if (!empty($existing_uuid)) {
+                    $old_uuid = $existing_uuid[0]->uuid;
+                    $encodeed_uuid_from_db = $old_uuid;
+
+                    // Call cancel API before inserting new
+                    $apiPath = '/api/cancel-order-link';
+                    $url = SIP_PROTOCOL . SIP_HOST . $apiPath;
+                    $cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
+
+                    $response = wp_remote_post($cleanUrl, array(
+                        'method'    => 'POST',
+                        'timeout'   => 30,
+                        'body'      => json_encode(array(
+                            'order_id'       => $order_id,
+                            'order_uuid'  => $encodeed_uuid_from_db,
+                            'status'         => 'canceled'
+                        )),
+                        'headers'   => array(
+                            'Content-Type'  => 'application/json',
+                        ),
+                        'sslverify' => true,
+                    ));
+
+                    if (is_wp_error($response)) {
+
+                        wc_get_logger()->error('Cancel API Error: '. $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
+
+                    } else {
+                        wc_get_logger()->info('Cancel API Response: ' . print_r(wp_remote_retrieve_body($response), true), ['source' => 'dfinsell-payment-gateway']);
+
+                    }
+                }
+
+                // $last_order_time = isset($existing_links[0]) ? (int)$existing_links[0]->order_time : 0;
+                // $new_order_time = $last_order_time + 1;
+
+                $inserted = $wpdb->insert(
+                    $table_name,
+                    [
+                        'order_id' => $order_id,
+                        'uuid' => $uuid,
+                    ],
+                    ['%d', '%s']
+                );
+
+                if ($inserted !== false) {
+
+                    wc_get_logger()->info(" DFinSell: Inserted new payment link for order ID $order_id ", ['source' => 'dfinsell-payment-gateway']);
+
+                } else {
+
+                    wc_get_logger()->error("DFinSell: Failed to insert uuid — WPDB error: " . $wpdb->last_error, ['source' => 'dfinsell-payment-gateway']);
+
+                }
+            } catch (Exception $e) {
+
+                wc_get_logger()->error("DFinSell: Exception during payment link handling: " . $e->getMessage(), ['source' => 'dfinsell-payment-gateway']);
+
+            }
+            // =====================/ end code for payment link /
 
 			// Return a success result without redirecting
 			return array(
@@ -533,7 +671,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Use sandbox keys if sandbox mode is enabled, otherwise use live keys
 		$api_secret = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_secret_key')) : sanitize_text_field($this->get_option('secret_key'));
 		$api_public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
-
+        $status = $is_sandbox
+        ? sanitize_text_field($this->get_option('sandbox_status'))
+        : sanitize_text_field($this->get_option('live_status'));
 		// Sanitize and get the billing email or phone
 		$request_for = sanitize_email($order->get_billing_email() ?: $order->get_billing_phone());
 		// Get order details and sanitize
@@ -607,6 +747,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'billing_country' => $billing_country,
 			'billing_state' => $billing_state,
 			'is_sandbox' => $is_sandbox,
+            'status'=>$status
 		);
 	}
 
@@ -827,13 +968,26 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			return; // Only load on WooCommerce settings page
 		}
 
+        wp_enqueue_style(
+            'dfinsell-admin-style',
+            plugins_url('assets/css/admin-style.css', __DIR__), // This ensures correct path
+            [],
+            '1.0.0'
+        );
+
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), array('jquery'), filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
+     
 		// Localize the script to pass parameters
 		wp_localize_script('dfinsell-admin-script', 'params', array(
 			'PAYMENT_CODE' => $this->id
 		));
+        wp_localize_script('dfinsell-admin-script', 'dfinsell_ajax_object', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'nonce'    => wp_create_nonce('dfinsell_sync_nonce'),
+        ]);
+    
 	}
 
 	public function hide_custom_payment_gateway_conditionally($available_gateways) {
@@ -845,14 +999,24 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	
 			$is_sandbox = sanitize_text_field($this->get_option('sandbox')) === 'yes';
 			$public_key = $is_sandbox ? sanitize_text_field($this->get_option('sandbox_public_key')) : sanitize_text_field($this->get_option('public_key'));
-	
+            $status = $is_sandbox
+            ? sanitize_text_field($this->get_option('sandbox_status'))
+            : sanitize_text_field($this->get_option('live_status'));
 			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 	
 			$data = [
 				'is_sandbox' => $is_sandbox,
 				'amount'     => $amount,
 			];
-	
+            if($status !='active'){
+                wc_get_logger()->error("Account status  is " . $status ." hiding the gateway", ['source' => 'dfinsell-payment-gateway']);
+                unset($available_gateways[$gateway_id]);
+                return $available_gateways;
+
+            }
+		
+			wc_get_logger()->info('DFin Sell transactionLimitApiUrl : ' . $transactionLimitApiUrl."--".$public_key, array('source' => 'dfinsell-payment-gateway'));
+ 
 			// Send the data to the API
 			$transaction_limit_response = wp_remote_post($transactionLimitApiUrl, array(
 				'method'    => 'POST',
@@ -864,10 +1028,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				),
 				'sslverify' => true, // Ensure SSL verification
 			));
-	
+			wc_get_logger()->info('DFin Sell transaction_limit_response : ' . json_encode($transaction_limit_response), array('source' => 'dfinsell-payment-gateway'));
+
 			$transaction_limit_response_body = wp_remote_retrieve_body($transaction_limit_response);
+			wc_get_logger()->info('DFin Sell  transaction_limit_response_body : ' . json_encode($transaction_limit_response_body), array('source' => 'dfinsell-payment-gateway'));
+
 			$transaction_limit_response_data = json_decode($transaction_limit_response_body, true);
-	
+			wc_get_logger()->info('DFin Sell  limit : ' . json_encode($transaction_limit_response_data), array('source' => 'dfinsell-payment-gateway'));
+
 			if (isset($transaction_limit_response_data['error'])) {
 				unset($available_gateways[$gateway_id]);
 			}
@@ -875,4 +1043,87 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	
 		return $available_gateways;
 	}	
+
+
+    /**
+     * Custom field renderer for the DFinSell Sync Accounts section.
+     *
+     * @param array $field Field configuration passed from WooCommerce.
+     */
+ // Render method
+ public function render_dfinsell_sync_account_field($field){
+    wc_get_logger()->info('inside link', array('source' => 'dfinsell-payment-gateway'));
+    ?>
+    <tr valign="top">
+        <th scope="row" class="titledesc"><?php echo esc_html($field['title']); ?></th>
+        <td class="forminp">
+            <div class="dfinsell-account">
+                <button type="button" class="button button-primary" id="dfinsell-sync-accounts">
+                    <?php echo esc_html__('Sync Accounts Now', 'dfinsell-payment-gateway'); ?>
+                </button><br>
+                <span class="description">
+                    <?php echo esc_html__('Click to manually sync your DFinSell accounts with the latest configuration.', 'dfinsell-payment-gateway'); ?>
+                </span>
+                <input type="hidden" name="live_status" id="live_status" value="">
+                <input type="hidden" name="sandbox_status" id="sandbox_status" value="">
+            </div>
+        </td>
+    </tr>
+    <?php
+}
+
+
+
+public function generate_accounts_repeater_html($key, $data)
+{
+    
+    $global_settings = get_option('woocommerce_dfinsell_settings', []);
+    $global_settings = maybe_unserialize($global_settings);
+    $sandbox_enabled = !empty($global_settings['sandbox']) && $global_settings['sandbox'] === 'yes';
+    $sandbox_status  =  sanitize_text_field($this->get_option('sandbox_status')) ? sanitize_text_field($this->get_option('sandbox_status')) : 'unknown';
+	$live_status     =  sanitize_text_field($this->get_option('live_status')) ? sanitize_text_field($this->get_option('live_status')) : '';
+    ob_start();
+
+    
+?>
+    <tr valign="top">
+       
+        <td class="forminp">
+        
+            <div class="dfinsell-accounts-container">
+              
+            <div class="dfinsell-sync-account">
+            <span id="dfinsell-sync-status" ></span>    
+        	 <button class="button"  class="dfinsell-sync-accounts" id="dfinsell-sync-accounts"><span><i class="fa fa-refresh"  aria-hidden="true"></i></span>  <?php esc_html_e( 'Sync Account', 'dfinsell-payment-gateway' ); ?></button>
+       					<input type="hidden" name="live_status"
+                        value="<?php echo $live_status ?>">
+                        <input type="hidden" name="sandbox_status"
+                        value="<?php echo $sandbox_status ?>">
+ 
+                        
+                                <div class="account-status-block" style="float: right;">
+                                <span class="account-status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
+                                    <?php
+                                   if ($sandbox_enabled) {
+                                    echo esc_html__('Sandbox Account Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_status);
+                                } else {
+                                    echo esc_html__('Live Account Status: ', 'dfinsell-payment-gateway') . esc_html($live_status);
+                                }?>
+                                </span>
+                         
+                                    
+                            </div>
+
+                           
+                        </div>
+              
+                <?php wp_nonce_field('dfinsell_accounts_nonce_action', 'dfinsell_accounts_nonce'); ?>
+               
+            </div>
+        </td>
+    </tr>
+<?php return ob_get_clean();
+}
+    
+    
 }

@@ -33,3 +33,92 @@ jQuery(document).ready(function ($) {
     }
   )
 })
+jQuery(document).ready(function($) {
+    $('#dfinsell-sync-accounts').on('click', function(e) {
+        e.preventDefault();
+        
+        var $button = $(this);
+        var $status = $('#dfinsell-sync-status');
+        var originalButtonText = $button.text();
+        
+        // Set loading state
+        $button.prop('disabled', true);
+        $button.html('<span class="spinner is-active" style="float: none; margin: 0;"></span> Syncing...');
+        $status.removeClass('error success').text('Syncing accounts...').show();
+        
+        $.ajax({
+            url: dfinsell_ajax_object.ajax_url,
+            method: 'POST',
+            dataType: 'json',
+            data: {
+                action: 'dfinsell_manual_sync',
+                nonce: dfinsell_ajax_object.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    $status.addClass('success').text(response.data.message || 'Sync completed successfully!');
+                    
+                    // Refresh the page after 2 seconds to show updated statuses
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    $status.addClass('error').text(response.data.message || 'Sync failed. Please try again.');
+                }
+            },
+            error: function(xhr, status, error) {
+                var errorMessage = 'AJAX Error: ';
+                if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
+                    errorMessage += xhr.responseJSON.data.message;
+                } else {
+                    errorMessage += error;
+                }
+                $status.addClass('error').text(errorMessage);
+            },
+            complete: function() {
+                $button.prop('disabled', false);
+                $button.text(originalButtonText);
+            }
+        });
+    });
+jQuery(document).ready(function($) {
+    // Function to update all account statuses
+    function updateAccountStatuses() {
+        var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked');
+
+      
+       
+            var liveStatus =$('input[name="live_status"]').val();
+            var sandboxStatus =$('input[name="sandbox_status"]').val();
+            if (!sandboxStatus) {
+                sandboxStatus = 'unknown';
+            }
+            var $statusLabel =$('.account-status-label');
+
+            if (sandboxEnabled) {
+                // Update class and text for sandbox mode
+                $statusLabel
+                    .removeClass('live-status invalid active inactive')
+                    .addClass('sandbox-status ' + sandboxStatus.toLowerCase())
+                    .text('Sandbox account status: ' + sandboxStatus);
+            } else {
+                // Update class and text for live mode
+                $statusLabel
+                    .removeClass('sandbox-status invalid active inactive')
+                    .addClass('live-status ' + liveStatus.toLowerCase())
+                    .text('live account status: ' + liveStatus);
+            }
+       
+    }
+
+    // When checkbox is changed, update statuses
+    $('#woocommerce_dfinsell_sandbox').on('change', function() {
+        updateAccountStatuses();
+    });
+
+    // Optional: Update once on page load also (in case something is missed)
+   // updateAccountStatuses();
+});
+
+
+});
