@@ -129,15 +129,18 @@ jQuery(document).ready(function ($) {
         updateAccountIndices();
     });
 
-    function showErrorMessage(input, message) {
-        $(input).next(".error-message").remove(); // Remove existing error
-        $(input).after(`<div class="error-message" style="color: red; font-size: 12px;">${message}</div>`);
+    function showErrorMessage(inputField, message) {
+        // Function to show the error message next to the input field
+        inputField.addClass("error");
+        let errorMessage = $("<div>").addClass("error-message").text(message);
+        inputField.after(errorMessage);
     }
-
+    
     function clearErrorMessages() {
+        // Function to clear all previous error messages
         $(".error-message").remove();
+        $(".error").removeClass("error");
     }
-
     $(document).on("submit", "form", function (event) {
         clearErrorMessages(); // Clear previous errors
         let livePublicKeys = new Set();
@@ -146,8 +149,7 @@ jQuery(document).ready(function ($) {
         let sandboxSecretKeys = new Set();
         let hasErrors = false;
         let prioritySet = new Set(); // To track unique priority values
-
-        $(".dfinsell-account").each(function () {
+         $(".dfinsell-account").each(function () {
             let livePublicKey = $(this).find(".live-public-key");
             let liveSecretKey = $(this).find(".live-secret-key");
             let sandboxPublicKey = $(this).find(".sandbox-public-key");
@@ -155,69 +157,103 @@ jQuery(document).ready(function ($) {
             let sandboxCheckbox = $(this).find(".sandbox-checkbox");
             let title = $(this).find(".account-title");
             let priority = $(this).find(".account-priority");
-
+    
             let livePublicKeyVal = livePublicKey.val().trim();
             let liveSecretKeyVal = liveSecretKey.val().trim();
             let sandboxPublicKeyVal = sandboxPublicKey.val().trim();
             let sandboxSecretKeyVal = sandboxSecretKey.val().trim();
             let titleVal = title.val().trim();
             let priorityVal = priority.val().trim();
-
+    
+            // Check for empty title
             if (!titleVal) {
                 showErrorMessage(title, "Title is required.");
                 hasErrors = true;
             }
+    
+            // Check for empty or duplicate priority
             if (!priorityVal) {
                 showErrorMessage(priority, "Priority is required.");
                 hasErrors = true;
+            } else if (prioritySet.has(priorityVal)) {
+                showErrorMessage(priority, "Priority must be unique.");
+                hasErrors = true;
+            } else {
+                prioritySet.add(priorityVal);
             }
-            else if (prioritySet.has(priorityVal)) {
-				showErrorMessage(priority, "Priority must be unique.");
-				hasErrors = true;
-			} else {
-				prioritySet.add(priorityVal);
-			}
-
-          
+    
+            // Check for empty live keys
             if (!livePublicKeyVal) {
-                showErrorMessage(livePublicKey, "Public Key is required.");
+                showErrorMessage(livePublicKey, "Live Public Key is required.");
                 hasErrors = true;
             }
             if (!liveSecretKeyVal) {
-                showErrorMessage(liveSecretKey, "Secret Key is required.");
+                showErrorMessage(liveSecretKey, "Live Secret Key is required.");
                 hasErrors = true;
             }
-
-            // Live Keys are required
+    
+            // Live Keys uniqueness check
             if (livePublicKeyVal && livePublicKeys.has(livePublicKeyVal)) {
-                showErrorMessage(livePublicKey, "Live Public Key must be unique.");
+                showErrorMessage(livePublicKey, "Live Public Key must be unique across all accounts.");
                 hasErrors = true;
             } else if (livePublicKeyVal) {
                 livePublicKeys.add(livePublicKeyVal);
             }
-
+    
             if (liveSecretKeyVal && liveSecretKeys.has(liveSecretKeyVal)) {
-                showErrorMessage(liveSecretKey, "Live Secret Key must be unique.");
+                showErrorMessage(liveSecretKey, "Live Secret Key must be unique across all accounts.");
                 hasErrors = true;
             } else if (liveSecretKeyVal) {
                 liveSecretKeys.add(liveSecretKeyVal);
             }
-
+    
+            // Check if Live Public Key and Live Secret Key are not the same
+            if (livePublicKeyVal && liveSecretKeyVal) {
+                if (livePublicKeyVal === liveSecretKeyVal) {
+                    showErrorMessage(liveSecretKey, "Live Secret Key must be different from Live Public Key.");
+                    hasErrors = true;
+                }
+            }
+    
+            // Sandbox Keys uniqueness check across all accounts
             if (sandboxPublicKeyVal && sandboxPublicKeys.has(sandboxPublicKeyVal)) {
-                showErrorMessage(sandboxPublicKey, "Sandbox Public Key must be unique.");
+                showErrorMessage(sandboxPublicKey, "Sandbox Public Key must be unique across all accounts.");
                 hasErrors = true;
             } else if (sandboxPublicKeyVal) {
                 sandboxPublicKeys.add(sandboxPublicKeyVal);
             }
-
+    
             if (sandboxSecretKeyVal && sandboxSecretKeys.has(sandboxSecretKeyVal)) {
-                showErrorMessage(sandboxSecretKey, "Sandbox Secret Key must be unique.");
+                showErrorMessage(sandboxSecretKey, "Sandbox Secret Key must be unique across all accounts.");
                 hasErrors = true;
             } else if (sandboxSecretKeyVal) {
                 sandboxSecretKeys.add(sandboxSecretKeyVal);
             }
-
-            // ✅ Ensure sandbox keys are mandatory if the checkbox is checked
+    
+            // Check if Live Keys and Sandbox Keys are not the same
+            if (livePublicKeyVal && sandboxPublicKeyVal) {
+                if (livePublicKeyVal === sandboxPublicKeyVal) {
+                    showErrorMessage(sandboxPublicKey, "Live Public Key and Sandbox Public Key must be different.");
+                    hasErrors = true;
+                }
+            }
+    
+            if (liveSecretKeyVal && sandboxSecretKeyVal) {
+                if (liveSecretKeyVal === sandboxSecretKeyVal) {
+                    showErrorMessage(sandboxSecretKey, "Live Secret Key and Sandbox Secret Key must be different.");
+                    hasErrors = true;
+                }
+            }
+    
+            // Sandbox keys should not be the same as each other (for the same account)
+            if (sandboxPublicKeyVal && sandboxSecretKeyVal) {
+                if (sandboxPublicKeyVal === sandboxSecretKeyVal) {
+                    showErrorMessage(sandboxSecretKey, "Sandbox Public Key and Sandbox Secret Key must be different.");
+                    hasErrors = true;
+                }
+            }
+    
+            // Ensure sandbox keys are mandatory if the checkbox is checked
             if (sandboxCheckbox.is(":checked")) {
                 if (!sandboxPublicKeyVal) {
                     showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
@@ -229,11 +265,18 @@ jQuery(document).ready(function ($) {
                 }
             }
         });
-
+    
         if (hasErrors) {
+            console.log("Form blocked due to errors.");
             event.preventDefault(); // Stop form submission
+        } else {
+            console.log("Form passed validation.");
         }
     });
+    
+  
+    
+    
 
     $(document).on("change", ".sandbox-checkbox", function () {
         let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
@@ -314,13 +357,13 @@ jQuery(document).ready(function($) {
                 $statusLabel
                     .removeClass('live-status invalid active inactive')
                     .addClass('sandbox-status ' + sandboxStatus.toLowerCase())
-                    .text('Sandbox account status: ' + sandboxStatus);
+                    .text('Sandbox Account Status: ' + capitalizeFirstLetter(sandboxStatus));
             } else {
                 // Update class and text for live mode
                 $statusLabel
                     .removeClass('sandbox-status invalid active inactive')
                     .addClass('live-status ' + liveStatus.toLowerCase())
-                    .text('live account status: ' + liveStatus);
+                    .text('Live Account Status: ' + capitalizeFirstLetter(liveStatus));
             }
         });
     }
@@ -333,6 +376,11 @@ jQuery(document).ready(function($) {
     // Optional: Update once on page load also (in case something is missed)
    // updateAccountStatuses();
 });
+
+// Function to capitalize the first letter
+function capitalizeFirstLetter(str) {
+    return str.charAt(0).toUpperCase() + str.slice(1);
+}
 
 
 });

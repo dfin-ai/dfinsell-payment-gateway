@@ -367,9 +367,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                                     <span class="account-status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
                                         <?php
                                        if ($sandbox_enabled) {
-                                        echo esc_html__('Sandbox Account Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_status);
+                                        echo esc_html__('Sandbox Account Status: ', 'dfinsell-payment-gateway') . esc_html(ucfirst($sandbox_status));
                                     } else {
-                                        echo esc_html__('Live Account Status: ', 'dfinsell-payment-gateway') . esc_html($live_status);
+                                        echo esc_html__('Live Account Status: ', 'dfinsell-payment-gateway') . esc_html(ucfirst($live_status));
                                     }?>
                                     </span>
                                 </div>
