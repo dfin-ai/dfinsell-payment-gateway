@@ -400,7 +400,7 @@ function activate_cron_job() {
 
 public function handle_cron_event()
 {
-    wc_get_logger()->info("Cron started", ['source' => 'dfinsell-payment-gateway']);
+    wc_get_logger()->info("Sync started via API.", ['source' => 'dfinsell-payment-gateway']);
 
     $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts');
 	if (is_string($accounts)) {
@@ -460,9 +460,9 @@ public function handle_cron_event()
 
     $response_body = wp_remote_retrieve_body($response);
     $response_data = json_decode($response_body, true);
-    wc_get_logger()->info('DFin Sell sync account Response: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
-
+   
     $updated = false;
+	$statusSummary = [];
     if (!empty($response_data['statuses'])) {
         foreach ($response_data['statuses'] as $statusData) {
             if (
@@ -476,6 +476,11 @@ public function handle_cron_event()
                     ) {
                         $account['live_status'] = $statusData['status'];
                         $updated = true;
+						$statusSummary[] = [
+							'title'  => $account['title'] ?? 'N/A',
+							'mode'   => $statusData['mode'],
+							'status' => $statusData['status'],
+						];
                     }
 
                     if (
@@ -484,15 +489,22 @@ public function handle_cron_event()
                     ) {
                         $account['sandbox_status'] = $statusData['status'];
                         $updated = true;
+						$statusSummary[] = [
+							'title'  => $account['title'] ?? 'N/A',
+							'mode'   => $statusData['mode'],
+							'status' => $statusData['status'],
+						];
                     }
                 }
             }
         }
     }
-
+	if (!empty($statusSummary)) {
+		wc_get_logger()->info('DFin Sell sync account Response: ' . json_encode($statusSummary), ['source' => 'dfinsell-payment-gateway']);
+	}
     if ($updated) {
         update_option('woocommerce_dfinsell_payment_gateway_accounts', $accounts);
-        wc_get_logger()->info("Cron updated account statuses.", ['source' => 'dfinsell-payment-gateway']);
+        wc_get_logger()->info("Sync completed successfully via API.", ['source' => 'dfinsell-payment-gateway']);
     } else {
         wc_get_logger()->info("Cron ran but no statuses were updated", ['source' => 'dfinsell-payment-gateway']);
     }
@@ -518,7 +530,7 @@ function dfinsell_manual_sync_callback() {
 		wp_die();
 	}
 
-	wc_get_logger()->info("Manual sync initiated by user: " . get_current_user_id(), ['source' => 'dfinsell-payment-gateway']);
+	wc_get_logger()->info("Manual sync initiated", ['source' => 'dfinsell-payment-gateway']);
 	
 	try {
 		// Start output buffering to capture any unexpected output

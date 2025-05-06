@@ -331,12 +331,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
             <td class="forminp">
             <div id="global-error" class="error-message" style="color: red; margin-bottom: 10px;"></div> 
                 <div class="dfinsell-accounts-container">
-				
+				<?php if (!empty($option_value)): ?>
                 <div class="dfinsell-sync-account">
                 <span id="dfinsell-sync-status" ></span>    
             <button class="button"  class="dfinsell-sync-accounts" id="dfinsell-sync-accounts"><span><i class="fa fa-refresh"  aria-hidden="true"></i></span>  <?php esc_html_e( 'Sync Accounts', 'dfinsell-payment-gateway' ); ?></button>
-           
-        </div>
+            </div>
+			<?php endif; ?>
+			
                 
                     <?php if (empty($option_value)): ?>
 						<div class="empty-account"><?php esc_html_e('No accounts available. Please add one to continue.', 'dfinsell-payment-gateway'); ?></div>
