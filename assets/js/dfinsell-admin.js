@@ -81,32 +81,29 @@ jQuery(document).ready(function($) {
             }
         });
     });
-jQuery(document).ready(function($) {
+
     // Function to update all account statuses
     function updateAccountStatuses() {
         var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked');
-
-      
-       
-            var liveStatus =$('input[name="live_status"]').val();
+        var liveStatus =$('input[name="live_status"]').val();
             var sandboxStatus =$('input[name="sandbox_status"]').val();
             if (!sandboxStatus) {
                 sandboxStatus = 'unknown';
             }
-            var $statusLabel =$('.account-status-label');
+            var $statusLabel =$('.dfinsell-status-label');
 
             if (sandboxEnabled) {
                 // Update class and text for sandbox mode
                 $statusLabel
                     .removeClass('live-status invalid active inactive')
                     .addClass('sandbox-status ' + sandboxStatus.toLowerCase())
-                    .text('Sandbox account status: ' + sandboxStatus);
+                    .text('Status: ' + sandboxStatus);
             } else {
                 // Update class and text for live mode
                 $statusLabel
                     .removeClass('sandbox-status invalid active inactive')
                     .addClass('live-status ' + liveStatus.toLowerCase())
-                    .text('live account status: ' + liveStatus);
+                    .text('Status: ' + liveStatus);
             }
        
     }
@@ -118,7 +115,7 @@ jQuery(document).ready(function($) {
 
     // Optional: Update once on page load also (in case something is missed)
    // updateAccountStatuses();
-});
+
 
 
 });

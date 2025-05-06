@@ -968,6 +968,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			return; // Only load on WooCommerce settings page
 		}
 
+		// Enqueue Admin CSS
+        wp_enqueue_style('dfinsell-font-awesome', plugins_url('../assets/css/font-awesome.css', __FILE__), [], filemtime(plugin_dir_path(__FILE__) . '../assets/css/font-awesome.css'), 'all');
+
+
         wp_enqueue_style(
             'dfinsell-admin-style',
             plugins_url('assets/css/admin-style.css', __DIR__), // This ensures correct path
@@ -1086,42 +1090,16 @@ public function generate_accounts_repeater_html($key, $data)
 
     
 ?>
-    <tr valign="top">
-       
-        <td class="forminp">
-        
-            <div class="dfinsell-accounts-container">
-              
-            <div class="dfinsell-sync-account">
-            <span id="dfinsell-sync-status" ></span>    
-        	 <button class="button"  class="dfinsell-sync-accounts" id="dfinsell-sync-accounts"><span><i class="fa fa-refresh"  aria-hidden="true"></i></span>  <?php esc_html_e( 'Sync Account', 'dfinsell-payment-gateway' ); ?></button>
-       					<input type="hidden" name="live_status"
+ 		  <div class="dfinsell-single-account">
+            <p class="dfinsell-status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">Status:  <?php echo $sandbox_enabled ? $sandbox_status : $live_status; ?><p>
+			<input type="hidden" name="live_status"
                         value="<?php echo $live_status ?>">
                         <input type="hidden" name="sandbox_status"
                         value="<?php echo $sandbox_status ?>">
- 
-                        
-                                <div class="account-status-block" style="float: right;">
-                                <span class="account-status-label <?php echo $sandbox_enabled ? 'sandbox-status' : 'live-status'; ?> <?php echo strtolower($sandbox_enabled ? ($sandbox_status ?? '') : ($live_status ?? '')); ?>">
-                                    <?php
-                                   if ($sandbox_enabled) {
-                                    echo esc_html__('Sandbox Account Status: ', 'dfinsell-payment-gateway') . esc_html($sandbox_status);
-                                } else {
-                                    echo esc_html__('Live Account Status: ', 'dfinsell-payment-gateway') . esc_html($live_status);
-                                }?>
-                                </span>
-                         
-                                    
-                            </div>
-
-                           
-                        </div>
-              
-                <?php wp_nonce_field('dfinsell_accounts_nonce_action', 'dfinsell_accounts_nonce'); ?>
-               
-            </div>
-        </td>
-    </tr>
+            <button class="button"   class="dfinsell-sync-accounts" id="dfinsell-sync-accounts"><span><i class="fa fa-refresh" aria-hidden="true"></i></span></button></div>
+              <?php wp_nonce_field('dfinsell_accounts_nonce_action', 'dfinsell_accounts_nonce'); ?>
+             </div>
+    
 <?php return ob_get_clean();
 }
     
