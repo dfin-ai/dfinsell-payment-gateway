@@ -151,6 +151,7 @@ jQuery(document).ready(function ($) {
     
         let allKeys = new Set(); // Global key uniqueness check
         let prioritySet = new Set(); // For unique priority
+        let titleSet = new Set();
         let hasErrors = false;
     
         // Helper for uniqueness validation
@@ -183,7 +184,13 @@ jQuery(document).ready(function ($) {
             if (!titleVal) {
                 showErrorMessage(title, "Title is required.");
                 hasErrors = true;
+            } else if (titleSet.has(titleVal)) {
+                showErrorMessage(title, "Title must be unique.");
+                hasErrors = true;
+            } else {
+                titleSet.add(titleVal);
             }
+        
     
             // Priority required & unique
             if (!priorityVal) {
