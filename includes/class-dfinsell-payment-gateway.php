@@ -1099,7 +1099,13 @@ public function generate_accounts_repeater_html($key, $data)
                         value="<?php echo $live_status ?>">
                         <input type="hidden" name="sandbox_status"
                         value="<?php echo $sandbox_status ?>">
-            <button class="button"   class="dfinsell-sync-accounts" id="dfinsell-sync-accounts"><span><i class="fa fa-refresh" aria-hidden="true"></i></span></button></div>
+            <button class="button"   class="dfinsell-sync-accounts" id="dfinsell-sync-accounts"><span>
+				<i class="fa fa-refresh" aria-hidden="true"></i>
+				</span>
+			</button>
+			<span id="dfinsell-sync-status" ></span>    
+
+		</div>
               <?php wp_nonce_field('dfinsell_accounts_nonce_action', 'dfinsell_accounts_nonce'); ?>
              </div>
     
