@@ -152,15 +152,20 @@
 .status-label.inactive ,.status-label.invalid,.account-status-label.inactive ,.account-status-label.invalid ,.account-status-label.unknown{
     background-color: #dc3545; /* Red */
 }
+#dfinsell-sync-status{
+	padding-right: 10px;
+}
 
 .dfinsell-sync-account{
-	text-align: right;
+	justify-content: end;
+    align-items: center;
+	display: flex;
 	margin-bottom: 15px !important;
 }
 .dfinsell-sync-account button{
-	border: 1px solid #8264D7;
-	color: #8264D7;
-	background: #8264D717;
+	border: 1px solid #8264D7 !important;
+	color: #8264D7 !important;
+	background: #8264D717 !important;
 	border-radius: 4px;
 	padding: 7px 10px;
 	font-size: 14px;
