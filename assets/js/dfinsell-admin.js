@@ -32,8 +32,8 @@ jQuery(document).ready(function ($) {
       toggleSandboxFields()
     }
   )
-})
-jQuery(document).ready(function($) {
+
+
     $('#dfinsell-sync-accounts').on('click', function(e) {
         e.preventDefault();
         

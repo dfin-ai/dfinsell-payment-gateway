@@ -137,10 +137,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Display all errors
 		if (!empty($errors)) {
+			
 			foreach ($errors as $error) {
-				$this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
+				WC_Admin_Settings::add_error($error);
+				//$this->admin_notices->dfinsell_add_notice('settings_error', 'error', $error);
 			}
-			add_action('admin_notices', array($this->admin_notices, 'display_notices'));
+			//add_action('admin_notices', array($this->admin_notices, 'display_notices'));
+			// Ensure admin notices are shown
+			add_action('admin_notices', 'WC_Admin_Settings::show_messages');
 		}
 
         if (empty($errors)) {
