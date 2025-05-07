@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.7
-Stable tag: 1.1.4 (Beta)  
+Stable tag: 1.1.5
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -26,6 +26,10 @@ This plugin integrates DFin Sell Payment Gateway with WooCommerce, enabling you 
 Visit the DFin website and log in to your account. Navigate to Developer Settings to generate or retrieve API keys.
 
 == Changelog ==
+
+= 1.1.5 =
+* Added a Sync button to map accounts between Dfinsell and WordPress for better integration.
+* Implemented order cancellation handling to keep transaction statuses accurate.
 
 = 1.1.4 (Beta) =
 * Applied a lightweight security check enhancement to improve request validation and reinforce data integrity.
@@ -84,6 +88,11 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
+
+== Upgrade Notice ==
+
+= 1.1.5 =
+* Adds account sync functionality and handles order cancellations for improved accuracy and integration.
 
 = 1.1.4 (Beta) =
 * Applied a lightweight security check enhancement to improve request validation and reinforce data integrity.
