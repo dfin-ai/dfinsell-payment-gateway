@@ -118,4 +118,58 @@ jQuery(document).ready(function ($) {
 
 
 
+    $('form').on('submit', function (event) {
+        $('.error-message').remove();
+    
+        const sandboxSelected = $('#woocommerce_dfinsell_sandbox').is(':checked');
+        const publicKey = sandboxSelected
+            ? $('[name="woocommerce_dfinsell_sandbox_public_key"]').val().trim()
+            : $('[name="woocommerce_dfinsell_public_key"]').val().trim();
+    
+        const secretKey = sandboxSelected
+            ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]').val().trim()
+            : $('[name="woocommerce_dfinsell_secret_key"]').val().trim();
+    
+        let hasErrors = false;
+    
+        // Public key required
+        if (!publicKey) {
+            const field = sandboxSelected
+                ? $('[name="woocommerce_dfinsell_sandbox_public_key"]')
+                : $('[name="woocommerce_dfinsell_public_key"]');
+            field.after('<div class="error-message" style="color:red; margin-top:4px;">Public Key is required.</div>');
+            hasErrors = true;
+        }
+    
+        // Secret key required
+        if (!secretKey) {
+            const field = sandboxSelected
+                ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]')
+                : $('[name="woocommerce_dfinsell_secret_key"]');
+            field.after('<div class="error-message" style="color:red; margin-top:4px;">Secret Key is required.</div>');
+            hasErrors = true;
+        }
+    
+        // Uniqueness check: same keys
+        if (publicKey && secretKey && publicKey === secretKey) {
+            const field = sandboxSelected
+                ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]')
+                : $('[name="woocommerce_dfinsell_secret_key"]');
+            field.after('<div class="error-message" style="color:red; margin-top:4px;">Secret Key must be different from Public Key.</div>');
+            hasErrors = true;
+        }
+    
+        // Stop form only if errors
+        if (hasErrors) {
+            event.preventDefault();
+            $(this).find('[type="submit"]').removeClass('is-busy');
+        }
+    });
+    
+
+
 });
+
+
+
+
