@@ -7,7 +7,7 @@
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfinsell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfinsell-payment-gateway
- * Version: 1.1.5
+ * Version: 1.1.5-Beta
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -81,18 +81,19 @@ function cancel_unpaid_order_action($order_id) {
 		}
 		// ========================== start code for expiring payment link ==========================
 		//  Get latest payment URL for this order from custom table
-		$table_name = $wpdb->prefix . 'order_payment_link';
-
+        $table_name = esc_sql($wpdb->prefix . 'order_payment_link'); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		
 		$latest_uuid = $wpdb->get_row($wpdb->prepare(
-			"SELECT uuid FROM $table_name WHERE order_id = %d ORDER BY id DESC ",
-			$order_id
-		));
+            "SELECT uuid FROM {$table_name} WHERE order_id = %d ORDER BY id DESC",
+            $order_id
+        ));
 
-		if (!$latest_uuid) {
-			wc_get_logger()->error('No Record found for order ID-'.  $order_id, ['source' => 'dfinsell-payment-gateway']);
-			return;
-		}
-		$encoded_uuid_from_db = $latest_uuid->uuid ;
+        if (!$latest_uuid || !isset($latest_uuid->uuid)) {
+            wc_get_logger()->error('No Record found for order ID - ' . intval($order_id), ['source' => 'dfinsell-payment-gateway']);
+            return;
+        }
+
+        $encoded_uuid_from_db = sanitize_text_field($latest_uuid->uuid);
 
 		// Call cancel API before inserting new
 		$apiPath = '/api/cancel-order-link';
@@ -117,13 +118,14 @@ function cancel_unpaid_order_action($order_id) {
 		));
 
 
-		//Log API response for debugging
+		// Log API response for debugging (with json_encode for structured data)
 		if (is_wp_error($response)) {
-			wc_get_logger()->error('Cancel API Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
-
+		    wc_get_logger()->error('Cancel API Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
 		} else {
-			wc_get_logger()->info('Cancel API Response: ' . print_r(wp_remote_retrieve_body($response), true), ['source' => 'dfinsell-payment-gateway']);
-
+		    $response_body = wp_remote_retrieve_body($response);
+		    // If the response is an array or object, convert it to a JSON string
+		    $response_json = is_array($response_body) || is_object($response_body) ? json_encode($response_body) : $response_body;
+		    wc_get_logger()->info('Cancel API Response: ' . $response_json, ['source' => 'dfinsell-payment-gateway']);
 		}
 		// ==============/ end code for payment link expirty / =============================
 

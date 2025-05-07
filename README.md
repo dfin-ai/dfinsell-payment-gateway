@@ -141,7 +141,7 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ## Changelog
 
-### Version 1.1.5
+### Version 1.1.5-Beta
 
 - **Account Sync Feature:**  
   Added a **Sync** button to map accounts between Dfinsell and WordPress, enabling smoother integration and management.

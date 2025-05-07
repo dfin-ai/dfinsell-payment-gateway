@@ -3,7 +3,7 @@ Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
 Tested up to: 6.8
-Stable tag: 1.1.5
+Stable tag: 1.1.5-Beta
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -27,7 +27,7 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 == Changelog ==
 
-= 1.1.5 =
+= 1.1.5-Beta =
 * Added a Sync button to map accounts between Dfinsell and WordPress for better integration.
 * Implemented order cancellation handling to keep transaction statuses accurate.
 

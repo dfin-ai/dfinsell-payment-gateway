@@ -373,7 +373,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 public function dfinsell_add_cron_interval($schedules) {
     $schedules['every_two_hours'] = array(
         'interval' => 2 * 60 * 60, // 2 hours in seconds = 7200
-        'display'  => __('Every Two Hours')
+        'display'  => __('Every Two Hours', 'dfinsell-payment-gateway')
     );
     return $schedules;
 }
