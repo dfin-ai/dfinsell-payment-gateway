@@ -33,54 +33,92 @@ jQuery(document).ready(function ($) {
     }
   )
 
+  $('#dfinsell-sync-accounts').on('click', function(e) {
+    e.preventDefault();
 
-    $('#dfinsell-sync-accounts').on('click', function(e) {
-        e.preventDefault();
+    const $button = $(this);
+    const $status = $('#dfinsell-sync-status');
+    const originalButtonText = $button.text();
+    const $syncTarget = $('.dfinsell-single-account');
+    console.log($syncTarget.length); 
+    const isSandbox = $('#woocommerce_dfinsell_sandbox').is(':checked');
+
+    // Clear previous messages
+    $('.dfinsell-sync-error').remove();
+    $status.removeClass('error success').hide();
+
+    // Get keys based on mode
+    const publicKey = isSandbox
+        ? $('[name="woocommerce_dfinsell_sandbox_public_key"]').val().trim()
+        : $('[name="woocommerce_dfinsell_public_key"]').val().trim();
+
+    const secretKey = isSandbox
+        ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]').val().trim()
+        : $('[name="woocommerce_dfinsell_secret_key"]').val().trim();
+
+    // Validate
+    if (!publicKey || !secretKey) {
+        const modeLabel = isSandbox ? 'Sandbox' : 'Live';
+        const missingFields = [];
+        if (!publicKey) missingFields.push('Public Key');
+        if (!secretKey) missingFields.push('Secret Key');
+    
+        const errorMessage = `${modeLabel} ${missingFields.join(' and ')} required for sync.`;
         
-        var $button = $(this);
-        var $status = $('#dfinsell-sync-status');
-        var originalButtonText = $button.text();
-        
-        // Set loading state
-        $button.prop('disabled', true);
-        $button.html('<span class="spinner is-active" style="float: none; margin: 0;"></span> Syncing...');
-        $status.removeClass('error success').text('Syncing accounts...').show();
-        
-        $.ajax({
-            url: dfinsell_ajax_object.ajax_url,
-            method: 'POST',
-            dataType: 'json',
-            data: {
-                action: 'dfinsell_manual_sync',
-                nonce: dfinsell_ajax_object.nonce
-            },
-            success: function(response) {
-                if (response.success) {
-                    $status.addClass('success').text(response.data.message || 'Sync completed successfully!');
-                    
-                    // Refresh the page after 2 seconds to show updated statuses
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 2000);
-                } else {
-                    $status.addClass('error').text(response.data.message || 'Sync failed. Please try again.');
-                }
-            },
-            error: function(xhr, status, error) {
-                var errorMessage = 'AJAX Error: ';
-                if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-                    errorMessage += xhr.responseJSON.data.message;
-                } else {
-                    errorMessage += error;
-                }
-                $status.addClass('error').text(errorMessage);
-            },
-            complete: function() {
-                $button.prop('disabled', false);
-                $button.text(originalButtonText);
+        console.log($syncTarget.length); 
+        console.log(errorMessage);
+    
+        // Ensure target exists before inserting
+        if ($syncTarget.length) {
+            $('<div class="dfinsell-sync-error" style="color: red; margin-left: 241px;">')
+                .text(errorMessage)
+                .insertAfter($syncTarget);
+        } else {
+            alert(errorMessage); // Fallback if the target div is missing
+        }
+    
+        return; // Stop sync
+    }
+
+    // Proceed with sync
+    $button.prop('disabled', true);
+    $button.html('<span class="spinner is-active" style="float: none; margin: 0;"></span> Syncing...');
+    $status.text('Syncing accounts...').show();
+
+    $.ajax({
+        url: dfinsell_ajax_object.ajax_url,
+        method: 'POST',
+        dataType: 'json',
+        data: {
+            action: 'dfinsell_manual_sync',
+            nonce: dfinsell_ajax_object.nonce
+        },
+        success: function(response) {
+            if (response.success) {
+                $status.addClass('success').text(response.data.message || 'Sync completed successfully!');
+                setTimeout(function() {
+                    window.location.reload();
+                }, 2000);
+            } else {
+                $status.addClass('error').text(response.data.message || 'Sync failed. Please try again.');
             }
-        });
+        },
+        error: function(xhr, status, error) {
+            let errorMessage = 'AJAX Error: ';
+            if (xhr.responseJSON?.data?.message) {
+                errorMessage += xhr.responseJSON.data.message;
+            } else {
+                errorMessage += error;
+            }
+            $status.addClass('error').text(errorMessage);
+        },
+        complete: function() {
+            $button.prop('disabled', false);
+            $button.text(originalButtonText);
+        }
     });
+});
+
 
     // Function to update all account statuses
     function updateAccountStatuses() {
