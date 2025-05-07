@@ -116,56 +116,102 @@ jQuery(document).ready(function ($) {
     // Optional: Update once on page load also (in case something is missed)
    // updateAccountStatuses();
 
+   $('form').on('submit', function (event) {
+    $('.error-message').remove(); // Clear previous messages
+
+    const isSandbox = $('#woocommerce_dfinsell_sandbox').is(':checked');
+
+    // Fields
+    const $livePublic = $('[name="woocommerce_dfinsell_public_key"]');
+    const $liveSecret = $('[name="woocommerce_dfinsell_secret_key"]');
+    const $sandboxPublic = $('[name="woocommerce_dfinsell_sandbox_public_key"]');
+    const $sandboxSecret = $('[name="woocommerce_dfinsell_sandbox_secret_key"]');
+
+    const livePublic = $livePublic.val().trim();
+    const liveSecret = $liveSecret.val().trim();
+    const sandboxPublic = $sandboxPublic.val().trim();
+    const sandboxSecret = $sandboxSecret.val().trim();
+
+    // Track if a field already has an error shown
+    const shownErrors = new Set();
+
+    function showError($field, message) {
+        const fieldName = $field.attr('name');
+        if (!shownErrors.has(fieldName)) {
+            $field.after(`<div class="error-message" style="color:red; margin-top:4px;">${message}</div>`);
+            shownErrors.add(fieldName);
+        }
+    }
+
+    let hasErrors = false;
+
+    // Required fields (only current mode)
+    if (isSandbox) {
+        if (!sandboxPublic) {
+            showError($sandboxPublic, 'Public Key is required.');
+            hasErrors = true;
+        }
+        if (!sandboxSecret) {
+            showError($sandboxSecret, 'Secret Key is required.');
+            hasErrors = true;
+        }
+    } else {
+        if (!livePublic) {
+            showError($livePublic, 'Public Key is required.');
+            hasErrors = true;
+        }
+        if (!liveSecret) {
+            showError($liveSecret, 'Secret Key is required.');
+            hasErrors = true;
+        }
+    }
+
+    // Same key (same mode) validation
+    if (sandboxPublic && sandboxSecret && sandboxPublic === sandboxSecret) {
+        showError($sandboxSecret, 'Sandbox Secret Key must be different from Sandbox Public Key.');
+        hasErrors = true;
+    }
+
+    if (livePublic && liveSecret && livePublic === liveSecret) {
+        showError($liveSecret, 'Live Secret Key must be different from Live Public Key.');
+        hasErrors = true;
+    }
+
+    // Cross-mode comparisons (only one error per field)
+    if (livePublic && sandboxPublic && livePublic === sandboxPublic) {
+        showError($livePublic, 'Live Public Key and Sandbox Public Key must be different.');
+        showError($sandboxPublic, 'Live Public Key and Sandbox Public Key must be different.');
+        hasErrors = true;
+    }
+
+    if (liveSecret && sandboxSecret && liveSecret === sandboxSecret) {
+        showError($liveSecret, 'Live Secret Key and Sandbox Secret Key must be different.');
+        showError($sandboxSecret, 'Live Secret Key and Sandbox Secret Key must be different.');
+        hasErrors = true;
+    }
+
+    if (livePublic && sandboxSecret && livePublic === sandboxSecret) {
+        showError($livePublic, 'Live Public Key and Sandbox Secret Key must be different.');
+        showError($sandboxSecret, 'Live Public Key and Sandbox Secret Key must be different.');
+        hasErrors = true;
+    }
+
+    if (liveSecret && sandboxPublic && liveSecret === sandboxPublic) {
+        showError($liveSecret, 'Live Secret Key and Sandbox Public Key must be different.');
+        showError($sandboxPublic, 'Live Secret Key and Sandbox Public Key must be different.');
+        hasErrors = true;
+    }
+
+    if (hasErrors) {
+        event.preventDefault();
+    }
+});
 
 
-    $('form').on('submit', function (event) {
-        $('.error-message').remove();
-    
-        const sandboxSelected = $('#woocommerce_dfinsell_sandbox').is(':checked');
-        const publicKey = sandboxSelected
-            ? $('[name="woocommerce_dfinsell_sandbox_public_key"]').val().trim()
-            : $('[name="woocommerce_dfinsell_public_key"]').val().trim();
-    
-        const secretKey = sandboxSelected
-            ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]').val().trim()
-            : $('[name="woocommerce_dfinsell_secret_key"]').val().trim();
-    
-        let hasErrors = false;
-    
-        // Public key required
-        if (!publicKey) {
-            const field = sandboxSelected
-                ? $('[name="woocommerce_dfinsell_sandbox_public_key"]')
-                : $('[name="woocommerce_dfinsell_public_key"]');
-            field.after('<div class="error-message" style="color:red; margin-top:4px;">Public Key is required.</div>');
-            hasErrors = true;
-        }
-    
-        // Secret key required
-        if (!secretKey) {
-            const field = sandboxSelected
-                ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]')
-                : $('[name="woocommerce_dfinsell_secret_key"]');
-            field.after('<div class="error-message" style="color:red; margin-top:4px;">Secret Key is required.</div>');
-            hasErrors = true;
-        }
-    
-        // Uniqueness check: same keys
-        if (publicKey && secretKey && publicKey === secretKey) {
-            const field = sandboxSelected
-                ? $('[name="woocommerce_dfinsell_sandbox_secret_key"]')
-                : $('[name="woocommerce_dfinsell_secret_key"]');
-            field.after('<div class="error-message" style="color:red; margin-top:4px;">Secret Key must be different from Public Key.</div>');
-            hasErrors = true;
-        }
-    
-        // Stop form only if errors
-        if (hasErrors) {
-            event.preventDefault();
-            $(this).find('[type="submit"]').removeClass('is-busy');
-        }
-    });
-    
+
+
+
+
 
 
 });
