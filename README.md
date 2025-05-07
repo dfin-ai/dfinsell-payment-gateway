@@ -145,6 +145,7 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 - **Account Sync Feature:**  
   Added a **Sync** button to map accounts between Dfinsell and WordPress, enabling smoother integration and management.
+  Account statuses are also updated automatically every 2 hours to keep data in sync.
 
 - **Order Cancellation Handling:**  
   Implemented logic to handle order cancellations, ensuring transaction statuses remain accurate and up to date.
