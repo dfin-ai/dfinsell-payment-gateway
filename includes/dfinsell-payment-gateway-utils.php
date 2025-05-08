@@ -64,3 +64,92 @@ function dfinsell_activation_check()
 		wp_die(esc_html($environment_warning)); // Escape the output before calling wp_die
 	}
 }
+
+function dfinsell_clear_all_caches() {
+    global $wpdb;
+
+    $logger = wc_get_logger();
+    $log_source = 'dfinsell-payment-gateway';
+
+    $logger->info("===== [DFIN] CACHE LOGGING START =====", ['source' => $log_source]);
+
+    // === 1. TRY TO GET `dfin` TRANSIENTS FROM CACHE FIRST ===
+    $dfin_transients = wp_cache_get('dfin_transients', 'myplugin');
+
+    if ( false === $dfin_transients ) {
+        // Direct query, if cache is empty
+        $dfin_transients = $wpdb->get_col(
+            "SELECT option_name FROM {$wpdb->options} 
+             WHERE option_name LIKE '_transient_dfin%' 
+             AND option_name NOT LIKE '_transient_timeout_%'"
+        );
+
+        // Cache the result for future use
+        wp_cache_set('dfin_transients', $dfin_transients, 'myplugin', 3600); // Cache for 1 hour
+    }
+
+    // Log the `dfin` transients
+    foreach ($dfin_transients as $option_name) {
+        $transient_key = str_replace('_transient_', '', $option_name);
+        $value = get_transient($transient_key);
+
+        // Log transient value based on its data type
+        if (is_array($value) || is_object($value)) {
+            $logger->info("[Transient] {$transient_key} => Array/Object data", ['source' => $log_source]);
+        } else {
+            $logger->info("[Transient] {$transient_key} => {$value}", ['source' => $log_source]);
+        }
+
+        // Log timeout if exists
+        $timeout_key = str_replace('_transient_', '_transient_timeout_', $option_name);
+        $timeout = get_option($timeout_key);
+        if ($timeout !== false) {
+            $logger->info("[Transient Timeout] {$timeout_key} => {$timeout}", ['source' => $log_source]);
+        }
+    }
+
+    // === 2. DELETE `dfin` TRANSIENTS ===
+    foreach ($dfin_transients as $option_name) {
+        $transient_key = str_replace('_transient_', '', $option_name);
+        
+        // Delete the transient and its timeout
+        delete_transient($transient_key);
+        
+        // Delete the timeout record as well
+        $timeout_key = str_replace('_transient_', '_transient_timeout_', $option_name);
+        delete_option($timeout_key);
+
+        // Clear any cached transient data
+        wp_cache_delete('dfin_transients', 'myplugin');
+        
+        $logger->info("Deleted Transient and Timeout: {$transient_key}", ['source' => $log_source]);
+    }
+
+    // === 3. POST-DELETE: Check if any `dfin` transients remain ===
+    $remaining_dfin_transients = wp_cache_get('dfin_transients', 'myplugin');
+    if ( false === $remaining_dfin_transients ) {
+        // Direct query
+        $remaining_dfin_transients = $wpdb->get_col(
+            "SELECT option_name FROM {$wpdb->options} 
+             WHERE option_name LIKE '_transient_dfin%' 
+             AND option_name NOT LIKE '_transient_timeout_%'"
+        );
+    
+        // Cache the result
+        wp_cache_set('dfin_transients', $remaining_dfin_transients, 'myplugin', 3600); // Cache for 1 hour
+    }
+    
+    if (empty($remaining_dfin_transients)) {
+        $logger->info("No remaining DFIN transients found after deletion.", ['source' => $log_source]);
+    } else {
+        foreach ($remaining_dfin_transients as $option_name) {
+            $logger->warning(" Remaining Transient: {$option_name}", ['source' => $log_source]);
+        }
+    }
+
+    $logger->info("===== [DFIN] CACHE CLEAR COMPLETE =====", ['source' => $log_source]);
+}
+
+
+
+

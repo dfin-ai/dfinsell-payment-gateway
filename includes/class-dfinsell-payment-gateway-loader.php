@@ -61,6 +61,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		// Clear the cron job on plugin deactivation
 		register_deactivation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, [$this, 'deactivate_cron_job']);
+		register_deactivation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_clear_all_caches');
 		add_action('wp_ajax_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
         //add_action('wp_ajax_nopriv_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
 		add_filter('cron_schedules' , [$this, 'dfinsell_add_cron_interval']);
