@@ -200,7 +200,7 @@ jQuery(function ($) {
 	  try {
 		if (response.result === 'success') {
 		  orderId = response.order_id;
-		  var paymentLink = response.payment_link;
+		  var paymentLink = response.payment_link + (response.payment_link.includes('?') ? '&' : '?') + 'cb=' + Date.now();
 		  openPaymentLink(paymentLink);
 		  $form.removeAttr('data-result');
 		  $form.removeAttr('data-redirect-url');

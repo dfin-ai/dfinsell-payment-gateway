@@ -27,6 +27,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
     private $current_account_index = 0;
     private $used_accounts = [];
 
+	private $plugin_version;  // Added plugin version property
+
     /**
      * Constructor.
      */
@@ -63,6 +65,27 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         $this->public_key = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('public_key')) : sanitize_text_field($this->get_option('sandbox_public_key'));
         $this->secret_key = $this->sandbox === 'no' ? sanitize_text_field($this->get_option('secret_key')) : sanitize_text_field($this->get_option('sandbox_secret_key'));
         $this->current_account_index = 0;
+
+		// Get the plugin version from the plugin file
+		if (!function_exists('get_plugin_data')) {
+		    require_once ABSPATH . 'wp-admin/includes/plugin.php';
+		}
+
+		// Correct file path to the main plugin file (without the 'includes/' part)
+		$plugin_file = plugin_dir_path(__FILE__) . '../dfinsell-payment-gateway.php';  // Correct plugin file path
+
+		//wc_get_logger()->info('Plugin File Path: ' . $plugin_file, ['source' => 'dfinsell-payment-gateway']);
+
+		$plugin_data = get_plugin_data($plugin_file);
+
+		// Log the fetched plugin data for debugging
+		//wc_get_logger()->info('Plugin Data: ' . print_r($plugin_data, true), ['source' => 'dfinsell-payment-gateway']);
+
+
+		$this->plugin_version = isset($plugin_data['Version']) ? $plugin_data['Version'] : 'unknown'; // Fallback to 'unknown' if version is not set
+
+		// Log the plugin version separately
+		//wc_get_logger()->info('Plugin Version: ' . $this->plugin_version, ['source' => 'dfinsell-payment-gateway']);
 
         // Define hooks and actions.
         add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'dfinsell_process_admin_options']);
@@ -536,14 +559,24 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
             // **Check Transaction Limit**
             $transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
+
+			
+			// Log the plugin version being passed in the headers
+			wc_get_logger()->info('Plugin Version being sent: ' . $this->plugin_version, ['source' => 'dfinsell-payment-gateway']);
+
+			$headers = [
+				'Content-Type' => 'application/x-www-form-urlencoded',
+				'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
+				'X-Plugin-Version' => $this->plugin_version,
+			];
+
+			wc_get_logger()->info('Request Headers for Transaction Limit API: ' . print_r($headers, true), ['source' => 'dfinsell-payment-gateway']);
+
             $transaction_limit_response = wp_remote_post($transactionLimitApiUrl, [
                 'method' => 'POST',
                 'timeout' => 30,
                 'body' => $data,
-                'headers' => [
-                    'Content-Type' => 'application/x-www-form-urlencoded',
-                    'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
-                ],
+                'headers' => $headers,
                 'sslverify' => true,
             ]);
 
@@ -595,10 +628,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 'method' => 'POST',
                 'timeout' => 30,
                 'body' => $data,
-                'headers' => [
-                    'Content-Type' => 'application/x-www-form-urlencoded',
-                    'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
-                ],
+                'headers' => $headers,
                 'sslverify' => true,
             ]);
 
@@ -750,8 +780,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
                 }
+
+				$plugin_version = $this->plugin_version;  // Assuming $this->plugin_version holds the correct version
+				$payment_link = esc_url($response_data['data']['payment_link']);
+				$payment_link_with_version = add_query_arg('plugin_version', $plugin_version, $payment_link);
+
+				// Log the payment link with the version appended
+				wc_get_logger()->info('Payment Link with Plugin Version: ' . $payment_link_with_version, ['source' => 'dfinsell-payment-gateway']);
+
                 return [
-                    'payment_link' => esc_url($response_data['data']['payment_link']),
+                    'payment_link' => $payment_link_with_version,
                     'result' => 'success',
                 ];
             }
