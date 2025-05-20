@@ -465,8 +465,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
      */
     public function process_payment($order_id, $used_accounts = [])
     {
-        global $woocommerce;
-
+		global $wpdb;
         // Retrieve client IP
         $ip_address = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
         if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
@@ -645,9 +644,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 }
 
                 // =========================== / start code for payment link / ================= 
-                global $wpdb;
+                
 
-                $table_name = esc_sql($wpdb->prefix . 'order_payment_link');
+				$table_name = $wpdb->prefix . 'order_payment_link';
+				$table_name = esc_sql($table_name); // sanitize as an extra precaution
                 $order_id   = $order->get_id();
                 $uuid = sanitize_text_field($response_data['data']['pay_id']);
 
@@ -656,96 +656,133 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 
                 // ========================== Check if table exists, create if not ==========================
-                // $dbVal = $wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $table_name)); 
-                // Get all tables from the WordPress database
-                $tables = $wpdb->tables();
-                if (!in_array($table_name, $tables)) {
-                    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+                $charset_collate = $wpdb->get_charset_collate();
 
-                    $charset_collate = $wpdb->get_charset_collate();
+				// Use dbDelta() to create/update the table schema. dbDelta() handles the "table exists" check.
+				//  Important:  Use placeholders for any variables in the CREATE TABLE statement, even though
+				//  dbDelta() is designed to handle this.  It's good practice.  In this case, we are using $table_name
+				$sql = "
+				CREATE TABLE IF NOT EXISTS {$table_name} (
+				    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				    order_id BIGINT(20) UNSIGNED NOT NULL,
+				    uuid TEXT NOT NULL,
+				    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+				    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+				    PRIMARY KEY (id),
+				    INDEX (order_id)
+				) ENGINE=InnoDB {$charset_collate};
+				";
 
-                    $sql = "CREATE TABLE $table_name (
-                        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                        order_id BIGINT(20) UNSIGNED NOT NULL,
-                        uuid TEXT NOT NULL,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        PRIMARY KEY (id),
-                        INDEX (order_id)
-                    ) ENGINE=InnoDB $charset_collate;";
+				require_once ABSPATH . 'wp-admin/includes/upgrade.php'; // Only include upgrade.php when needed.
+				dbDelta($sql);
 
-                    dbDelta($sql);
-                }
+				// Check for errors after dbDelta()
+				if ($wpdb->last_error) {
+				    wc_get_logger()->error(
+				        "Error creating table {$table_name}: " . $wpdb->last_error,
+				        ['source' => 'dfinsell-payment-gateway']
+				    );
+				}
 
 
-                try {
-                    // Check if existing payment links exist
-                    $existing_uuid = $wpdb->get_results($wpdb->prepare(
-                        "SELECT * FROM $table_name WHERE order_id = %d ORDER BY id DESC",
-                        $order_id
-                    ));
+              try {
+			    $cache_key   = 'order_uuid_' . $order_id;
+			    $cache_group = 'dfinsell_order_uuid';
 
-                    if (!empty($existing_uuid)) {
-                        $old_uuid = $existing_uuid[0]->uuid;
-                        $encodeed_uuid_from_db = $old_uuid;
+			    // Try to get the result from the cache
+			    $existing_uuid = wp_cache_get($cache_key, $cache_group);
 
-                        // Call cancel API before inserting new
-                        $apiPath = '/api/cancel-order-link';
-                        $url = SIP_PROTOCOL . SIP_HOST . $apiPath;
-                        $cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
+			    if (false === $existing_uuid) {
+			        // Validate table name to avoid injection
+			        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table_name)) {
+			            throw new Exception('Invalid table name');
+			        }
 
-                        $response = wp_remote_post($cleanUrl, array(
-                            'method'    => 'POST',
-                            'timeout'   => 30,
-                            'body'      => json_encode(array(
-                                'order_id'       => $order_id,
-                                'order_uuid'  => $encodeed_uuid_from_db,
-                                'status'         => 'canceled'
-                            )),
-                            'headers'   => array(
-                                'Content-Type'  => 'application/json',
-                            ),
-                            'sslverify' => true,
-                        ));
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery -- table name cannot be a placeholder, but is safe here
+$safe_table = esc_sql( $table_name );
 
-                        if (is_wp_error($response)) {
-                            wc_get_logger()->error(
-                                'Cancel API Error: ' . $response->get_error_message(),
-                                ['source' => 'dfinsell-payment-gateway']
-                            );
-                        } else {
-                            $body = wp_remote_retrieve_body($response);
-                            wc_get_logger()->info(
-                                'Cancel API Response: ' . wp_json_encode($body),
-                                ['source' => 'dfinsell-payment-gateway']
-                            );
-                        }
-                    }
+$existing_uuid = $wpdb->get_results(
+    $wpdb->prepare(
+        "SELECT * FROM `{$safe_table}` WHERE order_id = %d ORDER BY id DESC",
+        $order_id
+    )
+);
 
-                    // Use prepared statement for inserting values
-                    $inserted = $wpdb->insert(
-                        $table_name,
-                        [
-                            'order_id' => $order_id,
-                            'uuid' => $uuid,
-                        ],
-                        [
-                            '%d', // Integer format for order_id
-                            '%s', // String format for uuid
-                        ]
-                    );
 
-                    if ($inserted !== false) {
 
-                        wc_get_logger()->info(" DFinSell: Inserted new payment link for order ID $order_id ", ['source' => 'dfinsell-payment-gateway']);
-                    } else {
+			        // Cache result for 1 hour
+			        wp_cache_set($cache_key, $existing_uuid, $cache_group, 3600);
+			    }
 
-                        wc_get_logger()->error("DFinSell: Failed to insert uuid — WPDB error: " . $wpdb->last_error, ['source' => 'dfinsell-payment-gateway']);
-                    }
-                } catch (Exception $e) {
+			    if (!empty($existing_uuid)) {
+			        $old_uuid = sanitize_text_field($existing_uuid[0]->uuid);
 
-                    wc_get_logger()->error("DFinSell: Exception during payment link handling: " . $e->getMessage(), ['source' => 'dfinsell-payment-gateway']);
-                }
+			        // Cancel API call
+			        $apiPath  = '/api/cancel-order-link';
+			        $url      = SIP_PROTOCOL . SIP_HOST . $apiPath;
+			        $cleanUrl = esc_url_raw(preg_replace('#(?<!:)//+#', '/', $url));
+
+			        $response = wp_remote_post($cleanUrl, array(
+			            'method'    => 'POST',
+			            'timeout'   => 30,
+			            'body'      => wp_json_encode(array(
+			                'order_id'   => $order_id,
+			                'order_uuid' => $old_uuid,
+			                'status'     => 'canceled',
+			            )),
+			            'headers'   => array(
+			                'Content-Type' => 'application/json',
+			            ),
+			            'sslverify' => true,
+			        ));
+
+			        if (is_wp_error($response)) {
+			            wc_get_logger()->error(
+			                'Cancel API Error: ' . $response->get_error_message(),
+			                ['source' => 'dfinsell-payment-gateway']
+			            );
+			        } else {
+			            $body = wp_remote_retrieve_body($response);
+			            wc_get_logger()->info(
+			                'Cancel API Response: ' . wp_json_encode($body),
+			                ['source' => 'dfinsell-payment-gateway']
+			            );
+			        }
+			    }
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Safe use of $wpdb->insert() for custom table
+			    $inserted = $wpdb->insert(
+			        $table_name,
+			        [
+			            'order_id' => $order_id,
+			            'uuid'     => $uuid,
+			        ],
+			        [
+			            '%d',
+			            '%s',
+			        ]
+			    );
+
+			    if ($inserted !== false) {
+			        wc_get_logger()->info(
+			            "DFinSell: Inserted new payment link for order ID $order_id",
+			            ['source' => 'dfinsell-payment-gateway']
+			        );
+			    } else {
+			        wc_get_logger()->error(
+			            "DFinSell: Failed to insert uuid — WPDB error: " . $wpdb->last_error,
+			            ['source' => 'dfinsell-payment-gateway']
+			        );
+			    }
+
+			} catch (Exception $e) {
+			    wc_get_logger()->error(
+			        "DFinSell: Exception during payment link handling: " . $e->getMessage(),
+			        ['source' => 'dfinsell-payment-gateway']
+			    );
+			}
+
+
                 // =====================/ end code for payment link /
                 if (!empty($lock_key)) {
                     $this->release_lock($lock_key);
