@@ -698,17 +698,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			            throw new Exception('Invalid table name');
 			        }
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery -- table name cannot be a placeholder, but is safe here
-$safe_table = esc_sql( $table_name );
+				$safe_table = esc_sql( $table_name );
 
-$existing_uuid = $wpdb->get_results(
-    $wpdb->prepare(
-        "SELECT * FROM `{$safe_table}` WHERE order_id = %d ORDER BY id DESC",
-        $order_id
-    )
-);
-
-
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+				$existing_uuid = $wpdb->get_row(
+				    $wpdb->prepare(
+				        "SELECT * FROM `%s` WHERE order_id = %d ORDER BY id DESC",
+						$safe_table,
+				        $order_id
+				    )
+				);
 
 			        // Cache result for 1 hour
 			        wp_cache_set($cache_key, $existing_uuid, $cache_group, 3600);
