@@ -66,8 +66,8 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_filter('cron_schedules' , [$this, 'dfinsell_add_cron_interval']);
 		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
 
-		add_action('woocommerce_cancel_unpaid_order', 'cancel_unpaid_order_action');
-		add_action('woocommerce_order_status_cancelled', 'cancel_unpaid_order_action');
+		add_action('woocommerce_cancel_unpaid_order', [$this,'cancel_unpaid_order_action']);
+		add_action('woocommerce_order_status_cancelled', [$this,'cancel_unpaid_order_action']);
 	}
 	
 

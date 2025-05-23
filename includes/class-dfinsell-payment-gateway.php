@@ -703,7 +703,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
 				$existing_uuid = $wpdb->get_row(
 				    $wpdb->prepare(
-				        "SELECT * FROM `%s` WHERE order_id = %d ORDER BY id DESC",
+				        "SELECT uuid FROM `%s` WHERE order_id = %d ORDER BY id DESC",
 						$safe_table,
 				        $order_id
 				    )
