@@ -66,8 +66,8 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_filter('cron_schedules' , [$this, 'dfinsell_add_cron_interval']);
 		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
 
-		add_action('woocommerce_cancel_unpaid_order', [$this,'cancel_unpaid_order_action']);
-		add_action('woocommerce_order_status_cancelled', [$this,'cancel_unpaid_order_action']);
+		add_action('woocommerce_cancel_unpaid_order', [$this,'handle_cron_order_cancel']);
+		add_action('woocommerce_order_status_cancelled', [$this,'handle_status_cancelled']);
 	}
 	
 
@@ -562,20 +562,33 @@ function dfinsell_manual_sync_callback() {
 	wp_die(); // Always include this
 }
 
+public function handle_cron_order_cancel($order) {
+    if ($order instanceof WC_Order) {
+        $order_id = $order->get_id();
+        $this->cancel_unpaid_order_action($order_id);
+    } else {
+        wc_get_logger()->error('Cron Cancel Hook Error: Expected WC_Order instance.', ['source' => 'dfinsell-payment-gateway']);
+    }
+}
 
-function cancel_unpaid_order_action($order_param) {
+
+public function handle_status_cancelled($order_id) {
+    if (is_numeric($order_id)) {
+        $this->cancel_unpaid_order_action((int) $order_id);
+    } else {
+        wc_get_logger()->error('Status Cancelled Hook Error: Expected order ID.', ['source' => 'dfinsell-payment-gateway']);
+    }
+}
+
+function cancel_unpaid_order_action($order_id) {
 	global $wpdb;
 
-	if ($order_param instanceof WC_Order) {
-		$order_id = $order_param->get_id();
-	} elseif (is_numeric($order_param)) {
-		$order_id = (int) $order_param;
-	} else {
-		wc_get_logger()->error('Cancel order Error: Invalid order param received.', ['source' => 'dfinsell-payment-gateway']);
+	wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+
+	if (!is_numeric($order_id)) {
+		wc_get_logger()->error('Cancel order Error: Non-numeric order ID passed: ' . print_r($order_id, true), ['source' => 'dfinsell-payment-gateway']);
 		return;
 	}
-
-	wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
 
 	$order = wc_get_order($order_id);
 	// If order_id is not provided or invalid, find the latest 'shop_order_placehold'
