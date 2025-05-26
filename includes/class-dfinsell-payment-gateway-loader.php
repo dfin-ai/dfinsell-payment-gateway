@@ -563,11 +563,15 @@ function dfinsell_manual_sync_callback() {
 }
 
 
-function cancel_unpaid_order_action($order_id) {
+function cancel_unpaid_order_action($order_param) {
 	global $wpdb;
 
-	if (!$order_id) {
-		wc_get_logger()->error('Cancel order Error: Order ID is missing.', ['source' => 'dfinsell-payment-gateway']);
+	if ($order_param instanceof WC_Order) {
+		$order_id = $order_param->get_id();
+	} elseif (is_numeric($order_param)) {
+		$order_id = (int) $order_param;
+	} else {
+		wc_get_logger()->error('Cancel order Error: Invalid order param received.', ['source' => 'dfinsell-payment-gateway']);
 		return;
 	}
 
