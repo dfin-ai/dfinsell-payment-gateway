@@ -81,6 +81,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
 
         //add_action('admin_enqueue_scripts', 'dfinsell_enqueue_admin_styles');
+
+		add_action('woocommerce_cancel_unpaid_order', [$this,'handle_cron_order_cancel']);
+		add_action('woocommerce_order_status_cancelled', [$this,'handle_status_cancelled']);
     }
 
     private function get_api_url($endpoint)
@@ -1569,4 +1572,148 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         return true;
     }
+
+
+public function handle_cron_order_cancel($order) {
+    if (is_numeric($order)) {
+        $order_id = (int) $order;
+        $wc_order = wc_get_order($order_id);
+
+        if ($wc_order) {
+            $this->cancel_unpaid_order_action($order_id);
+
+            wc_get_logger()->info(
+                'Order Data (from ID): ' . wp_json_encode($wc_order->get_data()),
+                ['source' => 'dfinsell-payment-gateway']
+            );
+        } else {
+            wc_get_logger()->error(
+                'Could not retrieve WC_Order object for ID: ' . wp_json_encode($order),
+                ['source' => 'dfinsell-payment-gateway']
+            );
+        }
+
+    } elseif ($order instanceof WC_Order) {
+        $order_id = $order->get_id();
+        $this->cancel_unpaid_order_action($order_id);
+
+        wc_get_logger()->info(
+            'Order Data (object): ' . wp_json_encode($order->get_data()),
+            ['source' => 'dfinsell-payment-gateway']
+        );
+    } else {
+        wc_get_logger()->error(
+            'Cron Cancel Hook Error: Unexpected order value type: ' . gettype($order) . ' | Value: ' . wp_json_encode($order),
+            ['source' => 'dfinsell-payment-gateway']
+        );
+    }
+}
+
+
+	public function handle_status_cancelled($order_id) {
+	    if (is_numeric($order_id)) {
+	        $this->cancel_unpaid_order_action((int) $order_id);
+	    } else {
+	        wc_get_logger()->error('Status Cancelled Hook Error: Expected order ID.', ['source' => 'dfinsell-payment-gateway']);
+	    }
+	}
+
+	function cancel_unpaid_order_action($order_id) {
+		global $wpdb;
+
+		wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+
+		if (!is_numeric($order_id)) {
+			wc_get_logger()->error('Cancel order Error: Non-numeric order ID passed: ' . print_r($order_id, true), ['source' => 'dfinsell-payment-gateway']);
+			return;
+		}
+
+		$order = wc_get_order($order_id);
+		// If order_id is not provided or invalid, find the latest 'shop_order_placehold'
+		if ( ! $order_id || ! is_numeric( $order_id ) ) {
+		    $args = array(
+		        'post_type'      => 'shop_order_placehold',
+		        'post_status'    => 'any', // Or specific status if known, e.g., 'pending'
+		        'posts_per_page' => 1,
+		        'orderby'        => 'ID',
+		        'order'          => 'DESC',
+		        'fields'         => 'ids', // Only get the IDs
+		    );
+
+		    $placeholder_orders = get_posts( $args );
+
+		    if ( ! empty( $placeholder_orders ) ) {
+		        $order_id = $placeholder_orders[0];
+		        wc_get_logger()->info('Auto-fetched latest unpaid order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+		    } else {
+		        wc_get_logger()->error('Error: No unpaid placeholder orders found.', ['source' => 'dfinsell-payment-gateway']);
+		        return; // Exit if no placeholder order is found
+		    }
+		}
+
+		$order = wc_get_order($order_id);
+		if (!$order) {
+			wc_get_logger()->error('Error: No unpaid orders found.', ['source' => 'dfinsell-payment-gateway']);
+			return;
+		}
+
+		$pending_time = get_post_meta($order_id, '_pending_order_time', true);
+		$pending_time = is_numeric($pending_time) ? (int) $pending_time : 0;
+
+		if ($order->has_status('pending') && (time() - $pending_time) >= (30 * 60)) {
+			$order->update_status('cancelled', 'Order automatically cancelled due to unpaid timeout.');
+			wc_reduce_stock_levels($order_id);
+		}
+
+		// ========================== start code for expiring payment link ==========================
+		$table_name = $wpdb->prefix . 'order_payment_link';
+		$safe_table_name = esc_sql($table_name); // sanitize as per standard
+
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+	$latest_uuid = $wpdb->get_row(
+	    $wpdb->prepare(
+	        "SELECT uuid FROM `%s` WHERE order_id = %d ORDER BY id DESC",
+	        $safe_table_name,
+	        $order_id
+	    )
+	);
+
+	if (!$latest_uuid || !isset($latest_uuid->uuid)) {
+	    wc_get_logger()->error('No Record found for order ID - ' . intval($order_id), ['source' => 'dfinsell-payment-gateway']);
+	    return;
+	}
+
+	$encoded_uuid_from_db = sanitize_text_field($latest_uuid->uuid);
+
+		// Call cancel API
+		$apiPath = '/api/cancel-order-link';
+		$url = SIP_PROTOCOL . SIP_HOST . $apiPath;
+		$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
+
+		$response = wp_remote_post($cleanUrl, array(
+			'method'    => 'POST',
+			'timeout'   => 30,
+			'body'      => json_encode(array(
+				'order_id'     => $order_id,
+				'order_uuid'   => $encoded_uuid_from_db,
+				'status'       => 'canceled'
+			)),
+			'headers'   => array(
+				'Content-Type' => 'application/json',
+			),
+			'sslverify' => true,
+		));
+
+		if (is_wp_error($response)) {
+			wc_get_logger()->error('Cancel API Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
+		} else {
+			$response_body = wp_remote_retrieve_body($response);
+			$response_json = is_array($response_body) || is_object($response_body)
+				? json_encode($response_body)
+				: $response_body;
+			wc_get_logger()->info('Cancel API Response: ' . $response_json, ['source' => 'dfinsell-payment-gateway']);
+		}
+		// ========================== end code for expiring payment link ==========================
+	}
+
 }
