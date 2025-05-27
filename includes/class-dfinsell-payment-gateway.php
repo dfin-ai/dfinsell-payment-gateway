@@ -603,6 +603,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 ],
                 'sslverify' => true,
             ]);
+        
+            // Log the response properly
+             error_log("DFin Sell Payment Request: response " . print_r($response, true)); // Log it
+            // ...existing code...
 
             // **Handle Response**
             if (is_wp_error($response)) {
