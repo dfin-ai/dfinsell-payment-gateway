@@ -163,7 +163,15 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
         // Only attempt to update the order status if the target status is different from the current status.
         // WooCommerce's internal `update_status` also has idempotency, but this explicit check is clearer.
         if ('wc-' . $target_order_status !== $current_order_status) {
-            $updated = $order->update_status($target_order_status, sprintf(__('Order status updated via DFin Sell API from %s to %s', 'dfinsell-payment-gateway'), $current_order_status, $target_order_status));
+          $updated = $order->update_status(
+                $target_order_status,
+                sprintf(
+                    // translators: %1$s: current order status, %2$s: target order status
+                    __('Order status updated via DFin Sell API from %1$s to %2$s', 'dfinsell-payment-gateway'),
+                    $current_order_status, // This will map to %1$s
+                    $target_order_status   // This will map to %2$s
+                )
+            );
 
             if ($updated) {
                 $this->logger->info('Order status updated successfully for order ' . esc_html($order_id) . ' from "' . esc_html($current_order_status) . '" to "' . esc_html($target_order_status) . '".', array('source' => 'dfinsell-payment-gateway'));

@@ -80,10 +80,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
         add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
 
-        //add_action('admin_enqueue_scripts', 'dfinsell_enqueue_admin_styles');
+		add_action('woocommerce_cancel_unpaid_order', [$this, 'handle_cron_order_cancel']);
+        add_action('woocommerce_order_status_cancelled', [$this, 'handle_status_cancelled']);
 
-		add_action('woocommerce_cancel_unpaid_order', [$this,'handle_cron_order_cancel']);
-		add_action('woocommerce_order_status_cancelled', [$this,'handle_status_cancelled']);
     }
 
     private function get_api_url($endpoint)
@@ -603,10 +602,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
                 ],
                 'sslverify' => true,
             ]);
-        
-            // Log the response properly
-             error_log("DFin Sell Payment Request: response " . print_r($response, true)); // Log it
-            // ...existing code...
 
             // **Handle Response**
             if (is_wp_error($response)) {
@@ -704,17 +699,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			        if (!preg_match('/^[a-zA-Z0-9_]+$/', $table_name)) {
 			            throw new Exception('Invalid table name');
 			        }
-
-				$safe_table = esc_sql( $table_name );
-
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
-				$existing_uuid = $wpdb->get_row(
-				    $wpdb->prepare(
-				        "SELECT uuid FROM `%s` WHERE order_id = %d ORDER BY id DESC",
-						$safe_table,
-				        $order_id
-				    )
-				);
+				
+                    $existing_uuid = $wpdb->get_row(
+                        $wpdb->prepare(
+                            "SELECT uuid FROM {$table_name} WHERE order_id = %d ORDER BY id DESC",
+                            $order_id
+                        )
+                    );
 
 			        // Cache result for 1 hour
 			        wp_cache_set($cache_key, $existing_uuid, $cache_group, 3600);
@@ -725,7 +716,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			        // Cancel API call
 			        $apiPath  = '/api/cancel-order-link';
-			        $url      = SIP_PROTOCOL . SIP_HOST . $apiPath;
+			        $url      = $this->sip_protocol . $this->sip_host . $apiPath;
 			        $cleanUrl = esc_url_raw(preg_replace('#(?<!:)//+#', '/', $url));
 
 			        $response = wp_remote_post($cleanUrl, array(
@@ -1577,14 +1568,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
         return true;
     }
 
-
-public function handle_cron_order_cancel($order) {
+	
+function handle_cron_order_cancel($order) {
     if (is_numeric($order)) {
         $order_id = (int) $order;
         $wc_order = wc_get_order($order_id);
 
         if ($wc_order) {
-            $this->cancel_unpaid_order_action($order_id);
+           $this->cancel_unpaid_order_action($order_id);
 
             wc_get_logger()->info(
                 'Order Data (from ID): ' . wp_json_encode($wc_order->get_data()),
@@ -1614,7 +1605,7 @@ public function handle_cron_order_cancel($order) {
 }
 
 
-	public function handle_status_cancelled($order_id) {
+	function handle_status_cancelled($order_id) {
 	    if (is_numeric($order_id)) {
 	        $this->cancel_unpaid_order_action((int) $order_id);
 	    } else {
@@ -1671,19 +1662,22 @@ public function handle_cron_order_cancel($order) {
 
 		// ========================== start code for expiring payment link ==========================
 		$table_name = $wpdb->prefix . 'order_payment_link';
-		$safe_table_name = esc_sql($table_name); // sanitize as per standard
+		//$safe_table_name = esc_sql($table_name); // sanitize as per standard
 
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
-	$latest_uuid = $wpdb->get_row(
-	    $wpdb->prepare(
-	        "SELECT uuid FROM `%s` WHERE order_id = %d ORDER BY id DESC",
-	        $safe_table_name,
-	        $order_id
-	    )
-	);
+        $latest_uuid = $wpdb->get_row(
+            $wpdb->prepare( // Directly prepare the query here
+                "SELECT uuid FROM {$table_name} WHERE order_id = %d ORDER BY id DESC",
+                $order_id
+            )
+        );
 
-	if (!$latest_uuid || !isset($latest_uuid->uuid)) {
-	    wc_get_logger()->error('No Record found for order ID - ' . intval($order_id), ['source' => 'dfinsell-payment-gateway']);
+	wc_get_logger()->info('latest uuid - ' . $latest_uuid->uuid, ['source' => 'dfinsell-payment-gateway']);
+
+	if (empty($latest_uuid?->uuid)) {
+	    wc_get_logger()->error(
+	        'No record found for order ID - ' . (int) $order_id,
+	        ['source' => 'dfinsell-payment-gateway']
+	    );
 	    return;
 	}
 
@@ -1691,7 +1685,7 @@ public function handle_cron_order_cancel($order) {
 
 		// Call cancel API
 		$apiPath = '/api/cancel-order-link';
-		$url = SIP_PROTOCOL . SIP_HOST . $apiPath;
+		$url = $this->sip_protocol . $this->sip_host. $apiPath;
 		$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
 
 		$response = wp_remote_post($cleanUrl, array(
@@ -1719,5 +1713,6 @@ public function handle_cron_order_cancel($order) {
 		}
 		// ========================== end code for expiring payment link ==========================
 	}
+
 
 }
