@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.7  
-**Stable tag:** 1.1.5    
+**Stable tag:** 1.1.5  
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -78,21 +78,22 @@ For any issues or enhancement requests with this plugin, please contact the DFin
   Scroll down to find and select the DFin Sell Payment Gateway among the available payment methods.
 
 - **Add Plugin General Details:**
-    - **Title** : DFin Sell Payment Gateway
+
+  - **Title** : DFin Sell Payment Gateway
     Description
-    - **Description** : Secure payments with DFin Sell Payment Gateway.
-    - **Enable/Disable Sandbox Mode** : Toggle sandbox mode per account.
-    - **Payment Accounts (Add Multiple Accounts)** : 
-        - **Adding a New Account**
-            1. Click on **Add Account** to create a new account.
-            2. Enter a **unique account title**.
-            3. Provide details for each account:
-                - *Account Title*
-                - *Priority:* Set an order for the accounts.
-                - *Live Mode:* Public & Secret Keys (mandatory)
-                - *Sandbox Mode:* Public & Secret Keys (optional)
-    - **Order Status** : Select Processing or Completed.
-    - **Show Consent Checkbox** : Enabling this option will display a consent checkbox on the checkout page.
+  - **Description** : Secure payments with DFin Sell Payment Gateway.
+  - **Enable/Disable Sandbox Mode** : Toggle sandbox mode per account.
+  - **Payment Accounts (Add Multiple Accounts)** :
+    - **Adding a New Account**
+      1. Click on **Add Account** to create a new account.
+      2. Enter a **unique account title**.
+      3. Provide details for each account:
+         - _Account Title_
+         - _Priority:_ Set an order for the accounts.
+         - _Live Mode:_ Public & Secret Keys (mandatory)
+         - _Sandbox Mode:_ Public & Secret Keys (optional)
+  - **Order Status** : Select Processing or Completed.
+  - **Show Consent Checkbox** : Enabling this option will display a consent checkbox on the checkout page.
 
 - **Save Changes:**
   Click `Save changes` at the bottom of the page to update and save your API key settings.
@@ -141,7 +142,7 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ## Changelog
 
-### Version 1.1.5-Beta
+### Version 1.1.5
 
 - **Account Sync Feature:**  
   Added a **Sync** button to map accounts between Dfinsell and WordPress, enabling smoother integration and management.
@@ -159,19 +160,20 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 - **Unique Payment Token Handling:**  
   Implemented unique payment token support for orders to prevent duplicate payment processing and ensure more reliable order submissions.
-  
+
 ### Version 1.1.2 (Beta)
 
-- **Unpaid order redirection issue** 
+- **Unpaid order redirection issue**
   Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
+
 ### Version 1.1.1 (Beta)
 
-- **Minor Fix: Payment Lock Mechanism** 
+- **Minor Fix: Payment Lock Mechanism**
   Improved the payment locking mechanism to prevent simultaneous transactions from conflicting when using multiple accounts.
 
 ### Version 1.1.0 (Beta)
 
-- **Multiple Account Selections:** 
+- **Multiple Account Selections:**
   Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
 
 - **Special Character Validation**:
@@ -179,7 +181,7 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ### Version 1.0.10
 
-- **Fixed Button Overlap on Checkout Page:** 
+- **Fixed Button Overlap on Checkout Page:**
   Resolved an issue where buttons were overlapping on the checkout page, ensuring a smoother and more user-friendly experience.
 
 ### Version 1.0.9
