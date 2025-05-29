@@ -18,6 +18,9 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	private $sip_protocol;
 	private $sip_host;
 
+	private $gateway = null;
+
+
 	/**
 	 * Get the singleton instance of this class.
 	 * @return DFINSELL_PAYMENT_GATEWAY_Loader
@@ -83,6 +86,13 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		// Initialize gateways
 		$this->dfinsell_init_gateways();
 
+		// Now get your gateway instance to add hooks on it
+	    // Adjust this based on your gateway instantiation logic
+	    if ( isset($this->gateway) && is_object($this->gateway) ) {
+	        add_action('woocommerce_cancel_unpaid_order', [$this->gateway, 'cancel_unpaid_order_action']);
+	        add_action('woocommerce_order_status_cancelled', [$this->gateway, 'cancel_unpaid_order_action']);
+	    }
+
 		// Initialize REST API
 		$rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
 		$rest_api->dfinsell_register_routes();
@@ -109,6 +119,11 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			$methods[] = 'DFINSELL_PAYMENT_GATEWAY';
 			return $methods;
 		});
+
+		// Instantiate your gateway for internal use
+	    if (class_exists('DFINSELL_PAYMENT_GATEWAY')) {
+	        $this->gateway = new DFINSELL_PAYMENT_GATEWAY();
+	    }
 	}
 
 
