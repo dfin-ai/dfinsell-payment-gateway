@@ -80,10 +80,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
 
-		//add_action('woocommerce_cancel_unpaid_order', [$this, 'handle_cron_order_cancel']);
-
-		add_action('woocommerce_order_status_pending_to_cancelled', [$this, 'handle_order_status_change_to_cancelled']);
-
 		add_action('woocommerce_order_status_cancelled', [$this, 'handle_status_cancelled']);
 	}
 
@@ -1531,32 +1527,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		return true;
 	}
-
-
-	// function handle_cron_order_cancel($order_id)
-	// {
-	//     if (is_numeric($order_id)) {
-	//         $this->cancel_unpaid_order_action((int) $order_id);
-	//     } else {
-	//         wc_get_logger()->error('Status Cancelled Hook Error: Expected order ID.', ['source' => 'dfinsell-payment-gateway']);
-	//     }
-	// }
-
-	 /**
-     * Handles the order status change to 'cancelled'.
-     * This function is triggered by the 'woocommerce_order_status_pending_to_cancelled' hook.
-     *
-     * @param int $order_id The ID of the order whose status has changed.
-     */
-    public function handle_order_status_change_to_cancelled($order_id) {
-        wc_get_logger()->info('Order status changed to cancelled for Order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway-hook']);
-
-        if (is_numeric($order_id)) {
-            $this->cancel_unpaid_order_action((int) $order_id);
-        } else {
-            wc_get_logger()->error('Status Cancelled Hook Error: Expected numeric order ID.', ['source' => 'dfinsell-payment-gateway-hook']);
-        }
-    }
 
 	function handle_status_cancelled($order_id)
 	{
