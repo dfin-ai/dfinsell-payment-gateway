@@ -80,7 +80,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
 
-		add_action('woocommerce_order_status_cancelled', [$this, 'handle_status_cancelled']);
+		add_action('woocommerce_cancel_unpaid_order', [$this, 'cancel_unpaid_order_action']);
+		add_action('woocommerce_order_status_cancelled', [$this, 'cancel_unpaid_order_action']);
 	}
 
 	private function get_api_url($endpoint)
@@ -1526,15 +1527,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 
 		return true;
-	}
-
-	function handle_status_cancelled($order_id)
-	{
-		if (is_numeric($order_id)) {
-			$this->cancel_unpaid_order_action((int) $order_id);
-		} else {
-			wc_get_logger()->error('Status Cancelled Hook Error: Expected order ID.', ['source' => 'dfinsell-payment-gateway']);
-		}
 	}
 
 	function cancel_unpaid_order_action($order_id)
