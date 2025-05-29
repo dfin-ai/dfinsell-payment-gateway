@@ -1530,41 +1530,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	}
 
 
-	function handle_cron_order_cancel($order)
+	function handle_cron_order_cancel($order_id)
 	{
-		if (is_numeric($order)) {
-			$order_id = (int) $order;
-			$wc_order = wc_get_order($order_id);
-
-			if ($wc_order) {
-				$this->cancel_unpaid_order_action($order_id);
-
-				wc_get_logger()->info(
-					'Order Data (from ID): ' . wp_json_encode($wc_order->get_data()),
-					['source' => 'dfinsell-payment-gateway']
-				);
-			} else {
-				wc_get_logger()->error(
-					'Could not retrieve WC_Order object for ID: ' . wp_json_encode($order),
-					['source' => 'dfinsell-payment-gateway']
-				);
-			}
-		} elseif ($order instanceof WC_Order) {
-			$order_id = $order->get_id();
-			$this->cancel_unpaid_order_action($order_id);
-
-			wc_get_logger()->info(
-				'Order Data (object): ' . wp_json_encode($order->get_data()),
-				['source' => 'dfinsell-payment-gateway']
-			);
-		} else {
-			wc_get_logger()->error(
-				'Cron Cancel Hook Error: Unexpected order value type: ' . gettype($order) . ' | Value: ' . wp_json_encode($order),
-				['source' => 'dfinsell-payment-gateway']
-			);
-		}
+	    if (is_numeric($order_id)) {
+	        $this->cancel_unpaid_order_action((int) $order_id);
+	    } else {
+	        wc_get_logger()->error('Status Cancelled Hook Error: Expected order ID.', ['source' => 'dfinsell-payment-gateway']);
+	    }
 	}
-
 
 	function handle_status_cancelled($order_id)
 	{
