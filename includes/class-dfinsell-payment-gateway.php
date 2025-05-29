@@ -79,6 +79,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		add_filter('woocommerce_admin_order_preview_line_items', [$this, 'dfinsell_add_custom_label_to_order_row'], 10, 2);
 
 		add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
+
+		add_action('woocommerce_cancel_unpaid_order', [$this, 'cancel_unpaid_order_action']);
+		add_action('woocommerce_order_status_cancelled', [$this, 'cancel_unpaid_order_action']);
 	}
 
 	private function get_api_url($endpoint)
