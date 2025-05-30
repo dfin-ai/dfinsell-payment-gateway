@@ -49,7 +49,6 @@ function cancel_unpaid_order_action($order_id)
 	global $wpdb;
 
 	if (empty($order_id) || !is_numeric($order_id) || $order_id <= 0) {
-		wc_get_logger()->error('Cancel order Error: Invalid order ID passed: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
 		return;
 	}
 
