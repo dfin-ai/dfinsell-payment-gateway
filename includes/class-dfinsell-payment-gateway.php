@@ -79,9 +79,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		add_filter('woocommerce_admin_order_preview_line_items', [$this, 'dfinsell_add_custom_label_to_order_row'], 10, 2);
 
 		add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
-
-		add_action('woocommerce_cancel_unpaid_order', [$this, 'cancel_unpaid_order_action']);
-		add_action('woocommerce_order_status_cancelled', [$this, 'cancel_unpaid_order_action']);
 	}
 
 	private function get_api_url($endpoint)
@@ -1534,16 +1531,32 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	{
 		global $wpdb;
 
-		$order_id = (int) $order_id;
-		wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+		 // Sanity check: Ignore if ID is 0 or not numeric
+	    if (empty($order_id) || !is_numeric($order_id) || $order_id <= 0) {
+	        wc_get_logger()->error('Cancel order Error: Invalid order ID passed: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+	        return;
+	    }
 
-		if ($order_id <= 0) {
-		    wc_get_logger()->error(
-		        'Cancel order Error: Invalid order ID passed: ' . $order_id,
-		        ['source' => 'dfinsell-payment-gateway']
-		    );
-		    return;
-		}
+		$order_id = (int) $order_id;
+		
+	    $order = wc_get_order($order_id);
+
+	    if (!$order) {
+	        wc_get_logger()->error('Cancel order Error: Invalid order ID passed: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+	        return;
+	    }
+
+	    // Prevent duplicate execution
+	    if ($order->has_status('cancelled')) {
+	        wc_get_logger()->info("Skip cancel hook: Order {$order_id} is already cancelled.", ['source' => 'dfinsell-payment-gateway']);
+	        return;
+	    }
+
+	    // If current status is NOT 'pending', skip automatic cancel
+	    if (! $order->has_status('pending')) {
+	        wc_get_logger()->info("Skip auto cancel: Order {$order_id} is in status: " . $order->get_status(), ['source' => 'dfinsell-payment-gateway']);
+	        return;
+	    }
 
 		$order = wc_get_order($order_id);
 		// If order_id is not provided or invalid, find the latest 'shop_order_placehold'
