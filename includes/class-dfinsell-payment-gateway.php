@@ -713,7 +713,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					}
 
 					if (!empty($existing_uuid)) {
-						$old_uuid = sanitize_text_field($existing_uuid[0]->uuid);
+
+						wc_get_logger()->info(
+							'existing_uuid: ' . wp_json_encode($existing_uuid),
+							['source' => 'dfinsell-payment-gateway']
+						);
+
+						
+						$old_uuid = sanitize_text_field($existing_uuid->uuid);
 
 						// Cancel API call
 						$apiPath  = '/api/cancel-order-link';
@@ -1472,13 +1479,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	function check_for_sql_injection()
 	{
-		// Sanitize and validate the nonce field
-		$nonce = isset($_POST['dfinsell_nonce']) ? sanitize_text_field(wp_unslash($_POST['dfinsell_nonce'])) : '';
-		if (empty($nonce) || !wp_verify_nonce($nonce, 'dfinsell_payment')) {
-			wc_add_notice(__('Nonce verification failed. Please try again.', 'dfinsell-payment-gateway'), 'error');
-			return false;
-		}
-
+		
 		$sql_injection_patterns = ['/\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\b(?![^{}]*})/i', '/(\-\-|\#|\/\*|\*\/)/i', '/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'];
 
 		$errors = []; // Store multiple errors
@@ -1533,14 +1534,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	{
 		global $wpdb;
 
+		$order_id = (int) $order_id;
 		wc_get_logger()->info('WooCommerce hook triggered with Order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
 
-		if (!is_numeric($order_id)) {
-			wc_get_logger()->error(
-				'Cancel order Error: Non-numeric order ID passed: ' . $order_id,
-				['source' => 'dfinsell-payment-gateway']
-			);
-			return;
+		if ($order_id <= 0) {
+		    wc_get_logger()->error(
+		        'Cancel order Error: Invalid order ID passed: ' . $order_id,
+		        ['source' => 'dfinsell-payment-gateway']
+		    );
+		    return;
 		}
 
 		$order = wc_get_order($order_id);

@@ -40,3 +40,13 @@ spl_autoload_register(function ($class) {
 });
 
 DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
+
+add_action('plugins_loaded', function () {
+	if (class_exists('WC_Payment_Gateway')) {
+		$gateway = new DFINSELL_PAYMENT_GATEWAY();
+
+		add_action('woocommerce_cancel_unpaid_order', [$gateway, 'cancel_unpaid_order_action']);
+		add_action('woocommerce_order_status_cancelled', [$gateway, 'cancel_unpaid_order_action']);
+	}
+});
+
