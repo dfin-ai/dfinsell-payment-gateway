@@ -1546,18 +1546,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	        return;
 	    }
 
-	    // Prevent duplicate execution
-	    if ($order->has_status('cancelled')) {
-	        wc_get_logger()->info("Skip cancel hook: Order {$order_id} is already cancelled.", ['source' => 'dfinsell-payment-gateway']);
-	        return;
-	    }
-
-	    // If current status is NOT 'pending', skip automatic cancel
-	    if (! $order->has_status('pending')) {
-	        wc_get_logger()->info("Skip auto cancel: Order {$order_id} is in status: " . $order->get_status(), ['source' => 'dfinsell-payment-gateway']);
-	        return;
-	    }
-
 		$order = wc_get_order($order_id);
 		// If order_id is not provided or invalid, find the latest 'shop_order_placehold'
 		if (! $order_id || ! is_numeric($order_id)) {
@@ -1590,14 +1578,19 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$pending_time = get_post_meta($order_id, '_pending_order_time', true);
 		$pending_time = is_numeric($pending_time) ? (int) $pending_time : 0;
 
-		if ($order->has_status('pending') && (time() - $pending_time) >= (30 * 60)) {
-			$order->update_status('cancelled', 'Order automatically cancelled due to unpaid timeout.');
-			wc_reduce_stock_levels($order_id);
+		if ($order->has_status('pending')) {
+		        if ((time() - $pending_time) < (30 * 60)) {
+		                wc_get_logger()->info("Order {$order_id} is still pending and not timed out, skipping cancel API.", ['source' => 'dfinsell-payment-gateway']);
+		                return;
+		        }
 
-			// Invalidate cache when order status changes to 'cancelled'
-			// This ensures the next time we try to get UUID for this order, it's fresh.
-			$cache_key = 'dfinsell_payment_link_uuid_' . $order_id;
-			wp_cache_delete($cache_key, 'dfinsell_payment_gateway');
+		        // Cancel order and reduce stock if timeout occurred
+		        $order->update_status('cancelled', 'Order automatically cancelled due to unpaid timeout.');
+		        wc_reduce_stock_levels($order_id);
+
+		        // Invalidate cache
+		        $cache_key = 'dfinsell_payment_link_uuid_' . $order_id;
+		        wp_cache_delete($cache_key, 'dfinsell_payment_gateway');
 		}
 
 		// ========================== start code for expiring payment link ==========================
