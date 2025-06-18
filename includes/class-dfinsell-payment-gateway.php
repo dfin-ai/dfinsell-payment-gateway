@@ -350,13 +350,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 								<div class="title-blog">
 
 									<h4>
-
 										<span class="account-name-display">
 											<?php echo !empty($account['title']) ? esc_html($account['title']) : esc_html__('Untitled Account', 'dfinsell-payment-gateway'); ?>
 										</span>
-										&nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
+										&nbsp;<i class="fa fa-caret-down <?php echo esc_attr($this->id); ?>-toggle-btn" aria-hidden="true"></i>
 									</h4>
-
 
 									<div class="action-button">
 										<div class="account-status-block" style="float: right;">
@@ -376,8 +374,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 										</button>
 									</div>
 								</div>
-
-								<div class="account-info">
+								
+								<div class="<?php echo esc_attr($this->id); ?>-info account-info">
 									<div class="add-blog title-priority">
 										<div class="account-input account-name">
 											<label><?php esc_html_e('Account Name', 'dfinsell-payment-gateway'); ?></label>
@@ -413,13 +411,27 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 									</div>
 
 									<div class="account-checkbox">
-										<input type="checkbox" class="sandbox-checkbox"
-											name="accounts[<?php echo esc_attr($index); ?>][has_sandbox]"
-											<?php checked(!empty($account['sandbox_public_key'])); ?>>
-										<?php esc_html_e('Do you have the sandbox keys?', 'dfinsell-payment-gateway'); ?>
+										<?php
+											$checkbox_id = esc_attr( $this->id . '-sandbox-checkbox-' . $index );
+											$checkbox_class = esc_attr($this->id . '-sandbox-checkbox' );
+										?>
+										<input type="checkbox"
+											class="<?php echo $checkbox_class; ?>"
+											id="<?php echo $checkbox_id; ?>"
+											name="accounts[<?php echo esc_attr( $index ); ?>][has_sandbox]"
+											<?php checked( ! empty( $account['sandbox_public_key'] ) ); ?>>
+										<label for="<?php echo $checkbox_id; ?>">
+											<?php esc_html_e( 'Do you have the sandbox keys?', 'dfinsell-payment-gateway' ); ?>
+										</label>
 									</div>
 
-									<div class="sandbox-key" style="<?php echo empty($account['sandbox_public_key']) ? 'display: none;' : ''; ?>">
+									<?php
+									$sandbox_container_id = esc_attr( $this->id . '-sandbox-keys-' . $index );
+									$sandbox_container_class = esc_attr( $this->id . '-sandbox-keys sandbox-key' );
+									$sandbox_display_style = empty( $account['sandbox_public_key'] ) ? 'display: none;' : '';
+									?>
+								<div id="<?php echo $sandbox_container_id; ?>" class="<?php echo $sandbox_container_class; ?>" style="<?php echo $sandbox_display_style; ?>">
+
 										<div class="add-blog">
 
 											<div class="account-input">
@@ -1076,7 +1088,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		wp_localize_script('dfinsell-admin-script', 'dfinsell_ajax_object', [
 			'ajax_url' => admin_url('admin-ajax.php'),
 			'nonce' => wp_create_nonce('dfinsell_sync_nonce'),
-			'payment_method' => $this->id,
+			'gateway_id' => $this->id,
 		]);
 	}
 

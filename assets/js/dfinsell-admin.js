@@ -1,435 +1,441 @@
 jQuery(document).ready(function ($) {
-	// Sanitize the payment_method parameter
-	const payment_method = typeof dfinsell_ajax_object.payment_method === 'string' ? $.trim(dfinsell_ajax_object.payment_method) : '';
 
-	function toggleSandboxFields() {
-		if (payment_method) {
-			const sandboxChecked = $('#woocommerce_' + $.escapeSelector(payment_method) + '_sandbox').is(':checked');
-			const sandboxSelector = '.' + $.escapeSelector(payment_method) + '-sandbox-keys';
-			const productionSelector = '.' + $.escapeSelector(payment_method) + '-production-keys';
-
-			$(sandboxSelector).closest('tr').toggle(sandboxChecked);
-			$(productionSelector).closest('tr').toggle(!sandboxChecked);
-		}
+	if (typeof dfinsell_ajax_object === 'undefined' || typeof dfinsell_ajax_object.gateway_id === 'undefined') {
+		console.error('dfinsell_ajax_object or dfinsell_ajax_object.gateway_id is not defined. Please ensure wp_localize_script is correctly set up.');
+		return; // Exit if the required object is not available
 	}
 
-	toggleSandboxFields();
+	// Get the payment method ID from the localized object
+	var gatewayId = dfinsell_ajax_object.gateway_id;
+	var formClass = gatewayId + '-gateway-settings-form';
+	var gatewaySettingsForm = $('form#mainform'); // Common ID for WooCommerce settings forms
 
-	$('#woocommerce_' + $.escapeSelector(payment_method) + '_sandbox').change(toggleSandboxFields);
+	if (gatewaySettingsForm.length && gatewaySettingsForm.find('input[name^="woocommerce_' + gatewayId + '_"]').length) {
+		gatewaySettingsForm.addClass(gatewayId + '-gateway-settings-form');
 
-	function updateAccountIndices() {
-		$(".dfinsell-account").each(function (index) {
-			$(this).attr("data-index", index);
-			$(this).find("input, select").each(function () {
-				let name = $(this).attr("name");
-				if (name) {
-					name = name.replace(/\[.*?\]/, "[" + index + "]");
-					$(this).attr("name", name);
-				}
+		// Automatically run sync when the page loads
+		runAccountSync(gatewayId);
+
+		// Helper: Show error next to input or target container
+		function showErrorMessage(inputField, message) {
+			const $input = $(inputField);
+			
+			$input.addClass("error");
+
+			// Remove existing error message near this input
+			$input.siblings(".error-message").remove();
+
+			// Create and insert error message after input
+			const errorMessage = $("<div>").addClass("error-message").text(message);
+			$input.after(errorMessage);
+		}
+
+		// Helper: Clear all error states/messages
+		function clearErrorMessages() {
+			$(".error-message").remove();
+			$(".error").removeClass("error");
+		}
+
+		if (typeof gatewayId === 'string' && gatewayId.trim()) {
+			const gateway_id = gatewayId.trim();
+
+			// Selector class helpers
+			const accountClass = `.${gateway_id}-account`;
+			const addAccountBtnClass = `.${gateway_id}-add-account`;
+			const containerClass = `.${gateway_id}-accounts-container`;
+			const deleteBtnClass = `.delete-account-btn`;
+			const nameDisplayClass = `.${gateway_id}-name-display`;
+			const toggleBtnClass = `.${gateway_id}-toggle-btn`;
+			const accountInfoClass = `.${gateway_id}-info`;
+			const sandboxCheckboxClass = `.${gateway_id}-sandbox-checkbox`;
+
+			/**
+			 * Toggle Sandbox Keys visibility
+			 */
+			$(document).on("change", sandboxCheckboxClass, function () {
+				const $account = $(this).closest(accountClass);
+				const $sandboxContainer = $account.find(`.${gateway_id}-sandbox-keys`);
+				$sandboxContainer.toggle($(this).is(":checked"));
 			});
-		});
-	}
 
-	$(".account-info").hide();
+			/**
+			 * Update dynamic index-based input names
+			 */
+			function updateAccountIndices() {
+				$(accountClass).each(function (index) {
+					$(this).attr("data-index", index);
+					$(this).find("input, select").each(function () {
+						let name = $(this).attr("name");
+						if (name) {
+							name = name.replace(/\[.*?\]/, "[" + index + "]");
+							$(this).attr("name", name);
+						}
+					});
+				});
+			}
 
-	$(document).on("click", ".account-toggle-btn", function () {
-		let accountInfo = $(this).closest(".dfinsell-account").find(".account-info");
-		accountInfo.slideToggle();
-		$(this).toggleClass("rotated");
-	});
+			/**
+			 * Delete account logic
+			 */
+			$(document).on("click", deleteBtnClass, function () {
+				const $accounts = $(accountClass);
 
-	$(document).on("input", ".account-title", function () {
-		let newTitle = $(this).val().trim() || "Untitled Account";
-		$(this).closest(".dfinsell-account").find(".account-name-display").text(newTitle);
-	});
+				// Remove any existing error message
+				$(".delete-account-error").remove();
 
-	$(document).on("click", ".delete-account-btn", function () {
-		const $accounts = $(".dfinsell-account");
+				if ($accounts.length === 1) {
+					$accounts.first().before(`<div class="delete-account-error" style="color: red; margin-bottom: 10px;">At least one account must be present.</div>`);
+					return;
+				}
 
-		// Remove any previous error message
-		$(".delete-account-error").remove();
+				const $account = $(this).closest(accountClass);
+				$account.find("input").attr("name", ""); // Prevent submission
+				$account.remove();
+				updateAccountIndices();
+			});
 
-		if ($accounts.length === 1) {
-			// Append inline error message before the account block
-			$accounts.first().before('<div class="delete-account-error" style="color: red; margin-bottom: 10px;">At least one account must be present.</div>');
-			return;
+			/**
+			 * Add new account block
+			 */
+			$(document).on("click", addAccountBtnClass, function () {
+				const newAccountHtml = `
+					<div class="${gateway_id}-account dfinsell-account">
+						<div class="title-blog">
+							<h4>
+								<span class="${gateway_id}-name-display account-name-display">Untitled Account</span>
+								&nbsp;<i class="fa fa-caret-down ${gateway_id}-toggle-btn" aria-hidden="true"></i>
+							</h4>
+							<div class="action-button">
+								<button type="button" class="delete-account-btn"><i class="fa fa-trash" aria-hidden="true"></i></button>
+							</div>
+						</div>
+
+						<div class="${gateway_id}-info account-info" style="display: none;">
+							<div class="add-blog title-priority">
+								<div class="account-input account-name">
+									<label>Account Name</label>
+									<input type="text" class="${gateway_id}-title account-title" name="accounts[][title]" placeholder="Account Title">
+								</div>
+								<div class="account-input priority-name">
+									<label>Priority</label>
+									<input type="number" class="account-priority" name="accounts[][priority]" placeholder="Priority" min="1" value="${$(accountClass).length + 1}">
+								</div>
+							</div>
+
+							<div class="add-blog ${gateway_id}-production-keys">
+								<div class="account-input">
+									<label>Live Keys</label>
+									<input type="text" class="live-public-key" name="accounts[][live_public_key]" placeholder="Public Key">
+								</div>
+								<div class="account-input">
+									<input type="text" class="live-secret-key" name="accounts[][live_secret_key]" placeholder="Secret Key">
+								</div>
+							</div>
+
+							<div class="account-checkbox">
+								<input type="checkbox" class="${gateway_id}-sandbox-checkbox" name="accounts[][has_sandbox]">
+								Do you have the sandbox keys?
+							</div>
+
+							<div class="${gateway_id}-sandbox-keys sandbox-key" style="display: none;">
+								<div class="add-blog">
+									<div class="account-input">
+										<label>Sandbox Keys</label>
+										<input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Public Key">
+									</div>
+									<div class="account-input">
+										<input type="text" class="sandbox-secret-key" name="accounts[][sandbox_secret_key]" placeholder="Secret Key">
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>`;
+
+				$(containerClass + " .empty-account").remove(); // Remove placeholder
+				$(this).closest(".add-account-btn").before(newAccountHtml);
+				updateAccountIndices();
+			});
+
+			/**
+			 * Toggle account info block
+			 */
+			$(document).on("click", toggleBtnClass, function () {
+				const $info = $(this).closest(accountClass).find(accountInfoClass);
+				$info.slideToggle();
+				$(this).toggleClass("rotated");
+			});
+
+			/**
+			 * Live update of account title
+			 */
+			$(document).on("input", `${accountClass} .account-title`, function () {
+				const newTitle = $(this).val().trim() || "Untitled Account";
+				$(this).closest(accountClass).find(".account-name-display").text(newTitle);
+			});
 		}
 
-		let $account = $(this).closest(".dfinsell-account");
+		// Form submission validation
+		$(document).off("submit", "." + formClass).on("submit", "." + formClass, function (event) {
+			clearErrorMessages(); // Clear previous errors
 
-		// Remove account
-		$account.find("input").each(function () {
-			$(this).attr("name", ""); // Prevent form submission
-		});
-		$account.remove();
-		updateAccountIndices();
-	});
+			let allKeys = new Set();       // For unique key validation
+			let prioritySet = new Set();   // For unique priority validation
+			let titleSet = new Set();      // For unique title validation
+			let hasErrors = false;
 
-
-	$(document).on("click", ".dfinsell-add-account", function () {
-		let newAccountHtml = `
-        <div class="dfinsell-account">
-            <div class="title-blog">
-                <h4>
-                    <span class="account-name-display">Untitled Account</span>
-                    &nbsp;<i class="fa fa-caret-down account-toggle-btn" aria-hidden="true"></i>
-                </h4>
-                <div class="action-button">
-                    <button type="button" class="delete-account-btn"><i class="fa fa-trash" aria-hidden="true"></i></button>
-                </div>
-            </div>
-
-            <div class="account-info" style="display: none;">
-				<div class="add-blog title-priority">
-	                <div class="account-input account-name">
-	                    <label>Account Name</label>
-	                    <input type="text" class="account-title" name="accounts[][title]" placeholder="Account Title">
-	                </div>
-					<div class="account-input priority-name">
-                        <label>Priority</label>
-                        <input type="number" class="account-priority" name="accounts[][priority]" placeholder="Priority" min="1">
-                    </div>
-				</div>
-                <div class="add-blog">
-                    <div class="account-input">
-                        <label>Live Keys</label>
-                        <input type="text" class="live-public-key" name="accounts[][live_public_key]" placeholder="Public Key">
-                    </div>
-                    <div class="account-input">
-                        <input type="text" class="live-secret-key" name="accounts[][live_secret_key]" placeholder="Secret Key">
-                    </div>
-                </div>
-
-                <div class="account-checkbox">
-                    <input type="checkbox" class="sandbox-checkbox" name="accounts[][has_sandbox]">
-                    Do you have the sandbox keys?
-                </div>
-
-                <div class="sandbox-key" style="display: none;">
-                    <div class="add-blog">
-                        <div class="account-input">
-                            <label>Sandbox Keys</label>
-                        <input type="text" class="sandbox-public-key" name="accounts[][sandbox_public_key]" placeholder="Public Key">
-                        </div>
-                        <div class="account-input">
-                            <input type="text" class="sandbox-secret-key" name="accounts[][sandbox_secret_key]" placeholder="Secret Key">
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>`;
-
-		$(".dfinsell-accounts-container .empty-account").remove();
-		$(".dfinsell-add-account").closest(".add-account-btn").before(newAccountHtml);
-		updateAccountIndices();
-	});
-
-	function showErrorMessage(inputField, message) {
-		const $input = $(inputField); // ensure it's a jQuery object
-		console.log(" :: showErrorMessage :: ", $input, message);
-
-		$input.addClass("error");
-
-		// Remove existing error message next to this input
-		$input.siblings('.error-message').remove();
-
-		// Create and insert error message after input
-		const errorMessage = $("<div>").addClass("error-message").text(message);
-		$input.after(errorMessage);
-	}
-
-	function clearErrorMessage(inputField) {
-		const $input = $(inputField);
-		$input.removeClass("error");
-		$input.siblings('.error-message').remove();
-	}
-
-	function clearErrorMessages() {
-		// Function to clear all previous error messages
-		$(".error-message").remove();
-		$(".error").removeClass("error");
-	}
-
-	$(document).off("submit", "form").on("submit", "form", function (event) {
-
-		clearErrorMessages(); // Clear previous errors
-
-		let allKeys = new Set();       // For unique key validation
-		let prioritySet = new Set();   // For unique priority validation
-		let titleSet = new Set();      // For unique title validation
-		let hasErrors = false;
-
-		function validateKeyUniqueness(inputField, keyValue, label) {
-			if (allKeys.has(keyValue)) {
-				showErrorMessage(inputField, `${label} must be unique across all accounts and key types.`);
-				hasErrors = true;
-			} else {
-				allKeys.add(keyValue);
-			}
-		}
-
-		// Validate gateway title
-		const globalTitleField = $('#woocommerce_' + $.escapeSelector(payment_method) + '_title');
-		const globalTitleVal = globalTitleField.val()?.trim() || '';
-		if (!globalTitleVal) {
-			showErrorMessage(globalTitleField, "Enter a name for this payment method (shown to customers at checkout).");
-			hasErrors = true;
-		}
-
-		// Validate gateway description
-		const globalDescField = $('#woocommerce_' + $.escapeSelector(payment_method) + '_description');
-		const globalDescVal = globalDescField.val()?.trim() || '';
-		if (!globalDescVal) {
-			showErrorMessage(globalDescField, "Add a brief description shown to customers at checkout.");
-			hasErrors = true;
-		}
-
-		$(".dfinsell-account").each(function () {
-			const $account = $(this);
-
-			const livePublicKey = $account.find(".live-public-key");
-			const liveSecretKey = $account.find(".live-secret-key");
-			const sandboxPublicKey = $account.find(".sandbox-public-key");
-			const sandboxSecretKey = $account.find(".sandbox-secret-key");
-			const sandboxCheckbox = $account.find(".sandbox-checkbox");
-			const title = $account.find(".account-title");
-			const priority = $account.find(".account-priority");
-
-			const titleVal = title.val()?.trim() || '';
-			const priorityVal = priority.val()?.trim() || '';
-			const livePublicKeyVal = livePublicKey.val()?.trim() || '';
-			const liveSecretKeyVal = liveSecretKey.val()?.trim() || '';
-			const sandboxPublicKeyVal = sandboxPublicKey.val()?.trim() || '';
-			const sandboxSecretKeyVal = sandboxSecretKey.val()?.trim() || '';
-
-			// Title required and unique
-			if (!titleVal) {
-				console.log(" :: titleVal :: ", titleVal)
-				showErrorMessage(title, "Title is required.");
-				hasErrors = true;
-			} else if (titleSet.has(titleVal)) {
-				showErrorMessage(title, "Title must be unique.");
-				hasErrors = true;
-			} else {
-				titleSet.add(titleVal);
+			function validateKeyUniqueness(inputField, keyValue, label) {
+				if (allKeys.has(keyValue)) {
+					showErrorMessage(inputField, `${label} must be unique across all accounts and key types.`);
+					hasErrors = true;
+				} else {
+					allKeys.add(keyValue);
+				}
 			}
 
-			console.log(" :: titleVal :: ", titleVal)
-			console.log(" :: hasErrors :: ", hasErrors)
-
-			// Priority required and unique
-			if (!priorityVal) {
-				showErrorMessage(priority, "Priority is required.");
-				hasErrors = true;
-			} else if (prioritySet.has(priorityVal)) {
-				showErrorMessage(priority, "Priority must be unique.");
-				hasErrors = true;
-			} else {
-				prioritySet.add(priorityVal);
-			}
-
-			// Live keys required
-			if (!livePublicKeyVal) {
-				showErrorMessage(livePublicKey, "Live Public Key is required.");
-				hasErrors = true;
-			}
-			if (!liveSecretKeyVal) {
-				showErrorMessage(liveSecretKey, "Live Secret Key is required.");
+			// Validate gateway title
+			const globalTitleField = $('#woocommerce_' + $.escapeSelector(gatewayId) + '_title');
+			const globalTitleVal = globalTitleField.val()?.trim() || '';
+			if (!globalTitleVal) {
+				showErrorMessage(globalTitleField, "Enter a name for this payment method (shown to customers at checkout).");
 				hasErrors = true;
 			}
 
-			// Sandbox keys required (only if checkbox checked)
-			const sandboxRequired = sandboxCheckbox.is(":checked");
-			if (sandboxRequired) {
-				if (!sandboxPublicKeyVal) {
-					showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
+			// Validate gateway description
+			const globalDescField = $('#woocommerce_' + $.escapeSelector(gatewayId) + '_description');
+			const globalDescVal = globalDescField.val()?.trim() || '';
+			if (!globalDescVal) {
+				showErrorMessage(globalDescField, "Add a brief description shown to customers at checkout.");
+				hasErrors = true;
+			}
+
+			$("." + gatewayId + "-account").each(function () {
+				const $account = $(this);
+
+				const livePublicKey = $account.find(".live-public-key");
+				const liveSecretKey = $account.find(".live-secret-key");
+				const sandboxPublicKey = $account.find(".sandbox-public-key");
+				const sandboxSecretKey = $account.find(".sandbox-secret-key");
+				const sandboxCheckbox = $account.find(".sandbox-checkbox");
+				const title = $account.find(".account-title");
+				const priority = $account.find(".account-priority");
+
+				const titleVal = title.val()?.trim() || '';
+				const priorityVal = priority.val()?.trim() || '';
+				const livePublicKeyVal = livePublicKey.val()?.trim() || '';
+				const liveSecretKeyVal = liveSecretKey.val()?.trim() || '';
+				const sandboxPublicKeyVal = sandboxPublicKey.val()?.trim() || '';
+				const sandboxSecretKeyVal = sandboxSecretKey.val()?.trim() || '';
+
+				// Title required and unique
+				if (!titleVal) {
+					showErrorMessage(title, "Title is required.");
+					hasErrors = true;
+				} else if (titleSet.has(titleVal)) {
+					showErrorMessage(title, "Title must be unique.");
+					hasErrors = true;
+				} else {
+					titleSet.add(titleVal);
+				}
+
+				// Priority required and unique
+				if (!priorityVal) {
+					showErrorMessage(priority, "Priority is required.");
+					hasErrors = true;
+				} else if (prioritySet.has(priorityVal)) {
+					showErrorMessage(priority, "Priority must be unique.");
+					hasErrors = true;
+				} else {
+					prioritySet.add(priorityVal);
+				}
+
+				// Live keys required
+				if (!livePublicKeyVal) {
+					showErrorMessage(livePublicKey, "Live Public Key is required.");
 					hasErrors = true;
 				}
-				if (!sandboxSecretKeyVal) {
-					showErrorMessage(sandboxSecretKey, "Sandbox Secret Key is required.");
+				if (!liveSecretKeyVal) {
+					showErrorMessage(liveSecretKey, "Live Secret Key is required.");
 					hasErrors = true;
 				}
-			}
 
-			// Global uniqueness across keys
-			if (livePublicKeyVal) {
-				validateKeyUniqueness(livePublicKey, livePublicKeyVal, "Live Public Key");
-			}
-			if (liveSecretKeyVal) {
-				validateKeyUniqueness(liveSecretKey, liveSecretKeyVal, "Live Secret Key");
-			}
-			if (sandboxPublicKeyVal) {
-				validateKeyUniqueness(sandboxPublicKey, sandboxPublicKeyVal, "Sandbox Public Key");
-			}
-			if (sandboxSecretKeyVal) {
-				validateKeyUniqueness(sandboxSecretKey, sandboxSecretKeyVal, "Sandbox Secret Key");
-			}
-
-			// Same-account key duplication checks
-			if (livePublicKeyVal && liveSecretKeyVal && livePublicKeyVal === liveSecretKeyVal) {
-				showErrorMessage(liveSecretKey, "Live Secret Key must be different from Live Public Key.");
-				hasErrors = true;
-			}
-			if (sandboxPublicKeyVal && sandboxSecretKeyVal && sandboxPublicKeyVal === sandboxSecretKeyVal) {
-				showErrorMessage(sandboxSecretKey, "Sandbox Public Key and Sandbox Secret Key must be different.");
-				hasErrors = true;
-			}
-
-			// Cross-type key collision (e.g., live vs sandbox)
-			if (livePublicKeyVal && sandboxPublicKeyVal && livePublicKeyVal === sandboxPublicKeyVal) {
-				showErrorMessage(sandboxPublicKey, "Live Public Key and Sandbox Public Key must be different.");
-				hasErrors = true;
-			}
-			if (liveSecretKeyVal && sandboxSecretKeyVal && liveSecretKeyVal === sandboxSecretKeyVal) {
-				showErrorMessage(sandboxSecretKey, "Live Secret Key and Sandbox Secret Key must be different.");
-				hasErrors = true;
-			}
-		});
-
-		// Final form blocking check
-		if (hasErrors) {
-			console.log("Form blocked due to validation errors.");
-			event.preventDefault();
-			$(this).find('[type="submit"]').removeClass('is-busy');
-		} else {
-			console.log("Form passed validation.");
-		}
-	});
-
-
-	$(document).on("change", ".sandbox-checkbox", function () {
-		let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
-		if ($(this).is(":checked")) {
-			sandboxContainer.show();
-		} else {
-			sandboxContainer.hide();
-			//sandboxContainer.find("input").val("").next(".error-message").remove(); // Clear errors if unchecked
-		}
-	});
-
-	function runAccountSync() {
-		var $button = $(this);
-		var $status = $('#dfinsell-sync-status');
-		var originalButtonText = $button.text();
-
-		// Set loading state
-		$button.prop('disabled', true);
-		$button.html('<span class="spinner is-active" style="float: none; margin: 0;"></span> Syncing...');
-		$status.removeClass('error success').text('Syncing accounts...').show();
-
-		$.ajax({
-			url: dfinsell_ajax_object.ajax_url,
-			method: 'POST',
-			dataType: 'json',
-			data: {
-				action: 'dfinsell_manual_sync',
-				nonce: dfinsell_ajax_object.nonce
-			},
-			success: function (response) {
-				if (response.success) {
-					$status
-						.removeClass('error') // Clear previous state
-						.addClass('success')
-						.text(response.data.message || 'Sync completed successfully!')
-						.fadeIn()       // Show message
-						.delay(4000)    // Wait 4 seconds
-						.fadeOut();     // Hide it
-
-
-					// Re-render account statuses
-					updateAccountStatuses(response.data.statuses);
-
-				} else {
-					$status
-						.removeClass('success') // Clear previous state
-						.addClass('error')
-						.text(response.data.message || 'Sync failed. Please try again.')
-						.fadeIn()
-						.delay(4000)
-						.fadeOut();
-				}
-			},
-			error: function (xhr, status, error) {
-				var errorMessage = 'AJAX Error: ';
-				if (xhr.responseJSON && xhr.responseJSON.data && xhr.responseJSON.data.message) {
-					errorMessage += xhr.responseJSON.data.message;
-				} else {
-					errorMessage += error;
-				}
-				$status.addClass('error').text(errorMessage);
-			},
-			complete: function () {
-				$button.prop('disabled', false);
-				$button.text(originalButtonText);
-			}
-		});
-	}
-
-	$('#dfinsell-sync-accounts').on('click', function (e) {
-		e.preventDefault();
-
-		runAccountSync();
-	});
-
-	// For the sandbox toggle (if it's a checkbox or select)
-	$('#woocommerce_dfinsell_sandbox').on('change', function () {
-		runAccountSync();
-	});
-
-	// Function to update all account statuses
-	function updateAccountStatuses(statuses) {
-		if (!Array.isArray(statuses)) return;
-
-		statuses.forEach(function (statusItem) {
-			var accountTitle = statusItem.title;
-			var mode = statusItem.mode;
-			var newStatus = statusItem.status;
-
-			console.log(" :: statusItem :: ", statusItem)
-			console.log('Updating status for:', accountTitle, mode, newStatus);
-
-			// Loop through all accounts to find matching title
-			$('.dfinsell-account').each(function () {
-				var $account = $(this);
-				var currentTitle = $.trim($account.find('.account-title').val());
-
-				if (currentTitle === accountTitle) {
-					// Update hidden inputs
-					if (mode === 'live') {
-						$account.find('.live-status').val(newStatus);
-					} else if (mode === 'sandbox') {
-						$account.find('.sandbox-status').val(newStatus);
+				// Sandbox keys required (only if checkbox checked)
+				const sandboxRequired = sandboxCheckbox.is(":checked");
+				if (sandboxRequired) {
+					if (!sandboxPublicKeyVal) {
+						showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
+						hasErrors = true;
 					}
-
-					// Update visible label
-					var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked'); // <-- Updated
-					var statusLabel = $account.find('.account-status-label');
-
-					console.log(" :: sandboxEnabled :: ", sandboxEnabled)
-					console.log(" :: statusLabel :: ", statusLabel)
-
-					if ((sandboxEnabled && mode === 'sandbox') || (!sandboxEnabled && mode === 'live')) {
-						statusLabel
-							.removeClass('active inactive invalid unknown')
-							.addClass(newStatus.toLowerCase())
-							.text((mode === 'sandbox' ? 'Sandbox Account Status: ' : 'Live Account Status: ') + capitalize(newStatus));
+					if (!sandboxSecretKeyVal) {
+						showErrorMessage(sandboxSecretKey, "Sandbox Secret Key is required.");
+						hasErrors = true;
 					}
+				}
+
+				// Global uniqueness across keys
+				if (livePublicKeyVal) {
+					validateKeyUniqueness(livePublicKey, livePublicKeyVal, "Live Public Key");
+				}
+				if (liveSecretKeyVal) {
+					validateKeyUniqueness(liveSecretKey, liveSecretKeyVal, "Live Secret Key");
+				}
+				if (sandboxPublicKeyVal) {
+					validateKeyUniqueness(sandboxPublicKey, sandboxPublicKeyVal, "Sandbox Public Key");
+				}
+				if (sandboxSecretKeyVal) {
+					validateKeyUniqueness(sandboxSecretKey, sandboxSecretKeyVal, "Sandbox Secret Key");
+				}
+
+				// Same-account key duplication checks
+				if (livePublicKeyVal && liveSecretKeyVal && livePublicKeyVal === liveSecretKeyVal) {
+					showErrorMessage(liveSecretKey, "Live Secret Key must be different from Live Public Key.");
+					hasErrors = true;
+				}
+				if (sandboxPublicKeyVal && sandboxSecretKeyVal && sandboxPublicKeyVal === sandboxSecretKeyVal) {
+					showErrorMessage(sandboxSecretKey, "Sandbox Public Key and Sandbox Secret Key must be different.");
+					hasErrors = true;
+				}
+
+				// Cross-type key collision (e.g., live vs sandbox)
+				if (livePublicKeyVal && sandboxPublicKeyVal && livePublicKeyVal === sandboxPublicKeyVal) {
+					showErrorMessage(sandboxPublicKey, "Live Public Key and Sandbox Public Key must be different.");
+					hasErrors = true;
+				}
+				if (liveSecretKeyVal && sandboxSecretKeyVal && liveSecretKeyVal === sandboxSecretKeyVal) {
+					showErrorMessage(sandboxSecretKey, "Live Secret Key and Sandbox Secret Key must be different.");
+					hasErrors = true;
 				}
 			});
+
+			// Final form blocking check
+			if (hasErrors) {
+				console.log("Form blocked due to validation errors.");
+				event.preventDefault();
+				$(this).find('[type="submit"]').removeClass('is-busy');
+			} else {
+				console.log("Form passed validation.");
+			}
 		});
+
+
+		// need to check below
+		function runAccountSync(gatewayId) {
+			if (typeof gatewayId !== 'string' || !gatewayId.trim()) return;
+
+			const id = gatewayId.trim();
+
+			const $button = $(`#${id}-sync-accounts`);
+			const $status = $(`#${id}-sync-status`);
+			const originalButtonText = $button.text();
+
+			// Set loading state
+			$button.prop('disabled', true).html('<span class="spinner is-active" style="float: none; margin: 0;"></span> Syncing...');
+			$status.removeClass('error success').text('Syncing accounts...').show();
+
+			$.ajax({
+				url: dfinsell_ajax_object.ajax_url,
+				method: 'POST',
+				dataType: 'json',
+				data: {
+					action: `${id}_manual_sync`, // assuming different action per gateway (optional)
+					nonce: dfinsell_ajax_object.nonce
+				},
+				success: function (response) {
+					if (response.success) {
+						$status
+							.removeClass('error')
+							.addClass('success')
+							.text(response.data.message || 'Sync completed successfully!')
+							.fadeIn()
+							.delay(4000)
+							.fadeOut();
+
+						// Update statuses (pass gateway ID if needed)
+						if (typeof updateAccountStatuses === 'function') {
+							updateAccountStatuses(response.data.statuses, id);
+						}
+					} else {
+						$status
+							.removeClass('success')
+							.addClass('error')
+							.text(response.data.message || 'Sync failed. Please try again.')
+							.fadeIn()
+							.delay(4000)
+							.fadeOut();
+					}
+				},
+				error: function (xhr, status, error) {
+					let errorMessage = 'AJAX Error: ';
+					if (xhr.responseJSON?.data?.message) {
+						errorMessage += xhr.responseJSON.data.message;
+					} else {
+						errorMessage += error;
+					}
+					$status.addClass('error').text(errorMessage);
+				},
+				complete: function () {
+					$button.prop('disabled', false).text(originalButtonText);
+				}
+			});
+		}
+
+		$('#'+gatewayId+'-sync-accounts').on('click', function (e) {
+			e.preventDefault();
+			runAccountSync(gatewayId);
+		});
+
+		// For the sandbox toggle (if it's a checkbox or select)
+		$('#woocommerce_'+gatewayId+'_sandbox').on('change', function () {
+			runAccountSync(gatewayId);
+		});
+
+		// Function to update all account statuses
+		function updateAccountStatuses(statuses) {
+			if (!Array.isArray(statuses)) return;
+
+			statuses.forEach(function (statusItem) {
+				var accountTitle = statusItem.title;
+				var mode = statusItem.mode;
+				var newStatus = statusItem.status;
+
+				// Loop through all accounts to find matching title
+				$('.'+gatewayId+'-account').each(function () {
+					var $account = $(this);
+					var currentTitle = $.trim($account.find('.account-title').val());
+
+					if (currentTitle === accountTitle) {
+						// Update hidden inputs
+						if (mode === 'live') {
+							$account.find('.live-status').val(newStatus);
+						} else if (mode === 'sandbox') {
+							$account.find('.sandbox-status').val(newStatus);
+						}
+
+						// Update visible label
+						var sandboxEnabled = $('#woocommerce_'+gatewayId+'_sandbox').is(':checked'); // <-- Updated
+						var statusLabel = $account.find('.account-status-label');
+
+						if ((sandboxEnabled && mode === 'sandbox') || (!sandboxEnabled && mode === 'live')) {
+							statusLabel
+								.removeClass('active inactive invalid unknown')
+								.addClass(newStatus.toLowerCase())
+								.text((mode === 'sandbox' ? 'Sandbox Account Status: ' : 'Live Account Status: ') + capitalize(newStatus));
+						}
+					}
+				});
+			});
+		}
+
+		function capitalize(text) {
+			if (!text) return '';
+			return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+		}
+
+		// When checkbox is changed, update statuses
+		$('#woocommerce_'+gatewayId+'_sandbox').on('change', function () {
+			updateAccountStatuses();
+		});
+
+	} else {
+		console.log('Could not identify form for gateway: ' + gatewayId);
 	}
-
-	function capitalize(text) {
-		if (!text) return '';
-		return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
-	}
-
-	// When checkbox is changed, update statuses
-	$('#woocommerce_dfinsell_sandbox').on('change', function () {
-		updateAccountStatuses();
-	});
-
-	// Optional: Update once on page load also (in case something is missed)
-	// updateAccountStatuses();
-
 });
