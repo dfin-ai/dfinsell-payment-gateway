@@ -171,8 +171,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					}
 				}
 				// Add the 'status' field, defaulting to 'active' for new accounts
-				$sandbox_status = isset($account['sandbox_status']) ? sanitize_text_field($account['sandbox_status']) : 'active';
-				$live_status = isset($account['live_status']) ? sanitize_text_field($account['live_status']) : 'active';
+				$sandbox_status = isset($account['sandbox_status']) ? sanitize_text_field($account['sandbox_status']) : 'Active';
+				$live_status = isset($account['live_status']) ? sanitize_text_field($account['live_status']) : 'Active';
 				// Store valid account
 				$valid_accounts[$normalized_index] = [
 					'title' => $account_title,
@@ -1089,14 +1089,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	public function hide_custom_payment_gateway_conditionally($available_gateways)
 	{
-		$gateway_id = self::ID;
+		$gateway_id = $this->id;
 
 		if (is_checkout()) {
-			// Force refresh WooCommerce session cache
 			WC()->session->set('dfin_gateway_hidden_logged', false);
 			WC()->session->set('dfin_gateway_status', '');
 
-			// Retrieve cached gateway status (to prevent redundant API calls)
 			$gateway_status = WC()->session->get('dfin_gateway_status');
 
 			if ($gateway_status === 'hidden') {
@@ -1106,7 +1104,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				return $available_gateways;
 			}
 
-			// Get cart total amount
 			$amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 
 			if (!method_exists($this, 'get_all_accounts')) {
@@ -1117,13 +1114,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$accounts = $this->get_all_accounts();
 
 			if (empty($accounts)) {
-				//wc_get_logger()->warning('No accounts available. Hiding payment gateway.', ['source' => 'dfinsell-payment-gateway']);
-				unset($available_gateways[$gateway_id]); // Unset gateway properly
+				wc_get_logger()->warning('No accounts available. Hiding payment gateway.', ['source' => 'dfinsell-payment-gateway']);
+				unset($available_gateways[$gateway_id]);
 				WC()->session->set('dfin_gateway_status', 'hidden');
-				return $available_gateways; // Return updated list
+				return $available_gateways;
 			}
 
-			// Sort accounts by priority (higher priority first)
 			usort($accounts, function ($a, $b) {
 				return $a['priority'] <=> $b['priority'];
 			});
@@ -1131,15 +1127,19 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$all_high_priority_accounts_limited = true;
 			$user_account_active = false;
 
-			// Clear Transient Cache Before Checking API Limits
-			// Use delete_transient instead of direct database query
-			delete_transient('_dfinsell_daily_limit'); // Adjusted transient key pattern if needed
+			delete_transient('_dfinsell_daily_limit');
 
 			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
 
-			foreach ($accounts as $account) {
+			foreach ($accounts as $index => $account) {
 				$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+				$account_context = [
+					'title' => $account['title'] ?? 'N/A',
+					'priority' => $account['priority'] ?? 'N/A',
+					'is_sandbox' => $this->sandbox,
+					'public_key' => $public_key,
+				];
 
 				$data = [
 					'is_sandbox' => $this->sandbox,
@@ -1147,30 +1147,44 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					'api_public_key' => $public_key,
 				];
 
-				// Cache key to avoid redundant API requests
 				$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
 
-				$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key);
+				// Check merchant status
+				$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status');
+				wc_get_logger()->info('[Account ' . $index . '] /api/check-merchant-status response: ' . wp_json_encode($acc_status_response_data), [
+					'source' => 'dfinsell-payment-gateway',
+					'context' => $account_context,
+				]);
 
-				wc_get_logger()->error('account status data ' . wp_json_encode($acc_status_response_data), ['source' => 'dfinsell-payment-gateway']);
-
-				if ($acc_status_response_data['status'] == 'active') {
+				if ($acc_status_response_data['status'] === 'success') {
 					$user_account_active = true;
+				}
+
+				// Check transaction limits
+				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key . '_limit');
+				wc_get_logger()->info('[Account ' . $index . '] /api/dailylimit response: ' . wp_json_encode($transaction_limit_response_data), [
+					'source' => 'dfinsell-payment-gateway',
+					'context' => $account_context,
+				]);
+
+				if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'success') {
+					$all_high_priority_accounts_limited = false;
+				}
+
+				// If both conditions are already satisfied, break early
+				if ($user_account_active && !$all_high_priority_accounts_limited) {
 					break;
 				}
-
-				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
-
-				if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'error') {
-					// At least one high-priority account is available
-					$all_high_priority_accounts_limited = false;
-					break; // Stop checking after the first valid account
-				}
 			}
+
+			wc_get_logger()->info('Final decision flags: user_account_active=' . json_encode($user_account_active) . ', all_high_priority_accounts_limited=' . json_encode($all_high_priority_accounts_limited), [
+				'source' => 'dfinsell-payment-gateway',
+			]);
 
 			if (!$user_account_active) {
 				unset($available_gateways[$gateway_id]);
 				WC()->session->set('dfin_gateway_status', 'hidden');
+				return $available_gateways;
 			}
 
 			if ($all_high_priority_accounts_limited) {
@@ -1178,16 +1192,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					wc_get_logger()->warning('All high-priority accounts have reached transaction limits. Hiding gateway.', ['source' => 'dfinsell-payment-gateway']);
 					WC()->session->set('dfin_gateway_hidden_logged', true);
 				}
-
 				unset($available_gateways[$gateway_id]);
 				WC()->session->set('dfin_gateway_status', 'hidden');
-			} else {
-				WC()->session->set('dfin_gateway_status', 'visible');
+				return $available_gateways;
 			}
+
+			WC()->session->set('dfin_gateway_status', 'visible');
 		}
 
 		return $available_gateways;
 	}
+
 
 	/**
 	 * Validate an individual account.
@@ -1290,14 +1305,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$accounts = is_array($unserialized) ? $unserialized : [];
 		}
 
-
 		$valid_accounts = [];
 
 		if (!empty($accounts)) {
 			foreach ($accounts as $account) {
 				// If in sandbox mode, check sandbox status and keys
 				if ($this->sandbox) {
-					if (isset($account['sandbox_status']) && $account['sandbox_status'] === 'active') {
+					if (isset($account['sandbox_status']) && $account['sandbox_status'] === 'Active') {
 						if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
 							$valid_accounts[] = $account;
 						}
@@ -1305,7 +1319,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				}
 				// If in live mode, check live status and keys
 				else {
-					if (isset($account['live_status']) && $account['live_status'] === 'active') {
+					if (isset($account['live_status']) && $account['live_status'] === 'Active') {
 						if (!empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
 							$valid_accounts[] = $account;
 						}
@@ -1423,7 +1437,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Filter out used accounts and check correct mode status & keys
 		$available_accounts = array_filter($settings, function ($account) use ($used_accounts, $status_key, $public_key, $secret_key) {
 			return !in_array($account['title'], $used_accounts)
-				&& isset($account[$status_key]) && $account[$status_key] === 'active'
+				&& isset($account[$status_key]) && $account[$status_key] === 'Active'
 				&& !empty($account[$public_key]) && !empty($account[$secret_key]);
 		});
 

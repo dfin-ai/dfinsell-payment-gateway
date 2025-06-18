@@ -42,7 +42,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		add_action('admin_init', [$this, 'dfinsell_handle_environment_check']);
 		add_action('admin_notices', [$this->admin_notices, 'display_notices']);
-		add_action('plugins_loaded', [$this, 'dfinsell_init']);
+		add_action('plugins_loaded', [$this, 'dfinsell_init'], 11);
 
 		// Register the AJAX action callback for checking payment status
 		add_action('wp_ajax_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
