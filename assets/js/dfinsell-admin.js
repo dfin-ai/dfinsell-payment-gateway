@@ -1,12 +1,12 @@
 jQuery(document).ready(function ($) {
-	// Sanitize the PAYMENT_CODE parameter
-	const PAYMENT_CODE = typeof params.PAYMENT_CODE === 'string' ? $.trim(params.PAYMENT_CODE) : '';
+	// Sanitize the payment_method parameter
+	const payment_method = typeof dfinsell_ajax_object.payment_method === 'string' ? $.trim(dfinsell_ajax_object.payment_method) : '';
 
 	function toggleSandboxFields() {
-		if (PAYMENT_CODE) {
-			const sandboxChecked = $('#woocommerce_' + $.escapeSelector(PAYMENT_CODE) + '_sandbox').is(':checked');
-			const sandboxSelector = '.' + $.escapeSelector(PAYMENT_CODE) + '-sandbox-keys';
-			const productionSelector = '.' + $.escapeSelector(PAYMENT_CODE) + '-production-keys';
+		if (payment_method) {
+			const sandboxChecked = $('#woocommerce_' + $.escapeSelector(payment_method) + '_sandbox').is(':checked');
+			const sandboxSelector = '.' + $.escapeSelector(payment_method) + '-sandbox-keys';
+			const productionSelector = '.' + $.escapeSelector(payment_method) + '-production-keys';
 
 			$(sandboxSelector).closest('tr').toggle(sandboxChecked);
 			$(productionSelector).closest('tr').toggle(!sandboxChecked);
@@ -15,7 +15,7 @@ jQuery(document).ready(function ($) {
 
 	toggleSandboxFields();
 
-	$('#woocommerce_' + $.escapeSelector(PAYMENT_CODE) + '_sandbox').change(toggleSandboxFields);
+	$('#woocommerce_' + $.escapeSelector(payment_method) + '_sandbox').change(toggleSandboxFields);
 
 	function updateAccountIndices() {
 		$(".dfinsell-account").each(function (index) {
@@ -42,16 +42,6 @@ jQuery(document).ready(function ($) {
 		let newTitle = $(this).val().trim() || "Untitled Account";
 		$(this).closest(".dfinsell-account").find(".account-name-display").text(newTitle);
 	});
-
-	/*$(document).on("change", ".sandbox-checkbox", function () {
-		let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
-		if ($(this).is(":checked")) {
-			sandboxContainer.show();
-		} else {
-			sandboxContainer.hide();
-			sandboxContainer.find("input").val("");
-		}
-	}); */
 
 	$(document).on("click", ".delete-account-btn", function () {
 		const $accounts = $(".dfinsell-account");
@@ -135,10 +125,23 @@ jQuery(document).ready(function ($) {
 	});
 
 	function showErrorMessage(inputField, message) {
-		// Function to show the error message next to the input field
-		inputField.addClass("error");
-		let errorMessage = $("<div>").addClass("error-message").text(message);
-		inputField.after(errorMessage);
+		const $input = $(inputField); // ensure it's a jQuery object
+		console.log(" :: showErrorMessage :: ", $input, message);
+
+		$input.addClass("error");
+
+		// Remove existing error message next to this input
+		$input.siblings('.error-message').remove();
+
+		// Create and insert error message after input
+		const errorMessage = $("<div>").addClass("error-message").text(message);
+		$input.after(errorMessage);
+	}
+
+	function clearErrorMessage(inputField) {
+		const $input = $(inputField);
+		$input.removeClass("error");
+		$input.siblings('.error-message').remove();
 	}
 
 	function clearErrorMessages() {
@@ -146,15 +149,16 @@ jQuery(document).ready(function ($) {
 		$(".error-message").remove();
 		$(".error").removeClass("error");
 	}
-	$(document).on("submit", "form", function (event) {
+
+	$(document).off("submit", "form").on("submit", "form", function (event) {
+
 		clearErrorMessages(); // Clear previous errors
 
-		let allKeys = new Set(); // Global key uniqueness check
-		let prioritySet = new Set(); // For unique priority
-		let titleSet = new Set();
+		let allKeys = new Set();       // For unique key validation
+		let prioritySet = new Set();   // For unique priority validation
+		let titleSet = new Set();      // For unique title validation
 		let hasErrors = false;
 
-		// Helper for uniqueness validation
 		function validateKeyUniqueness(inputField, keyValue, label) {
 			if (allKeys.has(keyValue)) {
 				showErrorMessage(inputField, `${label} must be unique across all accounts and key types.`);
@@ -164,24 +168,43 @@ jQuery(document).ready(function ($) {
 			}
 		}
 
+		// Validate gateway title
+		const globalTitleField = $('#woocommerce_' + $.escapeSelector(payment_method) + '_title');
+		const globalTitleVal = globalTitleField.val()?.trim() || '';
+		if (!globalTitleVal) {
+			showErrorMessage(globalTitleField, "Enter a name for this payment method (shown to customers at checkout).");
+			hasErrors = true;
+		}
+
+		// Validate gateway description
+		const globalDescField = $('#woocommerce_' + $.escapeSelector(payment_method) + '_description');
+		const globalDescVal = globalDescField.val()?.trim() || '';
+		if (!globalDescVal) {
+			showErrorMessage(globalDescField, "Add a brief description shown to customers at checkout.");
+			hasErrors = true;
+		}
+
 		$(".dfinsell-account").each(function () {
-			let livePublicKey = $(this).find(".live-public-key");
-			let liveSecretKey = $(this).find(".live-secret-key");
-			let sandboxPublicKey = $(this).find(".sandbox-public-key");
-			let sandboxSecretKey = $(this).find(".sandbox-secret-key");
-			let sandboxCheckbox = $(this).find(".sandbox-checkbox");
-			let title = $(this).find(".account-title");
-			let priority = $(this).find(".account-priority");
+			const $account = $(this);
 
-			let livePublicKeyVal = livePublicKey.val().trim();
-			let liveSecretKeyVal = liveSecretKey.val().trim();
-			let sandboxPublicKeyVal = sandboxPublicKey.val().trim();
-			let sandboxSecretKeyVal = sandboxSecretKey.val().trim();
-			let titleVal = title.val().trim();
-			let priorityVal = priority.val().trim();
+			const livePublicKey = $account.find(".live-public-key");
+			const liveSecretKey = $account.find(".live-secret-key");
+			const sandboxPublicKey = $account.find(".sandbox-public-key");
+			const sandboxSecretKey = $account.find(".sandbox-secret-key");
+			const sandboxCheckbox = $account.find(".sandbox-checkbox");
+			const title = $account.find(".account-title");
+			const priority = $account.find(".account-priority");
 
-			// Title required
+			const titleVal = title.val()?.trim() || '';
+			const priorityVal = priority.val()?.trim() || '';
+			const livePublicKeyVal = livePublicKey.val()?.trim() || '';
+			const liveSecretKeyVal = liveSecretKey.val()?.trim() || '';
+			const sandboxPublicKeyVal = sandboxPublicKey.val()?.trim() || '';
+			const sandboxSecretKeyVal = sandboxSecretKey.val()?.trim() || '';
+
+			// Title required and unique
 			if (!titleVal) {
+				console.log(" :: titleVal :: ", titleVal)
 				showErrorMessage(title, "Title is required.");
 				hasErrors = true;
 			} else if (titleSet.has(titleVal)) {
@@ -191,8 +214,10 @@ jQuery(document).ready(function ($) {
 				titleSet.add(titleVal);
 			}
 
+			console.log(" :: titleVal :: ", titleVal)
+			console.log(" :: hasErrors :: ", hasErrors)
 
-			// Priority required & unique
+			// Priority required and unique
 			if (!priorityVal) {
 				showErrorMessage(priority, "Priority is required.");
 				hasErrors = true;
@@ -213,7 +238,20 @@ jQuery(document).ready(function ($) {
 				hasErrors = true;
 			}
 
-			// Validate all key uniqueness globally
+			// Sandbox keys required (only if checkbox checked)
+			const sandboxRequired = sandboxCheckbox.is(":checked");
+			if (sandboxRequired) {
+				if (!sandboxPublicKeyVal) {
+					showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
+					hasErrors = true;
+				}
+				if (!sandboxSecretKeyVal) {
+					showErrorMessage(sandboxSecretKey, "Sandbox Secret Key is required.");
+					hasErrors = true;
+				}
+			}
+
+			// Global uniqueness across keys
 			if (livePublicKeyVal) {
 				validateKeyUniqueness(livePublicKey, livePublicKeyVal, "Live Public Key");
 			}
@@ -227,19 +265,17 @@ jQuery(document).ready(function ($) {
 				validateKeyUniqueness(sandboxSecretKey, sandboxSecretKeyVal, "Sandbox Secret Key");
 			}
 
-			// Same-account live key mismatch
+			// Same-account key duplication checks
 			if (livePublicKeyVal && liveSecretKeyVal && livePublicKeyVal === liveSecretKeyVal) {
 				showErrorMessage(liveSecretKey, "Live Secret Key must be different from Live Public Key.");
 				hasErrors = true;
 			}
-
-			// Same-account sandbox key mismatch
 			if (sandboxPublicKeyVal && sandboxSecretKeyVal && sandboxPublicKeyVal === sandboxSecretKeyVal) {
 				showErrorMessage(sandboxSecretKey, "Sandbox Public Key and Sandbox Secret Key must be different.");
 				hasErrors = true;
 			}
 
-			// Live vs sandbox mismatch check
+			// Cross-type key collision (e.g., live vs sandbox)
 			if (livePublicKeyVal && sandboxPublicKeyVal && livePublicKeyVal === sandboxPublicKeyVal) {
 				showErrorMessage(sandboxPublicKey, "Live Public Key and Sandbox Public Key must be different.");
 				hasErrors = true;
@@ -248,20 +284,9 @@ jQuery(document).ready(function ($) {
 				showErrorMessage(sandboxSecretKey, "Live Secret Key and Sandbox Secret Key must be different.");
 				hasErrors = true;
 			}
-
-			// Sandbox fields required if checkbox checked
-			if (sandboxCheckbox.is(":checked")) {
-				if (!sandboxPublicKeyVal) {
-					showErrorMessage(sandboxPublicKey, "Sandbox Public Key is required.");
-					hasErrors = true;
-				}
-				if (!sandboxSecretKeyVal) {
-					showErrorMessage(sandboxSecretKey, "Sandbox Secret Key is required.");
-					hasErrors = true;
-				}
-			}
 		});
 
+		// Final form blocking check
 		if (hasErrors) {
 			console.log("Form blocked due to validation errors.");
 			event.preventDefault();
@@ -272,25 +297,17 @@ jQuery(document).ready(function ($) {
 	});
 
 
-
-
-
 	$(document).on("change", ".sandbox-checkbox", function () {
 		let sandboxContainer = $(this).closest(".dfinsell-account").find(".sandbox-key");
 		if ($(this).is(":checked")) {
 			sandboxContainer.show();
 		} else {
 			sandboxContainer.hide();
-			sandboxContainer.find("input").val("").next(".error-message").remove(); // Clear errors if unchecked
+			//sandboxContainer.find("input").val("").next(".error-message").remove(); // Clear errors if unchecked
 		}
 	});
 
-
-
-
-	$('#dfinsell-sync-accounts').on('click', function (e) {
-		e.preventDefault();
-
+	function runAccountSync() {
 		var $button = $(this);
 		var $status = $('#dfinsell-sync-status');
 		var originalButtonText = $button.text();
@@ -310,14 +327,26 @@ jQuery(document).ready(function ($) {
 			},
 			success: function (response) {
 				if (response.success) {
-					$status.addClass('success').text(response.data.message || 'Sync completed successfully!');
+					$status
+						.removeClass('error') // Clear previous state
+						.addClass('success')
+						.text(response.data.message || 'Sync completed successfully!')
+						.fadeIn()       // Show message
+						.delay(4000)    // Wait 4 seconds
+						.fadeOut();     // Hide it
 
-					// Refresh the page after 2 seconds to show updated statuses
-					setTimeout(function () {
-						window.location.reload();
-					}, 2000);
+
+					// Re-render account statuses
+					updateAccountStatuses(response.data.statuses);
+
 				} else {
-					$status.addClass('error').text(response.data.message || 'Sync failed. Please try again.');
+					$status
+						.removeClass('success') // Clear previous state
+						.addClass('error')
+						.text(response.data.message || 'Sync failed. Please try again.')
+						.fadeIn()
+						.delay(4000)
+						.fadeOut();
 				}
 			},
 			error: function (xhr, status, error) {
@@ -334,35 +363,65 @@ jQuery(document).ready(function ($) {
 				$button.text(originalButtonText);
 			}
 		});
+	}
+
+	$('#dfinsell-sync-accounts').on('click', function (e) {
+		e.preventDefault();
+
+		runAccountSync();
+	});
+
+	// For the sandbox toggle (if it's a checkbox or select)
+	$('#woocommerce_dfinsell_sandbox').on('change', function () {
+		runAccountSync();
 	});
 
 	// Function to update all account statuses
-	function updateAccountStatuses() {
-		var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked');
+	function updateAccountStatuses(statuses) {
+		if (!Array.isArray(statuses)) return;
 
-		$('.dfinsell-account').each(function () {
-			var $account = $(this);
-			var liveStatus = $account.find('input[name$="[live_status]"]').val();
-			var sandboxStatus = $account.find('input[name$="[sandbox_status]"]').val();
-			if (!sandboxStatus) {
-				sandboxStatus = 'unknown';
-			}
-			var $statusLabel = $account.find('.account-status-label');
+		statuses.forEach(function (statusItem) {
+			var accountTitle = statusItem.title;
+			var mode = statusItem.mode;
+			var newStatus = statusItem.status;
 
-			if (sandboxEnabled) {
-				// Update class and text for sandbox mode
-				$statusLabel
-					.removeClass('live-status invalid active inactive')
-					.addClass('sandbox-status ' + sandboxStatus.toLowerCase())
-					.text('Sandbox Account Status: ' + capitalizeFirstLetter(sandboxStatus));
-			} else {
-				// Update class and text for live mode
-				$statusLabel
-					.removeClass('sandbox-status invalid active inactive')
-					.addClass('live-status ' + liveStatus.toLowerCase())
-					.text('Live Account Status: ' + capitalizeFirstLetter(liveStatus));
-			}
+			console.log(" :: statusItem :: ", statusItem)
+			console.log('Updating status for:', accountTitle, mode, newStatus);
+
+			// Loop through all accounts to find matching title
+			$('.dfinsell-account').each(function () {
+				var $account = $(this);
+				var currentTitle = $.trim($account.find('.account-title').val());
+
+				if (currentTitle === accountTitle) {
+					// Update hidden inputs
+					if (mode === 'live') {
+						$account.find('.live-status').val(newStatus);
+					} else if (mode === 'sandbox') {
+						$account.find('.sandbox-status').val(newStatus);
+					}
+
+					// Update visible label
+					var sandboxEnabled = $('#woocommerce_dfinsell_sandbox').is(':checked'); // <-- Updated
+					var statusLabel = $account.find('.account-status-label');
+
+					console.log(" :: sandboxEnabled :: ", sandboxEnabled)
+					console.log(" :: statusLabel :: ", statusLabel)
+
+					if ((sandboxEnabled && mode === 'sandbox') || (!sandboxEnabled && mode === 'live')) {
+						statusLabel
+							.removeClass('active inactive invalid unknown')
+							.addClass(newStatus.toLowerCase())
+							.text((mode === 'sandbox' ? 'Sandbox Account Status: ' : 'Live Account Status: ') + capitalize(newStatus));
+					}
+				}
+			});
 		});
+	}
+
+	function capitalize(text) {
+		if (!text) return '';
+		return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
 	}
 
 	// When checkbox is changed, update statuses
@@ -372,12 +431,5 @@ jQuery(document).ready(function ($) {
 
 	// Optional: Update once on page load also (in case something is missed)
 	// updateAccountStatuses();
-
-
-	// Function to capitalize the first letter
-	function capitalizeFirstLetter(str) {
-		return str.charAt(0).toUpperCase() + str.slice(1);
-	}
-
 
 });

@@ -318,8 +318,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$sandbox_enabled = !empty($global_settings['sandbox']) && $global_settings['sandbox'] === 'yes';
 
 		ob_start();
-
-
 ?>
 		<tr valign="top">
 			<th scope="row" class="titledesc">
@@ -547,8 +545,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$transaction_limit_data = json_decode(wp_remote_retrieve_body($transaction_limit_response), true);
 
 			// **Handle Account Limit Error**
-			if (isset($transaction_limit_data['error'])) {
-				$error_message = sanitize_text_field($transaction_limit_data['error']);
+			if (isset($transaction_limit_data['status']) && $transaction_limit_data['status'] === 'error') {
+				$error_message = sanitize_text_field($transaction_limit_data['message']);
 				wc_get_logger()->error("Account '{$account['title']}' limit reached: $error_message", ['source' => 'dfinsell-payment-gateway']);
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
@@ -716,7 +714,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 							['source' => 'dfinsell-payment-gateway']
 						);
 
-						
+
 						$old_uuid = sanitize_text_field($existing_uuid->uuid);
 
 						// Cancel API call
@@ -1075,15 +1073,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), ['jquery'], filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
-
-
-		// Localize the script to pass parameters
-		wp_localize_script('dfinsell-admin-script', 'params', [
-			'PAYMENT_CODE' => $this->id,
-		]);
 		wp_localize_script('dfinsell-admin-script', 'dfinsell_ajax_object', [
 			'ajax_url' => admin_url('admin-ajax.php'),
-			'nonce'    => wp_create_nonce('dfinsell_sync_nonce'),
+			'nonce' => wp_create_nonce('dfinsell_sync_nonce'),
+			'payment_method' => $this->id,
 		]);
 	}
 
@@ -1129,14 +1122,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			});
 
 			$all_high_priority_accounts_limited = true;
+			$user_account_active = false;
 
 			// Clear Transient Cache Before Checking API Limits
 			// Use delete_transient instead of direct database query
 			delete_transient('_dfinsell_daily_limit'); // Adjusted transient key pattern if needed
 
+			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
+			$accStatusApiUrl = $this->get_api_url('/api/check-user-status');
+
 			foreach ($accounts as $account) {
 				$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
-				$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 
 				$data = [
 					'is_sandbox' => $this->sandbox,
@@ -1146,13 +1142,28 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				// Cache key to avoid redundant API requests
 				$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
+
+				$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key);
+
+				wc_get_logger()->error('account status data ' . wp_json_encode($acc_status_response_data), ['source' => 'dfinsell-payment-gateway']);
+
+				if ($acc_status_response_data['status'] == 'active') {
+					$user_account_active = true;
+					break;
+				}
+
 				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key);
 
-				if (!isset($transaction_limit_response_data['error'])) {
+				if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'error') {
 					// At least one high-priority account is available
 					$all_high_priority_accounts_limited = false;
 					break; // Stop checking after the first valid account
 				}
+			}
+
+			if (!$user_account_active) {
+				unset($available_gateways[$gateway_id]);
+				WC()->session->set('dfin_gateway_status', 'hidden');
 			}
 
 			if ($all_high_priority_accounts_limited) {
@@ -1476,7 +1487,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	function check_for_sql_injection()
 	{
-		
+
 		$sql_injection_patterns = ['/\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\b(?![^{}]*})/i', '/(\-\-|\#|\/\*|\*\/)/i', '/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'];
 
 		$errors = []; // Store multiple errors
@@ -1486,6 +1497,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			->checkout()
 			->get_checkout_fields();
 
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Verified by WooCommerce checkout nonce
 		foreach ($_POST as $key => $value) {
 			if (is_string($value)) {
 				foreach ($sql_injection_patterns as $pattern) {
@@ -1526,6 +1538,4 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		return true;
 	}
-
-
 }

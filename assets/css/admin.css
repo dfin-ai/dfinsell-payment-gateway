@@ -1,55 +1,63 @@
-.dfinsell-accounts-container{
+.dfinsell-accounts-container {
 	max-width: 600px;
 }
-.dfinsell-accounts-container .title-priority{
+
+.dfinsell-accounts-container .title-priority {
 	display: flex;
 }
 
-.dfinsell-accounts-container .title-priority .account-name{
+.dfinsell-accounts-container .title-priority .account-name {
 	width: 70% !important;
 }
 
-.dfinsell-accounts-container .title-priority .priority-name{
+.dfinsell-accounts-container .title-priority .priority-name {
 	width: 28% !important;
 }
 
-.dfinsell-accounts-container .rotated{
+.dfinsell-accounts-container .rotated {
 	transform: rotate(180deg);
 }
 
-.dfinsell-instructions-url, .dfinsell-instructions-url:hover{
-	color:#8264D7;
+.dfinsell-instructions-url,
+.dfinsell-instructions-url:hover {
+	color: #8264D7;
 }
-.dfinsell-accounts-container .dfinsell-account{
+
+.dfinsell-accounts-container .dfinsell-account {
 	margin-bottom: 14px !important;
 	border: 1px solid #C5C5C5;
 	border-radius: 7px;
 	padding: 12px;
 }
-.dfinsell-accounts-container .add-blog{
-	align-items: center;
+
+.dfinsell-accounts-container .add-blog {
+	align-items: start;
 	flex-wrap: wrap;
 	margin-bottom: 10px;
 	justify-content: space-between;
 }
-.dfinsell-accounts-container .account-input input{
-	 width:100% !important;
+
+.dfinsell-accounts-container .account-input input {
+	width: 100% !important;
 	margin-bottom: 8px !important;
 	margin-right: 8px !important;
 }
-.dfinsell-accounts-container h4{
+
+.dfinsell-accounts-container h4 {
 	font-size: 17px !important;
 	margin-top: 0 !important;
 	margin-bottom: 0px !important;
 	display: flex !important;
 	align-items: center !important;
 }
-.dfinsell-accounts-container h4 i{
+
+.dfinsell-accounts-container h4 i {
 	font-size: 13px !important;
 	margin-right: 6px !important;
 	cursor: pointer;
 }
-.empty-account{
+
+.empty-account {
 	background: #ffffff;
 	padding: 16px;
 	border-left: 3px solid #8264D7;
@@ -57,35 +65,40 @@
 	font-weight: 400;
 	margin-bottom: 20px !important;
 }
-.dfinsell-accounts-container .action-button{
+
+.dfinsell-accounts-container .action-button {
 	display: flex !important;
 	align-items: center !important;
 }
-.dfinsell-accounts-container .action-button button{
+
+.dfinsell-accounts-container .action-button button {
 	color: #6B6B6B;
 	font-size: 14px !important;
 	background: transparent;
 	border: none;
 	cursor: pointer;
 }
-.dfinsell-accounts-container .dfinsell-account .active-indicator{
+
+.dfinsell-accounts-container .dfinsell-account .active-indicator {
 	font-size: 14px !important;
 	color: #28A745 !important;
 	background: #E7F5EB !important;
 	border-radius: 5px;
 	padding: 4px 16px;
 	width: fit-content;
-	margin-right:8px;
+	margin-right: 8px;
 }
-.dfinsell-accounts-container .account-input{
+
+.dfinsell-accounts-container .account-input {
 	/* width:49.5%; */
 }
 
-.dfinsell-accounts-container .account-input label{
+.dfinsell-accounts-container .account-input label {
 	display: block !important;
 	margin-bottom: 5px !important;
 }
-.dfinsell-accounts-container .add-account-btn .dfinsell-add-account{
+
+.dfinsell-accounts-container .add-account-btn .dfinsell-add-account {
 	border-radius: 5px;
 	background: #0A0B21;
 	color: #F5F5F5;
@@ -96,35 +109,41 @@
 	padding: 11px !important;
 	border: 1px solid #0A0B21;
 	height: 42px !important;
-	line-height:19px !important;
+	line-height: 19px !important;
 }
-.dfinsell-accounts-container .add-account-btn .dfinsell-add-account span{
+
+.dfinsell-accounts-container .add-account-btn .dfinsell-add-account span {
 	font-size: 19px;
-	line-height: 12px;    
+	line-height: 12px;
 }
-.dfinsell-accounts-container .account-info{
+
+.dfinsell-accounts-container .account-info {
 	display: none;
 	margin-top: 18px !important;
 }
-.dfinsell-accounts-container .account-toggle-btn{
-	color:#6B6B6B ;
+
+.dfinsell-accounts-container .account-toggle-btn {
+	color: #6B6B6B;
 	font-size: 17px !important;
-	margin-left:8px !important;
+	margin-left: 8px !important;
 }
-.dfinsell-accounts-container .account-checkbox{
+
+.dfinsell-accounts-container .account-checkbox {
 	font-size: 14px !important;
-	display: flex !important ;
+	display: flex !important;
 	align-items: center !important;
 	margin: 10px 0 15px !important;
 }
-.dfinsell-accounts-container .account-checkbox input{
+
+.dfinsell-accounts-container .account-checkbox input {
 	width: 15px !important;
 	height: 15px !important;
 	margin-right: 5px !important;
 	margin-left: 0 !important;
 }
-.dfinsell-accounts-container .title-blog{
-	display:flex;
+
+.dfinsell-accounts-container .title-blog {
+	display: flex;
 	align-items: center;
 	justify-content: space-between;
 	word-break: break-word;
@@ -132,37 +151,47 @@
 
 
 .account-status {
-    margin-top: 5px;
+	margin-top: 5px;
 }
 
-.status-label ,.account-status-label{
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-weight: bold;
-    margin-right: 5px;
-    color: #fff;
+.status-label,
+.account-status-label {
+	display: inline-block;
+	padding: 3px 8px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: bold;
+	margin-right: 5px;
+	color: #fff;
 }
 
-.status-label.active,.account-status-label {
-    background-color: #28a745; /* Green */
+.status-label.active,
+.account-status-label {
+	background-color: #28a745;
+	/* Green */
 }
 
-.status-label.inactive ,.status-label.invalid,.account-status-label.inactive ,.account-status-label.invalid ,.account-status-label.unknown{
-    background-color: #dc3545; /* Red */
+.status-label.inactive,
+.status-label.invalid,
+.account-status-label.inactive,
+.account-status-label.invalid,
+.account-status-label.unknown {
+	background-color: #dc3545;
+	/* Red */
 }
-#dfinsell-sync-status{
+
+#dfinsell-sync-status {
 	padding-right: 10px;
 }
 
-.dfinsell-sync-account{
+.dfinsell-sync-account {
 	justify-content: end;
-    align-items: center;
+	align-items: center;
 	display: flex;
 	margin-bottom: 15px !important;
 }
-.dfinsell-sync-account button{
+
+.dfinsell-sync-account button {
 	border: 1px solid #8264D7 !important;
 	color: #8264D7 !important;
 	background: #8264D717 !important;
@@ -173,9 +202,13 @@
 	cursor: pointer;
 }
 
-.dfinsell-sync-account .success{
+.dfinsell-sync-account .success {
 	color: #28A745 !important;
 }
-.dfinsell-sync-account .error{
-	color: #dc3545; 
+
+/* Error style for input fields */
+.dfinsell-accounts-container input.error {
+	border: 1px solid #dc3545;
+	background-color: #fff0f0;
+	color: #dc3545;
 }
