@@ -1,12 +1,12 @@
 jQuery(document).ready(function ($) {
 
-	if (typeof dfinsell_ajax_object === 'undefined' || typeof dfinsell_ajax_object.gateway_id === 'undefined') {
-		console.error('dfinsell_ajax_object or dfinsell_ajax_object.gateway_id is not defined. Please ensure wp_localize_script is correctly set up.');
+	if (typeof dfinsell_admin_data === 'undefined' || typeof dfinsell_admin_data.gateway_id === 'undefined') {
+		console.error('dfinsell_admin_data or dfinsell_admin_data.gateway_id is not defined. Please ensure wp_localize_script is correctly set up.');
 		return; // Exit if the required object is not available
 	}
 
 	// Get the payment method ID from the localized object
-	var gatewayId = dfinsell_ajax_object.gateway_id;
+	var gatewayId = dfinsell_admin_data.gateway_id;
 	var formClass = gatewayId + '-gateway-settings-form';
 	var gatewaySettingsForm = $('form#mainform'); // Common ID for WooCommerce settings forms
 
@@ -99,7 +99,7 @@ jQuery(document).ready(function ($) {
 			 */
 			$(document).on("click", addAccountBtnClass, function () {
 				const newAccountHtml = `
-					<div class="${gateway_id}-account dfinsell-account">
+					<div class="${gateway_id}-account">
 						<div class="title-blog">
 							<h4>
 								<span class="${gateway_id}-name-display account-name-display">Untitled Account</span>
@@ -110,7 +110,7 @@ jQuery(document).ready(function ($) {
 							</div>
 						</div>
 
-						<div class="${gateway_id}-info account-info" style="display: none;">
+						<div class="${gateway_id}-info" style="display: none;">
 							<div class="add-blog title-priority">
 								<div class="account-input account-name">
 									<label>Account Name</label>
@@ -137,7 +137,7 @@ jQuery(document).ready(function ($) {
 								Do you have the sandbox keys?
 							</div>
 
-							<div class="${gateway_id}-sandbox-keys sandbox-key" style="display: none;">
+							<div class="${gateway_id}-sandbox-keys" style="display: none;">
 								<div class="add-blog">
 									<div class="account-input">
 										<label>Sandbox Keys</label>
@@ -332,12 +332,12 @@ jQuery(document).ready(function ($) {
 			$status.removeClass('error success').text('Syncing accounts...').show();
 
 			$.ajax({
-				url: dfinsell_ajax_object.ajax_url,
+				url: dfinsell_admin_data.ajax_url,
 				method: 'POST',
 				dataType: 'json',
 				data: {
 					action: `${id}_manual_sync`, // assuming different action per gateway (optional)
-					nonce: dfinsell_ajax_object.nonce
+					nonce: dfinsell_admin_data.nonce
 				},
 				success: function (response) {
 					if (response.success) {

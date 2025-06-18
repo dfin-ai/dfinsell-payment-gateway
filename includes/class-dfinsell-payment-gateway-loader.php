@@ -15,8 +15,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	private static $instance = null;
 	private $admin_notices;
 
-	private $sip_protocol;
-	private $sip_host;
+	private $base_url;
 
 	/**
 	 * Get the singleton instance of this class.
@@ -37,8 +36,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	private function __construct()
 	{
 
-		$this->sip_protocol = SIP_PROTOCOL;
-		$this->sip_host = SIP_HOST;
+		$this->base_url = DFINSELL_BASE_URL;
 
 		$this->admin_notices = new DFINSELL_PAYMENT_GATEWAY_Admin_Notices();
 
@@ -99,6 +97,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	private function dfinsell_init_gateways()
 	{
 		if (!class_exists('WC_Payment_Gateway')) {
+			error_log('WC_Payment_Gateway not found');
 			return;
 		}
 
@@ -106,6 +105,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		add_filter('woocommerce_payment_gateways', function ($methods) {
 			$methods[] = 'DFINSELL_PAYMENT_GATEWAY';
+			error_log('DFINSELL_PAYMENT_GATEWAY added to WooCommerce gateways');
 			return $methods;
 		});
 	}
@@ -113,8 +113,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 	private function get_api_url($endpoint)
 	{
-		$base_url = $this->sip_host;
-		return $this->sip_protocol . $base_url . $endpoint;
+		return $this->base_url . $endpoint;
 	}
 
 	/**
@@ -440,7 +439,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			}
 		}
 
-		$url = esc_url($this->sip_protocol . $this->sip_host . '/api/sync-account-status');
+		$url = esc_url($this->base_url . '/api/sync-account-status');
 		$response = wp_remote_post($url, [
 			'headers' => [
 				'Content-Type'  => 'application/json',

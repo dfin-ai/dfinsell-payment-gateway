@@ -148,7 +148,7 @@ function cancel_unpaid_order_action($order_id)
 
 	// Call cancel API
 	$apiPath = '/api/cancel-order-link';
-	$url = SIP_PROTOCOL . SIP_HOST . $apiPath;
+	$url = DFINSELL_BASE_URL . $apiPath;
 	$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
 
 	$response = wp_remote_post($cleanUrl, array(

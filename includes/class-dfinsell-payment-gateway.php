@@ -12,11 +12,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 {
 	const ID = 'dfinsell';
 
-	private $sip_protocol;
-	private $sip_host;
-
 	protected $sandbox;
-
+	private $base_url;
 	private $public_key;
 	private $secret_key;
 	private $sandbox_secret_key;
@@ -41,10 +38,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Instantiate the notices class
 		$this->admin_notices = new DFINSELL_PAYMENT_GATEWAY_Admin_Notices();
 
-		// Determine SIP protocol based on site protocol
-		$this->sip_protocol = SIP_PROTOCOL;
-		$this->sip_host = SIP_HOST;
-
+		$this->base_url = DFINSELL_BASE_URL;
+		
 		// Define user set variables
 		$this->id = self::ID;
 		$this->icon = ''; // Define an icon URL if needed.
@@ -83,7 +78,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	private function get_api_url($endpoint)
 	{
-		return $this->sip_protocol . $this->sip_host . $endpoint;
+		return $this->base_url . $endpoint;
 	}
 
 	public function dfinsell_process_admin_options()
@@ -262,7 +257,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					/* translators: %1$s is a link to the developer account. %2$s is used for any additional formatting if necessary. */
 					__('To configure this gateway, %1$sGet your API keys from your merchant account: Developer Settings > API Keys.%2$s', 'dfinsell-payment-gateway'),
 					'<strong><a class="dfinsell-instructions-url" href="' .
-						esc_url($this->sip_host . '/developers') .
+						esc_url($this->base_url . '/developers') .
 						'" target="_blank">' .
 						__('click here to access your developer account', 'dfinsell-payment-gateway') .
 						'</a></strong><br>',
@@ -375,7 +370,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 									</div>
 								</div>
 								
-								<div class="<?php echo esc_attr($this->id); ?>-info account-info">
+								<div class="<?php echo esc_attr($this->id); ?>-info">
 									<div class="add-blog title-priority">
 										<div class="account-input account-name">
 											<label><?php esc_html_e('Account Name', 'dfinsell-payment-gateway'); ?></label>
@@ -427,7 +422,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 									<?php
 									$sandbox_container_id = esc_attr( $this->id . '-sandbox-keys-' . $index );
-									$sandbox_container_class = esc_attr( $this->id . '-sandbox-keys sandbox-key' );
+									$sandbox_container_class = esc_attr( $this->id . '-sandbox-keys' );
 									$sandbox_display_style = empty( $account['sandbox_public_key'] ) ? 'display: none;' : '';
 									?>
 								<div id="<?php echo $sandbox_container_id; ?>" class="<?php echo $sandbox_container_class; ?>" style="<?php echo $sandbox_display_style; ?>">
@@ -592,7 +587,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			// **Proceed with Payment**
 			$apiPath = '/api/request-payment';
-			$url = esc_url($this->sip_protocol . $this->sip_host . $apiPath);
+			$url = esc_url($this->base_url . $apiPath);
 
 			$order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
 			$order->save();
@@ -731,7 +726,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 						// Cancel API call
 						$apiPath  = '/api/cancel-order-link';
-						$url      = $this->sip_protocol . $this->sip_host . $apiPath;
+						$url      = $this->base_url . $apiPath;
 						$cleanUrl = esc_url_raw(preg_replace('#(?<!:)//+#', '/', $url));
 
 						$response = wp_remote_post($cleanUrl, array(
@@ -1072,8 +1067,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	function dfinsell_admin_scripts($hook)
 	{
-		if ('woocommerce_page_wc-settings' !== $hook) {
-			return; // Only load on WooCommerce settings page
+		if ('woocommerce_page_wc-settings' !== $hook || ($_GET['section'] ?? '') !== $this->id) {
+			return;
 		}
 
 		// Enqueue Admin CSS
@@ -1085,7 +1080,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Register and enqueue your script
 		wp_enqueue_script('dfinsell-admin-script', plugins_url('../assets/js/dfinsell-admin.js', __FILE__), ['jquery'], filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell-admin.js'), true);
 
-		wp_localize_script('dfinsell-admin-script', 'dfinsell_ajax_object', [
+		wp_localize_script('dfinsell-admin-script', 'dfinsell_admin_data', [
 			'ajax_url' => admin_url('admin-ajax.php'),
 			'nonce' => wp_create_nonce('dfinsell_sync_nonce'),
 			'gateway_id' => $this->id,
@@ -1141,7 +1136,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			delete_transient('_dfinsell_daily_limit'); // Adjusted transient key pattern if needed
 
 			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
-			$accStatusApiUrl = $this->get_api_url('/api/check-user-status');
+			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
 
 			foreach ($accounts as $account) {
 				$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
