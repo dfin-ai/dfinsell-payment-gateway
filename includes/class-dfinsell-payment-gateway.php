@@ -24,6 +24,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $current_account_index = 0;
 	private $used_accounts = [];
 
+	private static $log_once_flags = [];
+
 	/**
 	 * Constructor.
 	 */
@@ -407,42 +409,43 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 									<div class="account-checkbox">
 										<?php
-											$checkbox_id = esc_attr( $this->id . '-sandbox-checkbox-' . $index );
-											$checkbox_class = esc_attr($this->id . '-sandbox-checkbox' );
+											$checkbox_id    = $this->id . '-sandbox-checkbox-' . $index;
+											$checkbox_class = $this->id . '-sandbox-checkbox';
 										?>
 										<input type="checkbox"
-											class="<?php echo $checkbox_class; ?>"
-											id="<?php echo $checkbox_id; ?>"
+											class="<?php echo esc_attr( $checkbox_class ); ?>"
+											id="<?php echo esc_attr( $checkbox_id ); ?>"
 											name="accounts[<?php echo esc_attr( $index ); ?>][has_sandbox]"
 											<?php checked( ! empty( $account['sandbox_public_key'] ) ); ?>>
-										<label for="<?php echo $checkbox_id; ?>">
+										<label for="<?php echo esc_attr( $checkbox_id ); ?>">
 											<?php esc_html_e( 'Do you have the sandbox keys?', 'dfinsell-payment-gateway' ); ?>
 										</label>
 									</div>
 
 									<?php
-									$sandbox_container_id = esc_attr( $this->id . '-sandbox-keys-' . $index );
-									$sandbox_container_class = esc_attr( $this->id . '-sandbox-keys' );
-									$sandbox_display_style = empty( $account['sandbox_public_key'] ) ? 'display: none;' : '';
+									$sandbox_container_id    = $this->id . '-sandbox-keys-' . $index;
+									$sandbox_container_class = $this->id . '-sandbox-keys';
+									$sandbox_display_style   = empty($account['sandbox_public_key']) ? 'display: none;' : '';
 									?>
-								<div id="<?php echo $sandbox_container_id; ?>" class="<?php echo $sandbox_container_class; ?>" style="<?php echo $sandbox_display_style; ?>">
+									<div id="<?php echo esc_attr($sandbox_container_id); ?>"
+									     class="<?php echo esc_attr($sandbox_container_class); ?>"
+									     style="<?php echo esc_attr($sandbox_display_style); ?>">
 
-										<div class="add-blog">
-
-											<div class="account-input">
-												<label><?php esc_html_e('Sandbox Keys', 'dfinsell-payment-gateway'); ?></label>
-												<input type="text" class="sandbox-public-key"
-													name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]"
-													placeholder="<?php esc_attr_e('Public Key', 'dfinsell-payment-gateway'); ?>"
-													value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
-											</div>
-											<div class="account-input">
-												<input type="text" class="sandbox-secret-key"
-													name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]"
-													placeholder="<?php esc_attr_e('Secret Key', 'dfinsell-payment-gateway'); ?>"
-													value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
-											</div>
-										</div>
+									    <div class="add-blog">
+									        <div class="account-input">
+									            <label><?php esc_html_e('Sandbox Keys', 'dfinsell-payment-gateway'); ?></label>
+									            <input type="text" class="sandbox-public-key"
+									                   name="accounts[<?php echo esc_attr($index); ?>][sandbox_public_key]"
+									                   placeholder="<?php esc_attr_e('Public Key', 'dfinsell-payment-gateway'); ?>"
+									                   value="<?php echo esc_attr($account['sandbox_public_key'] ?? ''); ?>">
+									        </div>
+									        <div class="account-input">
+									            <input type="text" class="sandbox-secret-key"
+									                   name="accounts[<?php echo esc_attr($index); ?>][sandbox_secret_key]"
+									                   placeholder="<?php esc_attr_e('Secret Key', 'dfinsell-payment-gateway'); ?>"
+									                   value="<?php echo esc_attr($account['sandbox_secret_key'] ?? ''); ?>">
+									        </div>
+									    </div>
 									</div>
 								</div>
 							</div>
@@ -469,6 +472,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	public function process_payment($order_id, $used_accounts = [])
 	{
 		global $wpdb;
+		$logger_context = ['source' => 'dfinsell-payment-gateway'];
+
 		// Retrieve client IP
 		$ip_address = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
 		if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
@@ -486,6 +491,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$request_timestamps = array_filter($request_timestamps, fn($ts) => $timestamp - $ts <= $window_size);
 
 		if (count($request_timestamps) >= $max_requests) {
+			wc_get_logger()->warning("Rate limit exceeded for IP: {$ip_address}", $logger_context);
 			wc_add_notice(__('Too many requests. Please try again later.', 'dfinsell-payment-gateway'), 'error');
 			return ['result' => 'fail'];
 		}
@@ -497,6 +503,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// **Retrieve Order**
 		$order = wc_get_order($order_id);
 		if (!$order) {
+			wc_get_logger()->error("Invalid order ID: {$order_id}", $logger_context);
 			wc_add_notice(__('Invalid order.', 'dfinsell-payment-gateway'), 'error');
 			return ['result' => 'fail'];
 		}
@@ -510,6 +517,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				$order->update_meta_data('_is_test_order', true);
 				$order->add_order_note($test_note);
 			}
+			wc_get_logger()->info("Sandbox mode: test order flag set for Order ID: {$order_id}", $logger_context);
 		}
 		$last_failed_account = null; // Track the last account that reached the limit
 		$previous_account = null;
@@ -519,7 +527,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			if (!$account) {
 				// **Ensure email is sent to the last failed account**
 				if ($last_failed_account) {
-					wc_get_logger()->info("Sending email to last failed account: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
+					wc_get_logger()->info("Sending notification to account '{$last_failed_account['title']}' due to no available alternatives.", $logger_context);
 					$this->send_account_switch_email($last_failed_account, $account);
 				}
 				wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
@@ -554,7 +562,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			// **Handle Account Limit Error**
 			if (isset($transaction_limit_data['status']) && $transaction_limit_data['status'] === 'error') {
 				$error_message = sanitize_text_field($transaction_limit_data['message']);
-				wc_get_logger()->error("Account '{$account['title']}' limit reached: $error_message", ['source' => 'dfinsell-payment-gateway']);
+				wc_get_logger()->warning("Account '{$account['title']}' exceeded daily transaction limit: $error_message", $logger_context);
+
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
 				}
@@ -566,7 +575,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				// **Send Email Notification **
 				if ($new_account) {
-					wc_get_logger()->info("Switching from '{$account['title']}' to '{$new_account['title']}' due to limit.", ['source' => 'dfinsell-payment-gateway']);
+					wc_get_logger()->info("Switched to fallback account '{$new_account['title']}' after '{$account['title']}' limit reached.", $logger_context);
 
 					// Send email only to the previously failed account
 					if ($previous_account) {
@@ -586,12 +595,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			// **Proceed with Payment**
+			wc_get_logger()->info("Sending payment request using account '{$account['title']}'", $logger_context);
 			$apiPath = '/api/request-payment';
 			$url = esc_url($this->base_url . $apiPath);
 
 			$order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
 			$order->save();
-			wc_get_logger()->info('DFin Sell Payment Request: ' . wp_json_encode($data), ['source' => 'dfinsell-payment-gateway']);
 
 			$response = wp_remote_post($url, [
 				'method' => 'POST',
@@ -606,7 +615,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			// **Handle Response**
 			if (is_wp_error($response)) {
-				wc_get_logger()->error('DFin Sell Payment Request Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
+				wc_get_logger()->error("HTTP error during payment request: {$response->get_error_message()}", $logger_context);
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
 				}
@@ -615,7 +624,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			$response_data = json_decode(wp_remote_retrieve_body($response), true);
-			wc_get_logger()->info('DFin Sell Payment Response: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
+			wc_get_logger()->info("Received payment API response: " . json_encode($response_data), $logger_context);
 
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
 				if ($last_failed_account) {
@@ -801,8 +810,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			// **Handle Payment Failure**
 			$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Payment failed.', 'dfinsell-payment-gateway');
-			wc_get_logger()->error("Payment failed on account '{$account['title']}':
-            $error_message", ['source' => 'dfinsell-payment-gateway']);
+			wc_get_logger()->error("Final payment failure using '{$account['title']}': $error_message", $logger_context);
 			// **Add Order Note for Failed Payment**
 			$order->add_order_note(
 				sprintf(
@@ -1067,8 +1075,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	function dfinsell_admin_scripts($hook)
 	{
-		if ('woocommerce_page_wc-settings' !== $hook || ($_GET['section'] ?? '') !== $this->id) {
-			return;
+
+		if (
+		    'woocommerce_page_wc-settings' !== $hook ||
+		    (sanitize_text_field(wp_unslash($_GET['section'] ?? '')) !== $this->id) // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		) {
+		    return;
 		}
 
 		// Enqueue Admin CSS
@@ -1089,126 +1101,134 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	public function hide_custom_payment_gateway_conditionally($available_gateways)
 	{
-		$gateway_id = $this->id;
+	    $gateway_id = $this->id;
 
-		if (is_checkout()) {
-			WC()->session->set('dfin_gateway_hidden_logged', false);
-			WC()->session->set('dfin_gateway_status', '');
+	    if (!is_checkout()) {
+	        return $available_gateways;
+	    }
 
-			$gateway_status = WC()->session->get('dfin_gateway_status');
+	    // Optional: limit logic execution within a single PHP request
+	    static $already_checked = false;
+	    static $is_visible = null;
 
-			if ($gateway_status === 'hidden') {
-				unset($available_gateways[$gateway_id]);
-				return $available_gateways;
-			} elseif ($gateway_status === 'visible') {
-				return $available_gateways;
-			}
+	    if ($already_checked) {
+	        if (!$is_visible) {
+	            unset($available_gateways[$gateway_id]);
+	        }
+	        return $available_gateways;
+	    }
 
-			$amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
+	    $already_checked = true;
 
-			if (!method_exists($this, 'get_all_accounts')) {
-				wc_get_logger()->error('Payment account setup is incomplete. Please ensure at least one valid payment account is configured.', [
-					'source' => 'dfinsell-payment-gateway'
-				]);
-				return $available_gateways;
-			}
+	    $amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 
-			$accounts = $this->get_all_accounts();
+	    if (!method_exists($this, 'get_all_accounts')) {
+	        wc_get_logger()->error('Payment account setup is incomplete. Please ensure at least one valid payment account is configured.', [
+	            'source' => 'dfinsell-payment-gateway'
+	        ]);
+	        unset($available_gateways[$gateway_id]);
+	        $is_visible = false;
+	        return $available_gateways;
+	    }
 
-			if (empty($accounts)) {
-				wc_get_logger()->warning('No payment accounts are available. The payment option will not appear during checkout.', [
-					'source' => 'dfinsell-payment-gateway'
-				]);
-				unset($available_gateways[$gateway_id]);
-				WC()->session->set('dfin_gateway_status', 'hidden');
-				return $available_gateways;
-			}
+	    $accounts = $this->get_all_accounts();
 
-			usort($accounts, function ($a, $b) {
-				return $a['priority'] <=> $b['priority'];
-			});
+	    if (empty($accounts)) {
+	        $log_key = 'dfin_log_no_accounts_' . md5($this->id);
+	        if (false === get_transient($log_key)) {
+	            wc_get_logger()->warning('No payment accounts are available. The payment option will not appear during checkout.', [
+	                'source' => 'dfinsell-payment-gateway'
+	            ]);
+	            set_transient($log_key, 1, 10); // Avoid duplicate log for 10 seconds
+	        }
+	        unset($available_gateways[$gateway_id]);
+	        $is_visible = false;
+	        return $available_gateways;
+	    }
 
-			$all_high_priority_accounts_limited = true;
-			$user_account_active = false;
+	    usort($accounts, function ($a, $b) {
+	        return $a['priority'] <=> $b['priority'];
+	    });
 
-			delete_transient('_dfinsell_daily_limit');
+	    $all_high_priority_accounts_limited = true;
+	    $user_account_active = false;
 
-			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
-			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
+	    delete_transient('_dfinsell_daily_limit');
 
-			foreach ($accounts as $index => $account) {
-				$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
-				$account_context = [
-					'title' => $account['title'] ?? 'N/A',
-					'priority' => $account['priority'] ?? 'N/A',
-					'is_sandbox' => $this->sandbox,
-					'public_key' => $public_key,
-				];
+	    $transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
+	    $accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
 
-				$data = [
-					'is_sandbox' => $this->sandbox,
-					'amount' => $amount,
-					'api_public_key' => $public_key,
-				];
+	    foreach ($accounts as $account) {
+	        $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
 
-				$cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
+	        $data = [
+	            'is_sandbox'     => $this->sandbox,
+	            'amount'         => $amount,
+	            'api_public_key' => $public_key,
+	        ];
 
-				// Check merchant status
-				$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status');
-				wc_get_logger()->info("[Account {$index}] Merchant account status checked successfully.", [
-					'source' => 'dfinsell-payment-gateway',
-					'context' => $account_context,
-				]);
+	        $cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
 
-				if ($acc_status_response_data['status'] === 'success') {
-					$user_account_active = true;
-				}
+	        $acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status');
 
-				// Check transaction limits
-				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key . '_limit');
-				wc_get_logger()->info("[Account {$index}] Daily transaction limit verified.", [
-					'source' => 'dfinsell-payment-gateway',
-					'context' => $account_context,
-				]);
-				if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'success') {
-					$all_high_priority_accounts_limited = false;
-				}
+	        if (
+	            isset($acc_status_response_data['status']) &&
+	            $acc_status_response_data['status'] === 'success'
+	        ) {
+	            $user_account_active = true;
+	        }
 
-				// If both conditions are already satisfied, break early
-				if ($user_account_active && !$all_high_priority_accounts_limited) {
-					break;
-				}
-			}
+	        $transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key . '_limit');
 
-			wc_get_logger()->info("Payment gateway visibility decision: account_active = " . json_encode($user_account_active) . ", limits_exceeded = " . json_encode($all_high_priority_accounts_limited), [
-				'source' => 'dfinsell-payment-gateway',
-			]);
+	        if (
+	            isset($transaction_limit_response_data['status']) &&
+	            $transaction_limit_response_data['status'] === 'success'
+	        ) {
+	            $all_high_priority_accounts_limited = false;
+	        }
 
-			if (!$user_account_active) {
-				wc_get_logger()->warning('All payment accounts are currently inactive. The payment option is hidden at checkout.', [
-					'source' => 'dfinsell-payment-gateway'
-				]);
-				unset($available_gateways[$gateway_id]);
-				WC()->session->set('dfin_gateway_status', 'hidden');
-				return $available_gateways;
-			}
+	        if ($user_account_active && !$all_high_priority_accounts_limited) {
+	            break;
+	        }
+	    }
 
-			if ($all_high_priority_accounts_limited) {
-				if (!WC()->session->get('dfin_gateway_hidden_logged')) {
-					wc_get_logger()->warning('All available payment accounts have reached their transaction limits. The payment option is temporarily unavailable.', [
-						'source' => 'dfinsell-payment-gateway'
-					]);
-					WC()->session->set('dfin_gateway_hidden_logged', true);
-				}
-				unset($available_gateways[$gateway_id]);
-				WC()->session->set('dfin_gateway_status', 'hidden');
-				return $available_gateways;
-			}
+	    if (!$user_account_active) {
+	        $log_key = 'dfin_log_no_active_accounts_' . md5($this->id);
+	        if (false === get_transient($log_key)) {
+	            wc_get_logger()->warning('Payment gateway is hidden. No payment accounts are currently active or approved for transactions.', [
+	                'source' => 'dfinsell-payment-gateway'
+	            ]);
+	            set_transient($log_key, 1, 10);
+	        }
+	        unset($available_gateways[$gateway_id]);
+	        $is_visible = false;
+	        return $available_gateways;
+	    }
 
-			WC()->session->set('dfin_gateway_status', 'visible');
-		}
+	    if ($all_high_priority_accounts_limited) {
+	        $log_key = 'dfin_log_accounts_limited_' . md5($this->id);
+	        if (false === get_transient($log_key)) {
+	            wc_get_logger()->warning('Payment gateway is hidden. All available accounts have reached their daily transaction limits.', [
+	                'source' => 'dfinsell-payment-gateway'
+	            ]);
+	            set_transient($log_key, 1, 10);
+	        }
+	        unset($available_gateways[$gateway_id]);
+	        $is_visible = false;
+	        return $available_gateways;
+	    }
 
-		return $available_gateways;
+	    // ✅ At least one account is valid and within limits
+	    $log_key = 'dfin_log_gateway_active_' . md5($this->id);
+	    if (false === get_transient($log_key)) {
+	        wc_get_logger()->info('Payment gateway is active. At least one account is available and within limits.', [
+	            'source' => 'dfinsell-payment-gateway'
+	        ]);
+	        set_transient($log_key, 1, 10);
+	    }
+
+	    $is_visible = true;
+	    return $available_gateways;
 	}
 
 
