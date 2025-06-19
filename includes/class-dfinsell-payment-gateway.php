@@ -1107,14 +1107,18 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
 
 			if (!method_exists($this, 'get_all_accounts')) {
-				wc_get_logger()->error('Method get_all_accounts() is missing!', ['source' => 'dfinsell-payment-gateway']);
+				wc_get_logger()->error('Payment account setup is incomplete. Please ensure at least one valid payment account is configured.', [
+					'source' => 'dfinsell-payment-gateway'
+				]);
 				return $available_gateways;
 			}
 
 			$accounts = $this->get_all_accounts();
 
 			if (empty($accounts)) {
-				wc_get_logger()->warning('No accounts available. Hiding payment gateway.', ['source' => 'dfinsell-payment-gateway']);
+				wc_get_logger()->warning('No payment accounts are available. The payment option will not appear during checkout.', [
+					'source' => 'dfinsell-payment-gateway'
+				]);
 				unset($available_gateways[$gateway_id]);
 				WC()->session->set('dfin_gateway_status', 'hidden');
 				return $available_gateways;
@@ -1151,7 +1155,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				// Check merchant status
 				$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status');
-				wc_get_logger()->info('[Account ' . $index . '] /api/check-merchant-status response: ' . wp_json_encode($acc_status_response_data), [
+				wc_get_logger()->info("[Account {$index}] Merchant account status checked successfully.", [
 					'source' => 'dfinsell-payment-gateway',
 					'context' => $account_context,
 				]);
@@ -1162,11 +1166,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				// Check transaction limits
 				$transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key . '_limit');
-				wc_get_logger()->info('[Account ' . $index . '] /api/dailylimit response: ' . wp_json_encode($transaction_limit_response_data), [
+				wc_get_logger()->info("[Account {$index}] Daily transaction limit verified.", [
 					'source' => 'dfinsell-payment-gateway',
 					'context' => $account_context,
 				]);
-
 				if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'success') {
 					$all_high_priority_accounts_limited = false;
 				}
@@ -1177,11 +1180,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				}
 			}
 
-			wc_get_logger()->info('Final decision flags: user_account_active=' . json_encode($user_account_active) . ', all_high_priority_accounts_limited=' . json_encode($all_high_priority_accounts_limited), [
+			wc_get_logger()->info("Payment gateway visibility decision: account_active = " . json_encode($user_account_active) . ", limits_exceeded = " . json_encode($all_high_priority_accounts_limited), [
 				'source' => 'dfinsell-payment-gateway',
 			]);
 
 			if (!$user_account_active) {
+				wc_get_logger()->warning('All payment accounts are currently inactive. The payment option is hidden at checkout.', [
+					'source' => 'dfinsell-payment-gateway'
+				]);
 				unset($available_gateways[$gateway_id]);
 				WC()->session->set('dfin_gateway_status', 'hidden');
 				return $available_gateways;
@@ -1189,7 +1195,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			if ($all_high_priority_accounts_limited) {
 				if (!WC()->session->get('dfin_gateway_hidden_logged')) {
-					wc_get_logger()->warning('All high-priority accounts have reached transaction limits. Hiding gateway.', ['source' => 'dfinsell-payment-gateway']);
+					wc_get_logger()->warning('All available payment accounts have reached their transaction limits. The payment option is temporarily unavailable.', [
+						'source' => 'dfinsell-payment-gateway'
+					]);
 					WC()->session->set('dfin_gateway_hidden_logged', true);
 				}
 				unset($available_gateways[$gateway_id]);
