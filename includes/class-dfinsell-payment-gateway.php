@@ -524,6 +524,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// **Start Payment Process**
 		while (true) {
 			$account = $this->get_next_available_account($used_accounts);
+
 			if (!$account) {
 				// **Ensure email is sent to the last failed account**
 				if ($last_failed_account) {
@@ -533,9 +534,56 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
 				return ['result' => 'fail'];
 			}
+
+			/* ==========================================================
+			   CHECK MERCHANT STATUS BEFORE USING ACCOUNT
+			   ----------------------------------------------------------
+			   Ensures the current account (merchant) is active and 
+			   approved before proceeding. Skips account if inactive.
+			   ========================================================== */
+
+			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+
+			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
+			$merchant_status_data = [
+			    'is_sandbox'     => $this->sandbox,
+			    'amount'         => $order->get_total(),
+			    'api_public_key' => $public_key,
+			];
+
+			// Use cache for status check
+			$cache_key = 'merchant_status_' . md5($public_key);
+			$merchant_status_response = $this->get_cached_api_response($accStatusApiUrl, $merchant_status_data, $cache_key);
+
+			if (
+			    !is_array($merchant_status_response) ||
+			    !isset($merchant_status_response['status']) ||
+			    $merchant_status_response['status'] !== 'success'
+			) {
+			    wc_get_logger()->warning("Account '{$account['title']}' failed merchant status check.", [
+			        'source'  => 'dfinsell-payment-gateway',
+			        'context' => [
+			            'order_id'      => $order_id,
+			            'account_title' => $account['title'] ?? 'unknown',
+			            'response'      => $merchant_status_response,
+			        ],
+			    ]);
+
+			    if (!empty($lock_key)) {
+			        $this->release_lock($lock_key);
+			    }
+
+			    // 👇 THIS LINE PREVENTS INFINITE LOOP
+				$used_accounts[] = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+
+			    continue; // Try next account
+			}
+
+
+			/* ========================== END ========================== */
+
 			$lock_key = $account['lock_key'] ?? null;
 
-			//wc_get_logger()->info("Using account '{$account['title']}' for payment.", ['source' => 'dfinsell-payment-gateway']);
 			// Add order note mentioning account name
 			$order->add_order_note(__('Processing Payment Via: ', 'dfinsell-payment-gateway') . $account['title']);
 
@@ -562,7 +610,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			// **Handle Account Limit Error**
 			if (isset($transaction_limit_data['status']) && $transaction_limit_data['status'] === 'error') {
 				$error_message = sanitize_text_field($transaction_limit_data['message']);
-				wc_get_logger()->warning("Account '{$account['title']}' exceeded daily transaction limit: $error_message", $logger_context);
+				wc_get_logger()->warning("['{$account['title']}'] exceeded daily transaction limit: $error_message", $logger_context);
 
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
@@ -624,11 +672,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			$response_data = json_decode(wp_remote_retrieve_body($response), true);
-			wc_get_logger()->info("Received payment API response: " . json_encode($response_data), $logger_context);
 
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
 				if ($last_failed_account) {
-					//wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
+					wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
 					$this->send_account_switch_email($last_failed_account, $account);
 				}
 				//$last_successful_account = $account;
@@ -638,9 +685,76 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					$order->update_meta_data('_dfinsell_pay_id', $pay_id);
 				}
 
+				$table_name = $wpdb->prefix . 'order_payment_link';
+
+				// Add simple cache to avoid hitting DB on every request
+				$cache_key    = 'dfinsell_table_exists_' . md5($table_name);
+				$cache_group  = 'dfinsell_payment_gateway';
+
+				$table_exists = wp_cache_get($cache_key, $cache_group);
+
+				if (false === $table_exists) {
+				    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
+				    $table_exists = $wpdb->get_var(
+				        $wpdb->prepare("SHOW TABLES LIKE %s", $table_name)
+				    );
+
+				    // Cache result for 1 hour
+				    wp_cache_set($cache_key, $table_exists, $cache_group, HOUR_IN_SECONDS);
+				}
+
+				if ($table_exists !== $table_name) {
+				    // Create the table if not exists
+				    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+
+				    $charset_collate = $wpdb->get_charset_collate();
+
+				    $create_sql = "CREATE TABLE $table_name (
+				        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+				        order_id BIGINT UNSIGNED NOT NULL,
+				        uuid VARCHAR(100) NOT NULL,
+				        payment_link TEXT NOT NULL,
+				        customer_email VARCHAR(191),
+				        amount DECIMAL(18,2),
+				        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+				    ) $charset_collate;";
+
+				    dbDelta($create_sql);
+
+				    wc_get_logger()->info("Created missing `$table_name` table.", [
+				        'source' => 'dfinsell-payment-gateway',
+				        'context' => ['table' => $table_name],
+				    ]);
+				}
+
+				// Prepare amount
+				$formatted_amount = number_format((float) ($response_data['data']['amount'] ?? 0), 2, '.', '');
+
+				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Insert is safely prepared with format specifiers
+				$wpdb->insert(
+				    $table_name,
+				    [
+				        'order_id'       => $order_id,
+				        'uuid'           => sanitize_text_field($pay_id),
+				        'payment_link'   => esc_url_raw($response_data['data']['payment_link'] ?? ''),
+				        'customer_email' => sanitize_email($response_data['data']['customer_email'] ?? ''),
+				        'amount'         => $formatted_amount,
+				        'created_at'     => current_time('mysql', 1),
+				    ],
+				    ['%d', '%s', '%s', '%s', '%s', '%s']
+				);
+
+				wc_get_logger()->info('Stored order payment link to DB.', [
+				    'source'  => 'dfinsell-payment-gateway',
+				    'context' => [
+				        'order_id' => $order_id,
+				        'uuid'     => $pay_id,
+				        'amount'   => $formatted_amount,
+				    ],
+				]);
+
 				// **Update Order Status**
 				$order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
-
 
 				// **Add Order Note (If Not Exists)**
 				// translators: %s represents the account title.
@@ -653,152 +767,26 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				if (!array_filter($existing_notes, fn($note) => trim(wp_strip_all_tags($note->comment_content)) === trim($new_note))) {
 					$order->add_order_note($new_note, false, true);
-				}
+				}				
 
-				// =========================== / start code for payment link / ================= 
-
-
-				$table_name = $wpdb->prefix . 'order_payment_link';
-				$table_name = esc_sql($table_name); // sanitize as an extra precaution
 				$order_id   = $order->get_id();
 				$uuid = sanitize_text_field($response_data['data']['pay_id']);
 
 				$json_data = json_encode($response_data);
-				wc_get_logger()->info("Order Payment link data: $json_data", ['source' => 'dfinsell-payment-gateway']);
+				wc_get_logger()->info(
+				    'Received successful payment API response. Saving order payment link data.',
+				    [
+				        'source'  => 'dfinsell-payment-gateway',
+				        'context' => [
+				            'order_id'       => $order_id,
+				            'uuid'           => $uuid,
+				            'payment_link'   => $response_data['data']['payment_link'] ?? '',
+				            'customer_email' => $response_data['data']['customer_email'] ?? '',
+				            'amount'         => $response_data['data']['amount'] ?? '',
+				        ],
+				    ]
+				);
 
-
-				// ========================== Check if table exists, create if not ==========================
-				$charset_collate = $wpdb->get_charset_collate();
-
-				// Use dbDelta() to create/update the table schema. dbDelta() handles the "table exists" check.
-				//  Important:  Use placeholders for any variables in the CREATE TABLE statement, even though
-				//  dbDelta() is designed to handle this.  It's good practice.  In this case, we are using $table_name
-				$sql = "
-				CREATE TABLE IF NOT EXISTS {$table_name} (
-				    id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-				    order_id BIGINT(20) UNSIGNED NOT NULL,
-				    uuid TEXT NOT NULL,
-				    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-				    PRIMARY KEY (id),
-				    INDEX (order_id)
-				) ENGINE=InnoDB {$charset_collate};
-				";
-
-				require_once ABSPATH . 'wp-admin/includes/upgrade.php'; // Only include upgrade.php when needed.
-				dbDelta($sql);
-
-				// Check for errors after dbDelta()
-				if ($wpdb->last_error) {
-					wc_get_logger()->error(
-						"Error creating table {$table_name}: " . $wpdb->last_error,
-						['source' => 'dfinsell-payment-gateway']
-					);
-				}
-
-
-				try {
-					$cache_key   = 'order_uuid_' . $order_id;
-					$cache_group = 'dfinsell_order_uuid';
-
-					// Try to get the result from the cache
-					$existing_uuid = wp_cache_get($cache_key, $cache_group);
-
-					if (false === $existing_uuid) {
-						// Validate table name to avoid injection
-						if (!preg_match('/^[a-zA-Z0-9_]+$/', $table_name)) {
-							throw new Exception('Invalid table name');
-						}
-
-						// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- This query is for a custom table, and no higher-level WordPress API exists to retrieve data from it.
-						$existing_uuid = $wpdb->get_row(
-							$wpdb->prepare(
-								// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $table_name is validated via preg_match and not passed as a placeholder as prepare() does not handle identifiers.
-								"SELECT uuid FROM " . $table_name . " WHERE order_id = %d ORDER BY id DESC",
-								$order_id
-							)
-						);
-
-						// Cache result for 1 hour
-						wp_cache_set($cache_key, $existing_uuid, $cache_group, 3600);
-					}
-
-					if (!empty($existing_uuid)) {
-
-						wc_get_logger()->info(
-							'existing_uuid: ' . wp_json_encode($existing_uuid),
-							['source' => 'dfinsell-payment-gateway']
-						);
-
-
-						$old_uuid = sanitize_text_field($existing_uuid->uuid);
-
-						// Cancel API call
-						$apiPath  = '/api/cancel-order-link';
-						$url      = $this->base_url . $apiPath;
-						$cleanUrl = esc_url_raw(preg_replace('#(?<!:)//+#', '/', $url));
-
-						$response = wp_remote_post($cleanUrl, array(
-							'method'    => 'POST',
-							'timeout'   => 30,
-							'body'      => wp_json_encode(array(
-								'order_id'   => $order_id,
-								'order_uuid' => $old_uuid,
-								'status'     => 'canceled',
-							)),
-							'headers'   => array(
-								'Content-Type' => 'application/json',
-							),
-							'sslverify' => true,
-						));
-
-						if (is_wp_error($response)) {
-							wc_get_logger()->error(
-								'Cancel API Error: ' . $response->get_error_message(),
-								['source' => 'dfinsell-payment-gateway']
-							);
-						} else {
-							$body = wp_remote_retrieve_body($response);
-							wc_get_logger()->info(
-								'Cancel API Response: ' . wp_json_encode($body),
-								['source' => 'dfinsell-payment-gateway']
-							);
-						}
-					}
-
-					// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Safe use of $wpdb->insert() for custom table
-					$inserted = $wpdb->insert(
-						$table_name,
-						[
-							'order_id' => $order_id,
-							'uuid'     => $uuid,
-						],
-						[
-							'%d',
-							'%s',
-						]
-					);
-
-					if ($inserted !== false) {
-						wc_get_logger()->info(
-							"DFinSell: Inserted new payment link for order ID $order_id",
-							['source' => 'dfinsell-payment-gateway']
-						);
-					} else {
-						wc_get_logger()->error(
-							"DFinSell: Failed to insert uuid — WPDB error: " . $wpdb->last_error,
-							['source' => 'dfinsell-payment-gateway']
-						);
-					}
-				} catch (Exception $e) {
-					wc_get_logger()->error(
-						"DFinSell: Exception during payment link handling: " . $e->getMessage(),
-						['source' => 'dfinsell-payment-gateway']
-					);
-				}
-
-
-				// =====================/ end code for payment link /
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
 				}
@@ -1158,6 +1146,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	    $transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 	    $accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
 
+		wc_get_logger()->info('Accounts to evaluate:', [
+		    'source' => 'dfinsell-payment-gateway',
+		    'context' => $accounts
+		]);
+
 	    foreach ($accounts as $account) {
 	        $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
 
@@ -1167,16 +1160,18 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	            'api_public_key' => $public_key,
 	        ];
 
-	        $cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);
+	        $cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);	
 
-	        $acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status');
+			$force_refresh = isset($_GET['refresh_accounts']) && $_GET['refresh_accounts'] == '1';
+			$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status', 30, $force_refresh);
 
-	        if (
-	            isset($acc_status_response_data['status']) &&
-	            $acc_status_response_data['status'] === 'success'
-	        ) {
-	            $user_account_active = true;
-	        }
+	       if (
+			    isset($acc_status_response_data['status']) &&
+			    $acc_status_response_data['status'] === 'success'
+			) {
+			    $user_account_active = true;
+			}
+
 
 	        $transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key . '_limit');
 
@@ -1289,75 +1284,90 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		return ['valid_accounts' => $valid_accounts];
 	}
 
-	private function get_cached_api_response($url, $data, $cache_key)
+	private function get_cached_api_response($url, $data, $cache_key, $ttl = 120, $force_refresh = false)
 	{
-		// Check if the response is already cached
-		$cached_response = get_transient($cache_key);
+	    // Allow ?refresh_accounts=1 in URL to force-refresh cache (useful for testing)
+	    if (!$force_refresh && isset($_GET['refresh_accounts']) && $_GET['refresh_accounts'] == '1') {
+	        $force_refresh = true;
+	    }
 
-		if ($cached_response !== false) {
-			return $cached_response;
-		}
+	    // If not forcing refresh, return cached version if it exists
+	    if (!$force_refresh) {
+	        $cached_response = get_transient($cache_key);
+	        if ($cached_response !== false) {
+	            return $cached_response;
+	        }
+	    } else {
+	        delete_transient($cache_key); // Clear previous cached version
+	    }
 
-		// Make the API call
-		$response = wp_remote_post($url, [
-			'method' => 'POST',
-			'timeout' => 30,
-			'body' => $data,
-			'headers' => [
-				'Content-Type' => 'application/x-www-form-urlencoded',
-				'Authorization' => 'Bearer ' . $data['api_public_key'],
-			],
-			'sslverify' => true,
-		]);
+	    // Make the API call
+	    $response = wp_remote_post($url, [
+	        'method'  => 'POST',
+	        'timeout' => 30,
+	        'body'    => $data,
+	        'headers' => [
+	            'Content-Type'  => 'application/x-www-form-urlencoded',
+	            'Authorization' => 'Bearer ' . $data['api_public_key'],
+	        ],
+	        'sslverify' => true,
+	    ]);
 
-		if (is_wp_error($response)) {
-			return false;
-		}
+	    if (is_wp_error($response)) {
+	        return ['status' => 'error', 'message' => $response->get_error_message()];
+	    }
 
-		$response_body = wp_remote_retrieve_body($response);
-		$response_data = json_decode($response_body, true);
+	    $response_body = wp_remote_retrieve_body($response);
+	    $response_data = json_decode($response_body, true);
 
-		// Cache the response for 2 minutes
-		set_transient($cache_key, $response_data, 2 * MINUTE_IN_SECONDS);
+	    // Cache the response
+	    set_transient($cache_key, $response_data, $ttl); // Default 120s, can be overridden
 
-		return $response_data;
+	    return $response_data;
 	}
+
 
 	private function get_all_accounts()
 	{
-		$accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
+	    $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
 
-		// Try to unserialize if it's a string
-		if (is_string($accounts)) {
-			$unserialized = maybe_unserialize($accounts);
-			$accounts = is_array($unserialized) ? $unserialized : [];
-		}
+	    if (is_string($accounts)) {
+	        $unserialized = maybe_unserialize($accounts);
+	        $accounts = is_array($unserialized) ? $unserialized : [];
+	        wc_get_logger()->debug(
+			    'Unserialized accounts.',
+			    [
+			        'source'  => 'dfinsell-payment-gateway',
+			        'context' => [
+			            'accounts' => $accounts,
+			        ],
+			    ]
+			);
 
-		$valid_accounts = [];
+	    }
 
-		if (!empty($accounts)) {
-			foreach ($accounts as $account) {
-				// If in sandbox mode, check sandbox status and keys
-				if ($this->sandbox) {
-					if (isset($account['sandbox_status']) && $account['sandbox_status'] === 'Active') {
-						if (!empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key'])) {
-							$valid_accounts[] = $account;
-						}
-					}
-				}
-				// If in live mode, check live status and keys
-				else {
-					if (isset($account['live_status']) && $account['live_status'] === 'Active') {
-						if (!empty($account['live_public_key']) && !empty($account['live_secret_key'])) {
-							$valid_accounts[] = $account;
-						}
-					}
-				}
-			}
-		}
+	    $valid_accounts = [];
 
-		$this->accounts = $valid_accounts;
-		return $this->accounts;
+	    foreach ($accounts as $i => $account) {
+
+	        if ($this->sandbox) {
+	            $status = strtolower($account['sandbox_status'] ?? '');
+	            $has_keys = !empty($account['sandbox_public_key']) && !empty($account['sandbox_secret_key']);
+	    
+	            if ($status === 'active' && $has_keys) {
+	                $valid_accounts[] = $account;
+	            }
+	        } else {
+	            $status = strtolower($account['live_status'] ?? '');
+	            $has_keys = !empty($account['live_public_key']) && !empty($account['live_secret_key']);
+	            if ($status === 'active' && $has_keys) {
+	                $valid_accounts[] = $account;
+	            }
+	        }
+	    }
+
+	    $this->accounts = $valid_accounts;
+	    return $valid_accounts;
 	}
 
 
@@ -1464,10 +1474,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Filter out used accounts and check correct mode status & keys
 		$available_accounts = array_filter($settings, function ($account) use ($used_accounts, $status_key, $public_key, $secret_key) {
-			return !in_array($account['title'], $used_accounts)
+			return !in_array($account[$public_key], $used_accounts, true)
 				&& isset($account[$status_key]) && $account[$status_key] === 'Active'
 				&& !empty($account[$public_key]) && !empty($account[$secret_key]);
 		});
+
 
 		if (empty($available_accounts)) {
 			return false;

@@ -44,6 +44,11 @@ DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
 add_action('woocommerce_cancel_unpaid_order', 'cancel_unpaid_order_action');
 add_action('woocommerce_order_status_cancelled', 'cancel_unpaid_order_action');
 
+/**
+ * Cancels an unpaid order after a specified timeout.
+ *
+ * @param int $order_id The ID of the order to cancel.
+ */
 function cancel_unpaid_order_action($order_id)
 {
 	global $wpdb;
@@ -53,32 +58,41 @@ function cancel_unpaid_order_action($order_id)
 	}
 
 	$order = wc_get_order($order_id);
-	
-	// If order_id is not provided or invalid, find the latest 'shop_order_placehold'
-	if (! $order_id || ! is_numeric($order_id)) {
-		$args = array(
+
+	// Fallback: try to fetch latest placeholder if order is invalid
+	if (!$order) {
+		$args = [
 			'post_type'      => 'shop_order_placehold',
 			'post_status'    => 'any',
 			'posts_per_page' => 1,
 			'orderby'        => 'ID',
 			'order'          => 'DESC',
 			'fields'         => 'ids',
-		);
+		];
 
 		$placeholder_orders = get_posts($args);
 
-		if (! empty($placeholder_orders)) {
+		if (!empty($placeholder_orders)) {
 			$order_id = $placeholder_orders[0];
-			wc_get_logger()->info('Auto-fetched latest unpaid order ID: ' . $order_id, ['source' => 'dfinsell-payment-gateway']);
+			$order    = wc_get_order($order_id);
+
+			wc_get_logger()->info('Fallback to latest unpaid placeholder order.', [
+				'source'  => 'dfinsell-payment-gateway',
+				'context' => ['order_id' => $order_id],
+			]);
 		} else {
-			wc_get_logger()->error('Error: No unpaid placeholder orders found.', ['source' => 'dfinsell-payment-gateway']);
+			wc_get_logger()->error('No unpaid placeholder orders found.', [
+				'source' => 'dfinsell-payment-gateway',
+			]);
 			return;
 		}
 	}
 
-	$order = wc_get_order($order_id);
 	if (!$order) {
-		wc_get_logger()->error('Error: No unpaid orders found.', ['source' => 'dfinsell-payment-gateway']);
+		wc_get_logger()->error('Order not found.', [
+			'source'  => 'dfinsell-payment-gateway',
+			'context' => ['order_id' => $order_id],
+		]);
 		return;
 	}
 
@@ -87,92 +101,103 @@ function cancel_unpaid_order_action($order_id)
 
 	if ($order->has_status('pending')) {
 		if ((time() - $pending_time) < (30 * 60)) {
-			wc_get_logger()->info("Order {$order_id} is still pending and not timed out, skipping cancel API.", ['source' => 'dfinsell-payment-gateway']);
+			wc_get_logger()->info('Order still within pending timeout. Skipping cancel.', [
+				'source'  => 'dfinsell-payment-gateway',
+				'context' => ['order_id' => $order_id],
+			]);
 			return;
 		}
 
-		// Cancel order and reduce stock if timeout occurred
 		$order->update_status('cancelled', 'Order automatically cancelled due to unpaid timeout.');
 		wc_reduce_stock_levels($order_id);
+		wp_cache_delete('dfinsell_payment_link_uuid_' . $order_id, 'dfinsell_payment_gateway');
+		wp_cache_delete('dfinsell_payment_row_' . $order_id, 'dfinsell_payment_gateway'); // Clear row cache
 
-		// Invalidate cache
-		$cache_key = 'dfinsell_payment_link_uuid_' . $order_id;
-		wp_cache_delete($cache_key, 'dfinsell_payment_gateway');
+		wc_get_logger()->info('Order auto-cancelled due to unpaid timeout.', [
+			'source'  => 'dfinsell-payment-gateway',
+			'context' => ['order_id' => $order_id],
+		]);
 	}
 
-	// ========================== start code for expiring payment link ==========================
-	$table_name = $wpdb->prefix . 'order_payment_link';
+	// ====== Cancel Payment Link API ======
+	$table_name   = $wpdb->prefix . 'order_payment_link';
+	$cache_key    = 'dfinsell_payment_row_' . $order_id;
+	$cache_group  = 'dfinsell_payment_gateway';
 
-	// BEFORE this code block, ENSURE you have this crucial validation for $table_name:
-	if (!preg_match('/^[a-zA-Z0-9_]+$/', $table_name)) {
-		throw new Exception('Invalid table name');
+	$payment_row = wp_cache_get($cache_key, $cache_group);
+
+	if (false === $payment_row) {
+	    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table_name is safe, built from $wpdb->prefix
+	    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- direct query is safe and properly prepared
+	    $payment_row = $wpdb->get_row(
+	        $wpdb->prepare(
+	            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table_name is not user input
+	            "SELECT * FROM `{$table_name}` WHERE `order_id` = %d LIMIT 1",
+	            $order_id
+	        ),
+	        ARRAY_A
+	    );
+
+	    if ($payment_row) {
+	        wp_cache_set($cache_key, $payment_row, $cache_group, 5 * MINUTE_IN_SECONDS);
+	    }
 	}
 
-	$latest_uuid = null;
-	$cache_key   = 'dfinsell_payment_link_uuid_' . $order_id;
-	$cache_group = 'dfinsell_payment_gateway'; // A unique group name for your plugin's cache
+	$uuid           = sanitize_text_field($payment_row['uuid'] ?? '');
+	$payment_link   = esc_url_raw($payment_row['payment_link'] ?? '');
+	$customer_email = sanitize_email($payment_row['customer_email'] ?? '');
+	$amount         = number_format(floatval($payment_row['amount'] ?? 0), 8, '.', '');
 
-	// Try to get from cache first
-	$cached_uuid_data = wp_cache_get($cache_key, $cache_group);
-
-	if (false !== $cached_uuid_data) {
-		$latest_uuid = (object) $cached_uuid_data; // Cast back to object if it was stored as array/object
-		wc_get_logger()->info('latest uuid (from cache) - ' . $latest_uuid->uuid, ['source' => 'dfinsell-payment-gateway']);
-	} else {
-		// If not in cache, query the database
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- This query is for a custom table, and no higher-level WordPress API exists to retrieve data from it.
-		$latest_uuid = $wpdb->get_row(
-			$wpdb->prepare(
-				// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $table_name is validated via preg_match and cannot be prepared by $wpdb->prepare() as it's an identifier.
-				"SELECT uuid FROM " . $table_name . " WHERE order_id = %d ORDER BY id DESC",
-				$order_id
-			)
-		);
-
-		// Store in cache
-		if ($latest_uuid) {
-			wp_cache_set($cache_key, $latest_uuid, $cache_group, HOUR_IN_SECONDS); // Cache for 1 hour
-			wc_get_logger()->info('latest uuid (from DB, cached) - ' . $latest_uuid->uuid, ['source' => 'dfinsell-payment-gateway']);
-		}
-	}
-
-	if (empty($latest_uuid?->uuid)) {
-		wc_get_logger()->error(
-			'No record found for order ID - ' . (int) $order_id,
-			['source' => 'dfinsell-payment-gateway']
-		);
+	if (empty($uuid)) {
+		wc_get_logger()->error('Missing or invalid UUID in payment link table.', [
+			'source'  => 'dfinsell-payment-gateway',
+			'context' => ['order_id' => $order_id, 'uuid' => $uuid],
+		]);
 		return;
 	}
 
-	$encoded_uuid_from_db = sanitize_text_field($latest_uuid->uuid);
-
-	// Call cancel API
-	$apiPath = '/api/cancel-order-link';
-	$url = DFINSELL_BASE_URL . $apiPath;
+	$apiPath  = '/api/cancel-order-link';
+	$url      = DFINSELL_BASE_URL . $apiPath;
 	$cleanUrl = esc_url(preg_replace('#(?<!:)//+#', '/', $url));
 
-	$response = wp_remote_post($cleanUrl, array(
+	$request_payload = [
+		'order_id'   => $order_id,
+		'order_uuid' => $uuid,
+		'status'     => 'canceled',
+	];
+
+	$response = wp_remote_post($cleanUrl, [
 		'method'    => 'POST',
 		'timeout'   => 30,
-		'body'      => json_encode(array(
-			'order_id'     => $order_id,
-			'order_uuid'   => $encoded_uuid_from_db,
-			'status'       => 'canceled'
-		)),
-		'headers'   => array(
-			'Content-Type' => 'application/json',
-		),
+		'body'      => json_encode($request_payload),
+		'headers'   => ['Content-Type' => 'application/json'],
 		'sslverify' => true,
-	));
+	]);
 
 	if (is_wp_error($response)) {
-		wc_get_logger()->error('Cancel API Error: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
+		wc_get_logger()->error("Cancel API call failed. Order ID: {$order_id}", [
+			'source'  => 'dfinsell-payment-gateway',
+			'context' => [
+				'order_id' => $order_id,
+				'uuid'     => $uuid,
+				'error'    => $response->get_error_message(),
+			],
+		]);
 	} else {
-		$response_body = wp_remote_retrieve_body($response);
-		$response_json = is_array($response_body) || is_object($response_body)
-			? json_encode($response_body)
-			: $response_body;
-		wc_get_logger()->info('Cancel API Response: ' . $response_json, ['source' => 'dfinsell-payment-gateway']);
+		$response_body    = wp_remote_retrieve_body($response);
+		$decoded_response = json_decode($response_body, true);
+
+		wc_get_logger()->info("Cancel API response received for Order ID: {$order_id}.", [
+			'source'  => 'dfinsell-payment-gateway',
+			'context' => [
+				'order_id'       => $order_id,
+				'uuid'           => $uuid,
+				'payment_link'   => $payment_link,
+				'customer_email' => $customer_email,
+				'amount'         => number_format((float) $amount, 2, '.', ''),
+				'response'       => $decoded_response,
+			],
+		]);
 	}
-	// ========================== end code for expiring payment link ==========================
 }
+

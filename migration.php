@@ -66,18 +66,43 @@ function dfinsell_migrate_old_settings()
 	dfinsell_trigger_sync();
 }
 
-
 function dfinsell_trigger_sync()
 {
+	if (get_transient('dfinsell_sync_lock')) {
+		return; // Already triggered recently
+	}
+	set_transient('dfinsell_sync_lock', true, 5 * MINUTE_IN_SECONDS);
+
 	if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
 		$loader = DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
 		if (method_exists($loader, 'handle_cron_event')) {
-			wc_get_logger()->info('DFin Sell sync account for migrations', ['source' => 'dfinsell-payment-gateway']);
+			wc_get_logger()->info('Sync account for migration started.', [
+				'source' => 'dfinsell-payment-gateway',
+				'context' => ['sync_id' => uniqid('migrate_', true)]
+			]);
 			$loader->handle_cron_event();
 		}
 	}
 }
 
+function dfinsell_on_plugin_activate() {
+	// Migrate settings
+	if (function_exists('dfinsell_migrate_old_settings')) {
+		dfinsell_migrate_old_settings();
+	}
 
-// Hook migration to plugin activation
-register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_migrate_old_settings');
+	// Activate cron
+	if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
+		DFINSELL_PAYMENT_GATEWAY_Loader::get_instance()->activate_cron_job();
+	}
+}
+
+function dfinsell_on_plugin_deactivate() {
+	// Deactivate cron
+	if (class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
+		DFINSELL_PAYMENT_GATEWAY_Loader::get_instance()->deactivate_cron_job();
+	}
+}
+
+register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_on_plugin_activate');
+register_deactivation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_on_plugin_deactivate');

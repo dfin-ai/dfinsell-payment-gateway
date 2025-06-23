@@ -51,14 +51,6 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('wp_ajax_popup_closed_event', array($this, 'handle_popup_close'));
 		add_action('wp_ajax_nopriv_popup_closed_event', array($this, 'handle_popup_close'));
 
-		register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, 'dfinsell_activation_check');
-
-
-		// Schedule the cron job on plugin activation
-		register_activation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, [$this, 'activate_cron_job']);
-
-		// Clear the cron job on plugin deactivation
-		register_deactivation_hook(DFINSELL_PAYMENT_GATEWAY_FILE, [$this, 'deactivate_cron_job']);
 		add_action('wp_ajax_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
 		add_filter('cron_schedules', [$this, 'dfinsell_add_cron_interval']);
 		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
@@ -279,8 +271,6 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				'timeout'   => 15,
 			]);
 
-			wc_get_logger()->info("response from the popup close event :" . json_encode($response), ['source' => 'dfinsell-payment-gateway']);
-
 			// Check for errors in the API request
 			if (is_wp_error($response)) {
 				wp_send_json_error(['message' => 'Failed to connect to the DFin Sell.']);
@@ -290,6 +280,16 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			// Parse the API response
 			$response_body = wp_remote_retrieve_body($response);
 			$response_data = json_decode($response_body, true);
+
+			$log_message = 'Popup closed. Transaction status received from DFin Sell.';
+
+			wc_get_logger()->info($log_message, [
+				'source'  => 'dfinsell-payment-gateway',
+				'context' => [
+					'order_id'           => $order_id,
+					'transaction_status' => $response_data['transaction_status'] ?? 'unknown'
+				],
+			]);
 
 			// Ensure the response contains the expected data
 			if (!isset($response_data['transaction_status'])) {
@@ -378,7 +378,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 	function activate_cron_job()
 	{
-		wc_get_logger()->info("activate cron job function", ['source' => 'dfinsell-payment-gateway']);
+		wc_get_logger()->info('Automatic payment status checks have been enabled.', ['source' => 'dfinsell-payment-gateway']);
 
 		// Clear existing scheduled event if it exists
 		$timestamp = wp_next_scheduled('dfinsell_cron_event');
@@ -392,7 +392,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 	function deactivate_cron_job()
 	{
-		wc_get_logger()->info("deactivate cron job function", ['source' => 'dfinsell-payment-gateway']);
+		wc_get_logger()->info('Automatic payment status checks have been disabled.', ['source' => 'dfinsell-payment-gateway']);
 		wp_clear_scheduled_hook('dfinsell_cron_event');
 	}
 

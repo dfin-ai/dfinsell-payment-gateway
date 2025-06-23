@@ -78,8 +78,12 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$api_order_status = isset($parameters['order_status']) ? sanitize_text_field($parameters['order_status']) : '';
 		$pay_id = isset($parameters['pay_id']) ? sanitize_text_field($parameters['pay_id']) : '';
 
-		// Log the received request for debugging and auditing purposes.
-		$this->logger->info('DFin Sell API Request Received: ' . wp_json_encode($parameters), array('source' => 'dfinsell-payment-gateway'));
+		$this->logger->info('DFin Sell API Request Received.', [
+		    'source'  => 'dfinsell-payment-gateway',
+		    'context' => [
+		        'response_payload' => $parameters
+		    ],
+		]);
 
 		// Validate API key first to secure the endpoint.
 		if (!$this->dfinsell_verify_api_key(base64_decode($api_key))) {
