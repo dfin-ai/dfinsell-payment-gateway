@@ -36,8 +36,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 	private function dfinsell_verify_api_key($api_key)
 	{
-		// Sanitize the API key parameter early
-		$api_key = sanitize_text_field($api_key);
+		$api_key = trim($api_key);
 
 		// Get DFinSell settings
 		$dfin_sell_settings = get_option('woocommerce_dfinsell_payment_gateway_accounts');
@@ -52,7 +51,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$sandbox = isset($dfin_settings['sandbox']) && $dfin_settings['sandbox'] === 'yes';
 
 		foreach ($accounts as $account) {
-			$public_key = $sandbox ? sanitize_text_field($account['sandbox_public_key']) : sanitize_text_field($account['live_public_key']);
+			$public_key = $sandbox ? trim($account['sandbox_public_key']) : trim($account['live_public_key']);
 
 			// Use a secure hash comparison
 			if (!empty($public_key) && hash_equals($public_key, $api_key)) {
