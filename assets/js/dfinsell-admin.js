@@ -215,7 +215,7 @@ jQuery(document).ready(function ($) {
 				const liveSecretKey = $account.find(".live-secret-key");
 				const sandboxPublicKey = $account.find(".sandbox-public-key");
 				const sandboxSecretKey = $account.find(".sandbox-secret-key");
-				const sandboxCheckbox = $account.find(".sandbox-checkbox");
+				const sandboxCheckbox = $account.find(`.${gatewayId}-sandbox-checkbox`);
 				const title = $account.find(".account-title");
 				const priority = $account.find(".account-priority");
 

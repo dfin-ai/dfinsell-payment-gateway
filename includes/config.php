@@ -5,7 +5,7 @@ if (!defined('DFINSELL_PROTOCOL')) {
 }
 
 if (!defined('DFINSELL_HOST')) {
-    define('DFINSELL_HOST', 'sell.dfin.ai');
+    define('DFINSELL_HOST', 'dfin-sell.lcl');
 }
 
 if (!defined('DFINSELL_BASE_URL')) {
