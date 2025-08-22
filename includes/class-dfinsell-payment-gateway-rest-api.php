@@ -7,6 +7,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 {
 	private $logger;
 	private static $instance = null;
+	private $gateway_id;
 
 	public static function get_instance()
 	{
@@ -20,6 +21,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	{
 		// Initialize the logger
 		$this->logger = wc_get_logger();
+		$this->gateway_id = DFINSELL_PLUGIN_ID;
 	}
 
 	public function dfinsell_register_routes()
@@ -121,11 +123,10 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			// Check if the current order status allows for a transition to 'completed' or 'processing'.
 			if (in_array($current_order_status, ['pending', 'failed'])) {
 				// Get the configured order status from the payment gateway settings for successful payments.
-				$gateway_id = 'dfinsell';
 				$payment_gateways = WC()->payment_gateways->payment_gateways();
 
-				if (isset($payment_gateways[$gateway_id])) {
-					$gateway = $payment_gateways[$gateway_id];
+				if (isset($payment_gateways[$this->gateway_id])) {
+					$gateway = $payment_gateways[$this->gateway_id];
 					// Default to 'processing' if not explicitly set in gateway options.
 					$target_order_status = sanitize_text_field($gateway->get_option('order_status', 'processing'));
 				} else {

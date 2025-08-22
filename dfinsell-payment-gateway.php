@@ -1,5 +1,4 @@
 <?php
-
 /**
  * Plugin Name: DFin Sell Payment Gateway
  * Description: This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security.
@@ -18,38 +17,74 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
-define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', '8.0');
-define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', '6.5.4');
-define('DFINSELL_PAYMENT_GATEWAY_FILE', __FILE__);
-define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
+$config = require __DIR__ . '/config.php';
 
-// Include utility functions
+// Define as global (only once, avoid redeclaring)
+$GLOBALS['dfinsell_config'] = $config;
+
+/**
+ * ==========================================================
+ * 🔑 Plugin Constants
+ * ==========================================================
+ */
+// Core plugin info
+define('DFINSELL_PLUGIN_ID', $config['id']);
+define('DFINSELL_PLUGIN_NAME', $config['name']);
+define('DFINSELL_PLUGIN_VERSION', $config['version']);
+
+// URLs & Paths
+define('DFINSELL_PLUGIN_HOST', $config['host']);
+define('DFINSELL_PROTOCOL', $config['protocol']);
+define('DFINSELL_BASE_URL', DFINSELL_PROTOCOL . DFINSELL_PLUGIN_HOST);
+
+define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', $config['paths']['dir']);
+define('DFINSELL_PAYMENT_GATEWAY_FILE', $config['paths']['file']);
+define('DFINSELL_ASSETS_URL', $config['paths']['assets']);
+
+// Requirements
+define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $config['requirements']['php']);
+define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $config['requirements']['wc']);
+
+/**
+ * ==========================================================
+ * 🔧 Includes
+ * ==========================================================
+ */
 require_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/dfinsell-payment-gateway-utils.php';
-
-// Migrations functions
-include_once plugin_dir_path(__FILE__) . 'migration.php';
+include_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'migration.php';
 
 // Autoload classes
 spl_autoload_register(function ($class) {
-	if (strpos($class, 'DFINSELL_PAYMENT_GATEWAY') === 0) {
-		$class_file = DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/class-' . str_replace('_', '-', strtolower($class)) . '.php';
-		if (file_exists($class_file)) {
-			require_once $class_file;
-		}
-	}
+    if (strpos($class, 'DFINSELL_PAYMENT_GATEWAY') === 0) {
+        $class_file = DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/class-' . str_replace('_', '-', strtolower($class)) . '.php';
+        if (file_exists($class_file)) {
+            require_once $class_file;
+        }
+    }
 });
+
+// Immediately after including the loader class
+add_filter(
+    'plugin_action_links_' . plugin_basename(__FILE__),
+    ['DFINSELL_PAYMENT_GATEWAY_Loader', 'dfinsell_plugin_action_links']
+);
 
 DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
 
-add_action('woocommerce_cancel_unpaid_order', 'cancel_unpaid_order_action');
-add_action('woocommerce_order_status_cancelled', 'cancel_unpaid_order_action');
+/**
+ * ==========================================================
+ * 🛑 Cancel Unpaid Orders
+ * ==========================================================
+ */
+add_action('woocommerce_cancel_unpaid_order', 'dfinsell_cancel_unpaid_order_action');
+add_action('woocommerce_order_status_cancelled', 'dfinsell_cancel_unpaid_order_action');
 
 /**
  * Cancels an unpaid order after a specified timeout.
  *
  * @param int $order_id The ID of the order to cancel.
  */
-function cancel_unpaid_order_action($order_id)
+function dfinsell_cancel_unpaid_order_action($order_id)
 {
 	global $wpdb;
 

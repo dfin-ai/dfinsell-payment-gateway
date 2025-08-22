@@ -3,9 +3,6 @@ if (!defined('ABSPATH')) {
 	exit; // Exit if accessed directly.
 }
 
-// Include the configuration file
-require_once plugin_dir_path(__FILE__) . 'config.php';
-
 /**
  * Class DFINSELL_PAYMENT_GATEWAY_Loader
  * Handles the loading and initialization of the DFin Sell Payment Gateway plugin.
@@ -16,7 +13,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	private $admin_notices;
 
 	private $base_url;
-
+	private $gateway_id;
 	/**
 	 * Get the singleton instance of this class.
 	 * @return DFINSELL_PAYMENT_GATEWAY_Loader
@@ -37,6 +34,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	{
 
 		$this->base_url = DFINSELL_BASE_URL;
+		$this->gateway_id = DFINSELL_PLUGIN_ID;
 
 		$this->admin_notices = new DFINSELL_PAYMENT_GATEWAY_Admin_Notices();
 
@@ -76,9 +74,6 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		$rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
 		$rest_api->dfinsell_register_routes();
 
-		// Add plugin action links
-		add_filter('plugin_action_links_' . plugin_basename(DFINSELL_PAYMENT_GATEWAY_FILE), [$this, 'dfinsell_plugin_action_links']);
-
 		// Add plugin row meta
 		add_filter('plugin_row_meta', [$this, 'dfinsell_plugin_row_meta'], 10, 2);
 	}
@@ -111,13 +106,11 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	 * @param array $links
 	 * @return array
 	 */
-	public function dfinsell_plugin_action_links($links)
-	{
-		$plugin_links = [
-			'<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section=dfinsell')) . '">' . esc_html__('Settings', 'dfinsell-payment-gateway') . '</a>',
-		];
-
-		return array_merge($plugin_links, $links);
+	public static function dfinsell_plugin_action_links($links) {
+	    $plugin_links = [
+	        '<a href="' . esc_url(admin_url('admin.php?page=wc-settings&tab=checkout&section=dfinsell')) . '">' . esc_html__('Settings', 'dfinsell-payment-gateway') . '</a>',
+	    ];
+	    return array_merge($plugin_links, $links);
 	}
 
 	/**
@@ -202,10 +195,9 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			
 		$payment_return_url = $order->get_checkout_order_received_url();
 
-		$gateway_id = 'dfinsell';
 		$payment_gateways = WC()->payment_gateways->payment_gateways();
-		if (isset($payment_gateways[$gateway_id])) {
-			$gateway = $payment_gateways[$gateway_id];
+		if (isset($payment_gateways[$this->gateway_id])) {
+			$gateway = $payment_gateways[$this->gateway_id];
 			$configured_order_status = sanitize_text_field($gateway->get_option('order_status'));
 		} else {
 			wp_send_json_error(['message' => 'Payment gateway not found.']);
@@ -314,10 +306,9 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			}
 
 			// Get the configured order status from the payment gateway settings
-			$gateway_id = 'dfinsell'; // Replace with your gateway ID
 			$payment_gateways = WC()->payment_gateways->payment_gateways();
-			if (isset($payment_gateways[$gateway_id])) {
-				$gateway = $payment_gateways[$gateway_id];
+			if (isset($payment_gateways[$this->gateway_id])) {
+				$gateway = $payment_gateways[$this->gateway_id];
 				$configured_order_status = sanitize_text_field($gateway->get_option('order_status'));
 			} else {
 				wp_send_json_error(['message' => 'Payment gateway not found.']);

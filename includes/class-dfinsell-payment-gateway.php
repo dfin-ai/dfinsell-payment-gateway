@@ -2,16 +2,12 @@
 if (!defined('ABSPATH')) {
 	exit(); // Exit if accessed directly.
 }
-// Include the configuration file
-require_once plugin_dir_path(__FILE__) . 'config.php';
 
 /**
  * Main WooCommerce DFin Sell Payment Gateway class.
  */
 class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 {
-	const ID = 'dfinsell';
-
 	protected $sandbox;
 	private $base_url;
 	private $public_key;
@@ -24,13 +20,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $current_account_index = 0;
 	private $used_accounts = [];
 
-	private static $log_once_flags = [];
-
 	/**
 	 * Constructor.
 	 */
 	public function __construct()
 	{
+		 global $dfinsell_config;
+
 		// Check if WooCommerce is active
 		if (!class_exists('WC_Payment_Gateway_CC')) {
 			add_action('admin_notices', [$this, 'woocommerce_not_active_notice']);
@@ -43,10 +39,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->base_url = DFINSELL_BASE_URL;
 		
 		// Define user set variables
-		$this->id = self::ID;
-		$this->icon = ''; // Define an icon URL if needed.
-		$this->method_title = __('DFin Sell Payment Gateway', 'dfinsell-payment-gateway');
-		$this->method_description = __('This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security.', 'dfinsell-payment-gateway');
+		$this->id = DFINSELL_PLUGIN_ID;
+		$this->icon = !empty($dfinsell_config['icon']) ? $dfinsell_config['icon'] : ''; // Define an icon URL if needed.
+		$this->method_title       = !empty($dfinsell_config['title']) ? $dfinsell_config['title'] : '';
+		$this->method_description = !empty($dfinsell_config['description']) ? $dfinsell_config['description'] : '';
 
 		// Load the settings
 		$this->dfinsell_init_form_fields();
@@ -62,7 +58,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->current_account_index = 0;
 
 		// Define hooks and actions.
-		add_action('woocommerce_update_options_payment_gateways_' . $this->id, [$this, 'dfinsell_process_admin_options']);
+		add_action('woocommerce_update_options_payment_gateways_dfinsell', [$this, 'dfinsell_process_admin_options']);
 
 		// Enqueue styles and scripts
 		add_action('wp_enqueue_scripts', [$this, 'dfinsell_enqueue_styles_and_scripts']);
