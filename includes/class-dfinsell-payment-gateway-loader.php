@@ -181,7 +181,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		$order = wc_get_order($order_id);
 
 		if (!$order) {
-			return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-onramp-payment-gateway')], 404);
+			return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
 		}
 
 		$payment_token = $order->get_meta('_dfinsell_pay_id');
