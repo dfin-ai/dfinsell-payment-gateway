@@ -45,11 +45,11 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('plugins_loaded', [$this, 'dfinsell_init'], 11);
 
 		// Register the AJAX action callback for checking payment status
-		add_action('wp_ajax_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
-		add_action('wp_ajax_nopriv_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
+		add_action('wp_ajax_dfinsell_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
+		add_action('wp_ajax_nopriv_dfinsell_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
 
-		add_action('wp_ajax_popup_closed_event', array($this, 'handle_popup_close'));
-		add_action('wp_ajax_nopriv_popup_closed_event', array($this, 'handle_popup_close'));
+		add_action('wp_ajax_dfinsell_popup_closed_event', array($this, 'handle_popup_close'));
+		add_action('wp_ajax_nopriv_dfinsell_popup_closed_event', array($this, 'handle_popup_close'));
 
 		add_action('wp_ajax_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
 		add_filter('cron_schedules', [$this, 'dfinsell_add_cron_interval']);
@@ -156,17 +156,9 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	 * Handle the AJAX request for checking payment status.
 	 * @param $request
 	 */
-	public function dfinsell_handle_check_payment_status_request($request)
+	public function dfinsell_handle_check_payment_status_request()
 	{
-		// Verify nonce for security (recommended)
-		// Sanitize and unslash the 'security' value
-		$security = isset($_POST['security']) ? sanitize_text_field(wp_unslash($_POST['security'])) : '';
-
-		// Check the nonce for security
-		if (empty($security) || !wp_verify_nonce($security, 'dfinsell_payment')) {
-			wp_send_json_error(['message' => 'Nonce verification failed.']);
-			wp_die();
-		}
+		check_ajax_referer('dfinsell_payment', 'security');
 
 		// Sanitize and validate the order ID from $_POST
 		$order_id = isset($_POST['order_id']) ? intval(sanitize_text_field(wp_unslash($_POST['order_id']))) : null;
@@ -227,14 +219,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 	public function handle_popup_close()
 	{
-		// Sanitize and unslash the 'security' value
-		$security = isset($_POST['security']) ? sanitize_text_field(wp_unslash($_POST['security'])) : '';
-
-		// Check the nonce for security
-		if (empty($security) || !wp_verify_nonce($security, 'dfinsell_payment')) {
-			wp_send_json_error(['message' => 'Nonce verification failed.']);
-			wp_die();
-		}
+		check_ajax_referer('dfinsell_payment', 'security');
 
 		// Get the order ID from the request
 		$order_id = isset($_POST['order_id']) ? sanitize_text_field(wp_unslash($_POST['order_id'])) : null;
@@ -257,6 +242,8 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		//Get uuid from WP
 		$payment_token = $order->get_meta('_dfinsell_pay_id');
 
+		$public_key    = $order->get_meta('_dfinsell_public_key');
+
 		// Proceed only if the order status is 'pending'
 		if ($order->get_status() === 'pending') {
 			// Call the DFin Sell to update status
@@ -266,7 +253,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				'body'      => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
 				'headers'   => [
 					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $security,
+					'Authorization' => 'Bearer ' . $public_key,
 				],
 				'timeout'   => 15,
 			]);
@@ -350,6 +337,14 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 							wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
 						}
 						break;
+					case 'pending':
+					    // Don't mark order, don't redirect
+					    wp_send_json_error([
+					        'code'    => 'pending',
+					        'message' => 'Transaction still pending.',
+					        'order_id' => $order_id
+					    ]);
+					    break;
 					default:
 						wp_send_json_error(['message' => 'Unknown transaction status received.']);
 				}

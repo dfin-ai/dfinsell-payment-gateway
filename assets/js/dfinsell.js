@@ -129,7 +129,7 @@ jQuery(function ($) {
 						type: 'POST',
 						url: dfinsell_params.ajax_url, // Ensure this is localized correctly
 						data: {
-							action: 'popup_closed_event',
+							action: 'dfinsell_popup_closed_event',
 							order_id: orderId,
 							security: dfinsell_params.dfinsell_nonce, // Ensure this is valid
 						},
@@ -159,12 +159,16 @@ jQuery(function ($) {
 			// Start polling only if it's not already active
 			if (!isPollingActive) {
 				isPollingActive = true;
+
+				console.log('dfinsell_params :', dfinsell_params);
+
+
 				paymentStatusInterval = setInterval(function () {
 					$.ajax({
 						type: 'POST',
 						url: dfinsell_params.ajax_url,
 						data: {
-							action: 'check_payment_status',
+							action: 'dfinsell_check_payment_status',
 							order_id: orderId,
 							security: dfinsell_params.dfinsell_nonce,
 						},

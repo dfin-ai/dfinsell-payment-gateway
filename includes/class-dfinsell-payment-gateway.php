@@ -683,6 +683,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				$pay_id = $response_data['data']['pay_id'] ?? '';
 				if (!empty($pay_id)) {
 					$order->update_meta_data('_dfinsell_pay_id', $pay_id);
+					$order->update_meta_data('_dfinsell_public_key', $public_key);
+					$order->update_meta_data('_dfinsell_secret_key', $secret_key);
+					$order->save();
 				}
 
 				$table_name = $wpdb->prefix . 'order_payment_link';
@@ -1087,145 +1090,419 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		]);
 	}
 
+	protected function log_info($message, $context = [])
+	{
+	    $logger = wc_get_logger();
+	    $data = ['source' => 'dfinsell-payment-gateway'];
+
+	    if (!empty($context)) {
+	        $data['context'] = $context;
+	    }
+
+	    $logger->info($message, $data);
+	}
+
+	/**
+	 * Get the next available account for payment processing.
+	 *
+	 * @param array $used_accounts List of already used accounts.
+	 * @return array|null
+	 */
+	public function get_updated_account() {
+	    $accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
+	    $valid_accounts = [];
+
+	    foreach ($accounts as $index => $account) {
+	        $useSandbox = $this->sandbox;
+	        $secretKey = $useSandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
+	        $publicKey = $useSandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+
+	        $this->log_info("Checking merchant status for account '{$account['title']}'", [
+	            'useSandbox' => $useSandbox,
+	            'publicKey' => $publicKey,
+	        ]);
+
+	        $checkStatusUrl = $this->get_api_url('/api/check-merchant-status', $useSandbox);
+	        $response = wp_remote_post($checkStatusUrl, [
+	            'headers' => [
+	                'Authorization' => 'Bearer ' . $publicKey,
+	                'Content-Type'  => 'application/json',
+	            ],
+	            'timeout' => 10,
+	            'body' => wp_json_encode([
+	                'api_secret_key' => $secretKey,
+	                'is_sandbox'     => $useSandbox,
+	            ]),
+	        ]);
+
+	        $body = json_decode(wp_remote_retrieve_body($response), true);
+	        $isError = is_array($body) && strtolower($body['status'] ?? '') === 'error';
+
+	        $valid_accounts[] = [
+	            'title'              => $account['title'],
+	            'priority'           => $account['priority'],
+	            'live_public_key'    => $account['live_public_key'],
+	            'live_secret_key'    => $account['live_secret_key'],
+	            'sandbox_public_key' => $account['sandbox_public_key'],
+	            'sandbox_secret_key' => $account['sandbox_secret_key'],
+	            'has_sandbox'        => $account['has_sandbox'],
+	            'sandbox_status'     => $isError ? 'Inactive' : 'Active',
+	            'live_status'        => $isError ? 'Inactive' : 'Active',
+	        ];
+
+	        if ($isError) {
+	            $this->log_info("Account '{$account['title']}' is inactive", ['response' => $body]);
+	        } else {
+	            $this->log_info("Account '{$account['title']}' is active");
+	        }
+	    }
+
+	    if (!empty($valid_accounts)) {
+	        update_option('woocommerce_dfinsell_payment_gateway_accounts', $valid_accounts);
+	        return true;
+	    }
+
+	    $this->log_info('No active account. Removing dfinsell gateway.');
+	    return false;
+	}
+
+
 	public function hide_custom_payment_gateway_conditionally($available_gateways)
 	{
-	    $gateway_id = $this->id;
+		$gateway_id = $this->id;
 
-	    if (!is_checkout()) {
+	    if (!isset($available_gateways[$gateway_id])) {
 	        return $available_gateways;
 	    }
 
-	    // Optional: limit logic execution within a single PHP request
-	    static $already_checked = false;
-	    static $is_visible = null;
+	    $cache_key = 'dfinsell_gateway_visibility_' . $gateway_id;
 
-	    if ($already_checked) {
-	        if (!$is_visible) {
-	            unset($available_gateways[$gateway_id]);
+		 // Unique cache/log key per cart state
+	    $cart_hash = WC()->cart ? WC()->cart->get_cart_hash() : 'no_cart';
+
+		// Skip logging if cart_hash is empty or 'no_cart' (cart not initialized)
+	    if (empty($cart_hash) || $cart_hash === 'no_cart') {
+	        return $available_gateways;
+	    }
+
+	    $cache_key = 'dfinsell_gateway_visibility_' . $gateway_id . '_' . $cart_hash;
+
+	    // ✅ Avoid running multiple times for the same cart_hash in the same request
+	    static $processed_hashes = [];
+	    if (in_array($cart_hash, $processed_hashes, true)) {
+	        return $available_gateways;
+	    }
+	    $processed_hashes[] = $cart_hash;
+
+		$this->log_info_once_per_session(
+	        'gateway_check_start_' . $cart_hash,
+	        'Payment Option Check Started',
+	        ['cart_hash' => $cart_hash]
+	    );
+
+		// ✅ Handle both page load & AJAX differently
+	    $is_ajax_order_review = (
+	        defined('DOING_AJAX') &&
+	        DOING_AJAX &&
+	        isset($_REQUEST['wc-ajax']) &&
+	        $_REQUEST['wc-ajax'] === 'update_order_review'
+	    );
+
+	   $this->log_info_once_per_session(
+		    'request_context_' . $cart_hash,
+		    'Checking payment option visibility',
+		    [
+		        'cart_hash'       => $cart_hash,
+		        'Request Type'    => $is_ajax_order_review ? 'Cart update (AJAX)' : 'Checkout page load',
+		        'On Checkout Page'=> is_checkout() ? 'Yes' : 'No'
+		    ]
+		);
+
+
+	    $amount = 0.00;
+
+	    if (isset($GLOBALS[$cache_key])) {
+	        return $GLOBALS[$cache_key];
+	    }
+
+	    if (!is_checkout() && !$is_ajax_order_review) {
+		    return $available_gateways;
+		}
+
+	    if (is_admin()) {
+			$this->log_info_once_per_session(
+			    'in_admin_' . $cart_hash,
+			    'Payment option check skipped (admin area)',
+			    ['cart_hash' => $cart_hash]
+			);
+
+			$this->log_info_once_per_session(
+			    'gateway_check_end_' . $cart_hash,
+			    'Payment Option Check Finished',
+			    ['cart_hash' => $cart_hash]
+			);
+
+	        $this->get_updated_account();
+	        return $available_gateways;
+	    }
+	   
+	    if (WC()->cart) {
+	        if ($is_ajax_order_review) {
+	            // During AJAX, cart totals are often not recalculated yet
+	            // Get from totals array instead of get_total('raw')
+	            $totals = WC()->cart->get_totals();
+	            $amount = isset($totals['total']) ? (float) $totals['total'] : 0.00;
+
+	            // If still zero but cart has items, skip hiding for now
+	            if ($amount < 0.01 && WC()->cart->get_cart_contents_count() > 0) {
+	               $this->log_info_once_per_session(
+					    'ajax_skip_' . $cart_hash,
+					    'Skipping hide during AJAX recalculation (cart has items, amount 0)',
+					    ['cart_hash' => $cart_hash]
+					);
+
+					$this->log_info_once_per_session(
+					    'gateway_check_end_' . $cart_hash,
+					    'Payment Option Check Finished',
+					    ['cart_hash' => $cart_hash]
+					);
+	                return $available_gateways;
+	            }
+	        } else {
+	            // Normal page load
+	            $amount = (float) WC()->cart->get_total('raw');
+	            if ($amount < 0.01) {
+	                // Try fallback
+	                $totals = WC()->cart->get_totals();
+	                if (!empty($totals['total'])) {
+	                    $amount = (float) $totals['total'];
+	                }
+	            }
 	        }
-	        return $available_gateways;
 	    }
 
-	    $already_checked = true;
+	    $this->log_info_once_per_session(
+		    'cart_amount_' . $cart_hash,
+		    'Cart total detected',
+		    [
+		        'Amount'    => $amount,
+		        'cart_hash' => $cart_hash
+		    ]
+		);
 
-	    $amount = number_format(WC()->cart->get_total('edit'), 2, '.', '');
+	    // Hide if truly below minimum
+	    if ($amount < 0.01) {
+			$this->log_info_once_per_session(
+			    'hide_reason_low_amount_' . $cart_hash,
+			    'Payment option hidden: order total below minimum',
+			    [
+			        'cart_hash' => $cart_hash,
+			        'Amount'    => $amount
+			    ]
+			);
+			$this->log_info_once_per_session(
+			    'gateway_check_end_' . $cart_hash,
+			    'Payment Option Check Finished',
+			    ['cart_hash' => $cart_hash]
+			);
 
+	        return $this->hide_gateway($available_gateways, $gateway_id);
+	    }
+
+	    $amount = number_format($amount, 2, '.', '');
+
+	    // Get accounts
 	    if (!method_exists($this, 'get_all_accounts')) {
-	        wc_get_logger()->error('Payment account setup is incomplete. Please ensure at least one valid payment account is configured.', [
-	            'source' => 'dfinsell-payment-gateway'
-	        ]);
-	        unset($available_gateways[$gateway_id]);
-	        $is_visible = false;
-	        return $available_gateways;
+	       $this->log_info_once_per_session(
+			    'missing_get_all_accounts_' . $cart_hash,
+			    'Gateway misconfigured: missing account retrieval method',
+			    ['cart_hash' => $cart_hash]
+			);
+			$this->log_info_once_per_session(
+			    'gateway_check_end_' . $cart_hash,
+			    'Payment Option Check Finished',
+			    ['cart_hash' => $cart_hash]
+			);
+
+	        return $this->hide_gateway($available_gateways, $gateway_id);
 	    }
 
 	    $accounts = $this->get_all_accounts();
 
+		$this->log_info_once_per_session(
+		    'account_check_' . $cart_hash,
+		    'Checking payment provider accounts',
+		    [
+				'accounts' => $accounts,
+		        'Number of Accounts Found' => count($accounts),
+		        'cart_hash' => $cart_hash
+		    ]
+		);
+
+
 	    if (empty($accounts)) {
-	        $log_key = 'dfin_log_no_accounts_' . md5($this->id);
-	        if (false === get_transient($log_key)) {
-	            wc_get_logger()->warning('No payment accounts are available. The payment option will not appear during checkout.', [
-	                'source' => 'dfinsell-payment-gateway'
-	            ]);
-	            set_transient($log_key, 1, 10); // Avoid duplicate log for 10 seconds
-	        }
-	        unset($available_gateways[$gateway_id]);
-	        $is_visible = false;
-	        return $available_gateways;
+	        $this->log_info_once_per_session(
+			    'no_accounts_' . $cart_hash,
+			    'Payment option hidden: no merchant accounts configured',
+			    ['cart_hash' => $cart_hash]
+			);
+			$this->log_info_once_per_session(
+			    'gateway_check_end_' . $cart_hash,
+			    'Payment Option Check Finished',
+			    ['cart_hash' => $cart_hash]
+			);
+
+	        return $this->hide_gateway($available_gateways, $gateway_id);
 	    }
 
-	    usort($accounts, function ($a, $b) {
-	        return $a['priority'] <=> $b['priority'];
-	    });
-
-	    $all_high_priority_accounts_limited = true;
-	    $user_account_active = false;
-
-	    delete_transient('_dfinsell_daily_limit');
+	    usort($accounts, fn($a, $b) => $a['priority'] <=> $b['priority']);
 
 	    $transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 	    $accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
 
-		wc_get_logger()->info('Accounts to evaluate:', [
-		    'source' => 'dfinsell-payment-gateway',
-		    'context' => $accounts
-		]);
+	    $user_account_active = false;
+	    $all_accounts_limited = true;
+
+	   $this->log_info_once_per_session(
+		    'account_check_' . $cart_hash,
+		    'Evaluating accounts for availability',
+		    [
+		        'cart_hash' => $cart_hash,
+		        'Amount'    => $amount,
+		        'Accounts'  => $accounts
+		    ]
+		);
+
+
+	   $force_refresh = (
+		    isset($_GET['refresh_accounts'], $_GET['_wpnonce']) &&
+		    $_GET['refresh_accounts'] === '1' &&
+		    wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'refresh_accounts_nonce')
+		);
 
 	    foreach ($accounts as $account) {
 	        $public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+	        $secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
 
 	        $data = [
 	            'is_sandbox'     => $this->sandbox,
 	            'amount'         => $amount,
 	            'api_public_key' => $public_key,
+	            'api_secret_key' => $secret_key,
 	        ];
 
-	        $cache_key = 'dfinsell_daily_limit_' . md5($public_key . $amount);	
+	        $cache_base = 'dfinsell_daily_limit_' . md5($public_key . $amount);
 
-			$force_refresh = isset($_GET['refresh_accounts']) && $_GET['refresh_accounts'] == '1';
-			$acc_status_response_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_key . '_status', 30, $force_refresh);
-
-	       if (
-			    isset($acc_status_response_data['status']) &&
-			    $acc_status_response_data['status'] === 'success'
-			) {
-			    $user_account_active = true;
-			}
-
-
-	        $transaction_limit_response_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_key . '_limit');
-
-	        if (
-	            isset($transaction_limit_response_data['status']) &&
-	            $transaction_limit_response_data['status'] === 'success'
-	        ) {
-	            $all_high_priority_accounts_limited = false;
+	        $status_data = $this->get_cached_api_response($accStatusApiUrl, $data, $cache_base . '_status', 30, $force_refresh);
+	        if (!empty($status_data['status']) && $status_data['status'] === 'success') {
+	            $user_account_active = true;
 	        }
 
-	        if ($user_account_active && !$all_high_priority_accounts_limited) {
+	        $limit_data = $this->get_cached_api_response($transactionLimitApiUrl, $data, $cache_base . '_limit');
+	       $this->log_info_once_per_session(
+			    'limit_response_' . $public_key . '_' . $cart_hash,
+			    'Transaction limit response',
+			    [
+			        'cart_hash' => $cart_hash,
+			        'Sandbox'   => $this->sandbox,
+			        'Data'      => $limit_data
+			    ]
+			);
+
+
+	        if (!empty($limit_data['status']) && $limit_data['status'] === 'success') {
+	            $all_accounts_limited = false;
+	        }
+
+	        if ($user_account_active && !$all_accounts_limited) {
 	            break;
 	        }
 	    }
 
 	    if (!$user_account_active) {
-	        $log_key = 'dfin_log_no_active_accounts_' . md5($this->id);
-	        if (false === get_transient($log_key)) {
-	            wc_get_logger()->warning('Payment gateway is hidden. No payment accounts are currently active or approved for transactions.', [
-	                'source' => 'dfinsell-payment-gateway'
-	            ]);
-	            set_transient($log_key, 1, 10);
-	        }
-	        unset($available_gateways[$gateway_id]);
-	        $is_visible = false;
-	        return $available_gateways;
+	       $this->log_info_once_per_session(
+			    'no_active_accounts_' . $cart_hash,
+			    'Payment option hidden: no active accounts',
+			    ['cart_hash' => $cart_hash]
+			);
+
+			$this->log_info_once_per_session(
+			    'gateway_check_end_' . $cart_hash,
+			    'Payment Option Check Finished',
+			    ['cart_hash' => $cart_hash]
+			);
+
+	        return $this->hide_gateway($available_gateways, $gateway_id);
 	    }
 
-	    if ($all_high_priority_accounts_limited) {
-	        $log_key = 'dfin_log_accounts_limited_' . md5($this->id);
-	        if (false === get_transient($log_key)) {
-	            wc_get_logger()->warning('Payment gateway is hidden. All available accounts have reached their daily transaction limits.', [
-	                'source' => 'dfinsell-payment-gateway'
-	            ]);
-	            set_transient($log_key, 1, 10);
-	        }
-	        unset($available_gateways[$gateway_id]);
-	        $is_visible = false;
-	        return $available_gateways;
+	    if ($all_accounts_limited) {
+	       $this->log_info_once_per_session(
+			    'accounts_limited_' . $cart_hash,
+			    'Payment option hidden: all accounts reached transaction limits',
+			    ['cart_hash' => $cart_hash]
+			);
+
+			$this->log_info_once_per_session(
+			    'gateway_check_end_' . $cart_hash,
+			    'Payment Option Check Finished',
+			    ['cart_hash' => $cart_hash]
+			);
+
+	        return $this->hide_gateway($available_gateways, $gateway_id);
 	    }
 
-	    // ✅ At least one account is valid and within limits
-	    $log_key = 'dfin_log_gateway_active_' . md5($this->id);
-	    if (false === get_transient($log_key)) {
-	        wc_get_logger()->info('Payment gateway is active. At least one account is available and within limits.', [
-	            'source' => 'dfinsell-payment-gateway'
-	        ]);
-	        set_transient($log_key, 1, 10);
-	    }
+		$this->log_info_once_per_session(
+		    'gateway_active_' . $cart_hash,
+		    'Payment option available: account active and within limits',
+		    ['cart_hash' => $cart_hash]
+		);
 
-	    $is_visible = true;
+		// End log
+		$this->log_info_once_per_session(
+		    'gateway_check_end_' . $cart_hash,
+		    'Payment Option Check Finished',
+		    ['cart_hash' => $cart_hash]
+		);
+
+
+	    $GLOBALS[$cache_key] = $available_gateways;
 	    return $available_gateways;
 	}
 
+	private function hide_gateway($available_gateways, $gateway_id)
+	{
+	    unset($available_gateways[$gateway_id]);
+	    $GLOBALS['dfinsell_gateway_visibility_' . $this->id] = $available_gateways;
+	    return $available_gateways;
+	}
+
+	private function log_info_once_per_session($key, $message, $context = [])
+	{
+	    if (!WC()->session) {
+	        return; // Session not started yet
+	    }
+
+	    // Extract cart_hash from context if provided, else fallback
+	    $cart_hash = isset($context['cart_hash']) ? $context['cart_hash'] : 'no_cart';
+
+	    // Make the log key unique for both the event key and current cart state
+	    $log_key = 'dfinsell_log_once_' . md5($key . $this->id . $cart_hash);
+
+	    // Check if we've already logged for this cart state
+	    if (WC()->session->get($log_key)) {
+	        return;
+	    }
+
+	    // Mark as logged for this cart state
+	    WC()->session->set($log_key, true);
+
+	    // Perform the actual logging
+	    if (!empty($context)) {
+	        $this->log_info($message, $context);
+	    } else {
+	        $this->log_info($message);
+	    }
+	}
 
 	/**
 	 * Validate an individual account.
@@ -1286,10 +1563,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	private function get_cached_api_response($url, $data, $cache_key, $ttl = 120, $force_refresh = false)
 	{
-	    // Allow ?refresh_accounts=1 in URL to force-refresh cache (useful for testing)
-	    if (!$force_refresh && isset($_GET['refresh_accounts']) && $_GET['refresh_accounts'] == '1') {
-	        $force_refresh = true;
-	    }
+	    // Allow ?refresh_accounts=1&_wpnonce=... in URL to force-refresh cache (useful for testing)
+		if (
+		    !$force_refresh &&
+		    isset($_GET['refresh_accounts']) &&
+		    $_GET['refresh_accounts'] === '1' &&
+		    isset($_GET['_wpnonce']) &&
+		    wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'refresh_accounts_nonce')
+		) {
+		    $force_refresh = true;
+		}
 
 	    // If not forcing refresh, return cached version if it exists
 	    if (!$force_refresh) {
@@ -1321,7 +1604,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	    $response_data = json_decode($response_body, true);
 
 	    // Cache the response
-	    set_transient($cache_key, $response_data, $ttl); // Default 120s, can be overridden
+	    set_transient($cache_key, $response_data, $ttl);
 
 	    return $response_data;
 	}

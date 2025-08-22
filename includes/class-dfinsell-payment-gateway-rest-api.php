@@ -149,7 +149,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 					WC()->cart->empty_cart();
 				}
 				$payment_return_url = esc_url($order->get_checkout_order_received_url());
-				return new WP_REST_Response(['success' => true, 'message' => 'Order status already updated or no change required', 'payment_return_url' => $payment_return_url], 200);
+				return new WP_REST_Response(['success' => true, 'message' => 'Order status already updated or no change required', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 			}
 		} else {
 			// If the API status is not 'completed', or if your system needs to handle other statuses
@@ -161,7 +161,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 			// If no action is needed for this specific API status, we still return success to acknowledge receipt.
 			$payment_return_url = esc_url($order->get_checkout_order_received_url());
-			return new WP_REST_Response(['success' => true, 'message' => 'Request received, no status change performed based on API status', 'payment_return_url' => $payment_return_url], 200);
+			return new WP_REST_Response(['success' => true, 'message' => 'Request received, no status change performed based on API status', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 		}
 
 		// Only attempt to update the order status if the target status is different from the current status.
@@ -194,6 +194,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 
 		// Return a successful response to DFin Sell API.
 		$payment_return_url = esc_url($order->get_checkout_order_received_url());
-		return new WP_REST_Response(['success' => true, 'message' => 'Order status processed successfully', 'payment_return_url' => $payment_return_url], 200);
+		return new WP_REST_Response(['success' => true, 'message' => 'Order status processed successfully', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 	}
 }
