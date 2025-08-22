@@ -181,29 +181,58 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		$order = wc_get_order($order_id);
 
 		if (!$order) {
-			return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
+			return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-onramp-payment-gateway')], 404);
 		}
 
-		$payment_return_url = esc_url($order->get_checkout_order_received_url());
+		$payment_token = $order->get_meta('_dfinsell_pay_id');
+		$public_key    = $order->get_meta('_dfinsell_public_key');
+		$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
+		$response = wp_remote_post($transactionStatusApiUrl, [
+			'method'    => 'POST',
+			'body'      => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
+			'headers'   => [
+				'Content-Type'  => 'application/json',
+				'Authorization' => 'Bearer ' . $public_key,
+			],
+			'timeout'   => 15,
+		]);
+
+		$response_body = wp_remote_retrieve_body($response);
+		$response_data = json_decode($response_body, true);
+			
+		$payment_return_url = $order->get_checkout_order_received_url();
+
+		$gateway_id = 'dfinsell';
+		$payment_gateways = WC()->payment_gateways->payment_gateways();
+		if (isset($payment_gateways[$gateway_id])) {
+			$gateway = $payment_gateways[$gateway_id];
+			$configured_order_status = sanitize_text_field($gateway->get_option('order_status'));
+		} else {
+			wp_send_json_error(['message' => 'Payment gateway not found.']);
+			wp_die();
+		}
 
 		// Determine order status
-		if ($order->is_paid()) {
+		if ($order->is_paid() || (isset($response_data['transaction_status']) && ($response_data['transaction_status'] == "success" || $response_data['transaction_status'] == "paid" || $response_data['transaction_status'] == "processing"))) {
+			$order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by Dfinsell.');
 			wp_send_json_success(['status' => 'success', 'redirect_url' => $payment_return_url]);
 			exit;
 		}
-
-		if ($order->has_status('failed')) {
+		
+		if ($order->has_status('failed') || (isset($response_data['transaction_status']) && $response_data['transaction_status'] == "failed")) {
+			$order->update_status('failed', 'Order marked as failed by Dfinsell.');
 			wp_send_json_success(['status' => 'failed', 'redirect_url' => $payment_return_url]);
+			exit;
+		}
+		
+		if ($order->has_status('cancelled') || (isset($response_data['transaction_status']) && $response_data['transaction_status'] == "canceled")) {
+			$order->update_status('cancelled', 'Order marked as canceled by Dfinsell.');
+			wp_send_json_success(['status' => 'cancelled', 'redirect_url' => $payment_return_url]);
 			exit;
 		}
 
 		if ($order->has_status(['on-hold', 'pending'])) {
 			wp_send_json_success(['status' => 'pending', 'redirect_url' => $payment_return_url]);
-			exit;
-		}
-
-		if ($order->has_status('canceled')) {
-			wp_send_json_success(['status' => 'canceled', 'redirect_url' => $payment_return_url]);
 			exit;
 		}
 
