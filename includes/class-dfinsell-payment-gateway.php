@@ -230,7 +230,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'label' => __('Enable DFin Sell Payment Gateway', 'dfinsell-payment-gateway'),
 				'type' => 'checkbox',
 				'description' => '',
-				'default' => 'no',
+				'default' => 'yes',
 			],
 			'title' => [
 				'title' => __('Title', 'dfinsell-payment-gateway'),
@@ -293,7 +293,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'label' => __('Enable consent checkbox on checkout page', 'dfinsell-payment-gateway'),
 				'type' => 'checkbox',
 				'description' => __('Check this box to show the consent checkbox on the checkout page. Uncheck to hide it.', 'dfinsell-payment-gateway'),
-				'default' => 'yes',
+				'default' => 'no',
 			],
 		];
 
