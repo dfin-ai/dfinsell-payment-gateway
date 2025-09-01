@@ -14,6 +14,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $secret_key;
 	private $sandbox_secret_key;
 	private $sandbox_public_key;
+	private $version;
 
 	private $admin_notices;
 	private $accounts = [];
@@ -43,6 +44,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->icon = !empty($dfinsell_config['icon']) ? $dfinsell_config['icon'] : ''; // Define an icon URL if needed.
 		$this->method_title       = !empty($dfinsell_config['title']) ? $dfinsell_config['title'] : '';
 		$this->method_description = !empty($dfinsell_config['description']) ? $dfinsell_config['description'] : '';
+		$this->version = !empty($dfinsell_config['version']) ? $dfinsell_config['version'] : '';
 
 		// Load the settings
 		$this->dfinsell_init_form_fields();
@@ -59,6 +61,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_dfinsell', [$this, 'dfinsell_process_admin_options']);
+
+		
+		 // Support WooCommerce Blocks
+	    add_action( 'woocommerce_blocks_loaded', [ $this, 'register_block_support' ] );
+		add_action( 'enqueue_block_assets', [ $this, 'dfinsell_enqueue_block_scripts' ] );
 
 		// Enqueue styles and scripts
 		add_action('wp_enqueue_scripts', [$this, 'dfinsell_enqueue_styles_and_scripts']);
@@ -78,6 +85,46 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	{
 		return $this->base_url . $endpoint;
 	}
+
+	// ✅ Register Blocks support
+	public function register_block_support() {
+	    if ( class_exists( '\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+	        require_once plugin_dir_path( __FILE__ ) . 'class-dfinsell-blocks-gateway.php';
+
+	        add_action(
+	            'woocommerce_blocks_payment_method_type_registration',
+	            function( $registry ) {
+	                $registry->register( new DFINSELL_Blocks_Gateway() );
+	            }
+	        );
+	    }
+	}
+
+	// ✅ For block-based checkout
+	public function dfinsell_enqueue_block_scripts() {
+	    wp_register_script(
+	        'dfinsell-blocks-js',
+	        plugins_url( '../assets/js/dfinsell-blocks.js', __FILE__ ),
+	        [ 'wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-hooks' ],
+	        '1.0',
+	        true
+	    );
+
+		$global_settings = get_option('woocommerce_dfinsell_settings', []);
+		$global_settings = maybe_unserialize($global_settings);
+
+	    wp_localize_script( 'dfinsell-blocks-js', 'dfinsell_params', [
+	        'ajax_url'       => admin_url( 'admin-ajax.php' ),
+	        'checkout_url'   => wc_get_checkout_url(),
+	        'dfin_loader'    => plugins_url( '../assets/images/loader.gif', __FILE__ ),
+	        'dfinsell_nonce' => wp_create_nonce( 'dfinsell_payment' ),
+			'settings'=>	$global_settings,
+	        'payment_method' => $this->id,
+	    ] );
+
+	    wp_enqueue_script( 'dfinsell-blocks-js' );
+	}
+
 
 	public function dfinsell_process_admin_options()
 	{

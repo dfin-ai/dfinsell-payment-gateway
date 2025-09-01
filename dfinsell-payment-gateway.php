@@ -71,27 +71,6 @@ add_filter(
 
 DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
 
-add_action( 'woocommerce_blocks_loaded', function() {
-    if ( class_exists( '\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
-        require_once plugin_dir_path( __FILE__ ) . 'includes/class-dfinsell-blocks-gateway.php';
-
-        add_action( 'woocommerce_blocks_payment_method_type_registration', function( $registry ) {
-            $registry->register( new DFINSELL_Blocks_Gateway() );
-        } );
-    }
-} );
-
-add_action( 'enqueue_block_assets', function() {
-    wp_register_script(
-        'dfinsell-blocks-script',
-        plugins_url( 'assets/js/dfinsell-blocks.js', __FILE__ ),
-        [ 'wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-hooks' ],
-        '1.0.0',
-        true
-    );
-} );
-
-
 /**
  * ==========================================================
  * 🛑 Cancel Unpaid Orders
