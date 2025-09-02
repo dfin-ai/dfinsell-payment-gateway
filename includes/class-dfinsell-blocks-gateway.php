@@ -2,10 +2,11 @@
 use Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType;
 
 class DFINSELL_Blocks_Gateway extends AbstractPaymentMethodType {
-    protected $id = 'dfinsell';
+    protected $name = 'dfinsell';
+	protected $id = 'dfinsell';
 
     public function initialize() {
-        $this->settings = get_option( 'woocommerce_' . $this->id . '_settings', [] );
+        $this->settings = get_option( 'woocommerce_' . $this->name . '_settings', [] );
     }
 
 	public function is_active() {
@@ -18,9 +19,10 @@ class DFINSELL_Blocks_Gateway extends AbstractPaymentMethodType {
 	}
 
   	public function get_payment_method_data() {
-		 error_log( print_r( $this->settings, true ) ); // Debug
+		 error_log( print_r( $this->settings, true ) );
 	    return [
-	        'id'          => $this->id, // e.g. 'dfinsell'
+	        'id'          => $this->name, // e.g. 'dfinsell'
+			'name'          => $this->name, // e.g. 'dfinsell'
 	        'title'       => isset( $this->settings['title'] ) ? $this->settings['title'] : '',
 	        'description' => isset( $this->settings['description'] ) ? $this->settings['description'] : '',
 	        'supports'    => [ 'products' ],

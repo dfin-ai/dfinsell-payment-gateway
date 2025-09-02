@@ -70,6 +70,11 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		// Initialize gateways
 		$this->dfinsell_init_gateways();
 
+		// Register blocks gateway
+    	$this->dfinsell_init_blocks();
+
+		add_action( 'enqueue_block_assets', [ $this, 'register_blocks_assets' ] );
+
 		// Initialize REST API
 		$rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
 		$rest_api->dfinsell_register_routes();
@@ -95,6 +100,34 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		});
 	}
 
+	private function dfinsell_init_blocks() {
+	    if ( class_exists( '\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+	        require_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/class-dfinsell-blocks-gateway.php';
+
+	        add_action( 'woocommerce_blocks_payment_method_type_registration', function( $registry ) {
+	            $registry->register( new DFINSELL_Blocks_Gateway() );
+	        });
+	    }
+	}
+
+
+	public function register_blocks_assets() {
+	    wp_register_script(
+	        'dfinsell-blocks-js',
+	        plugin_dir_url( DFINSELL_PAYMENT_GATEWAY_FILE ) . 'assets/js/dfinsell-blocks.js',
+	        [ 'wc-blocks-registry', 'wc-settings', 'wp-element' ],
+	        '1.0.0',
+	        true
+	    );
+
+	    $settings = get_option( 'woocommerce_dfinsell_settings', [] );
+
+	    wp_localize_script(
+	        'dfinsell-blocks-js',
+	        'dfinsell_params',
+	        [ 'settings' => $settings ]
+	    );
+	}
 
 	private function get_api_url($endpoint)
 	{

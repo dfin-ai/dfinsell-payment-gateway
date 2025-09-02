@@ -62,11 +62,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Define hooks and actions.
 		add_action('woocommerce_update_options_payment_gateways_dfinsell', [$this, 'dfinsell_process_admin_options']);
 
-		
-		 // Support WooCommerce Blocks
-	    add_action( 'woocommerce_blocks_loaded', [ $this, 'register_block_support' ] );
-		add_action( 'enqueue_block_assets', [ $this, 'dfinsell_enqueue_block_scripts' ] );
-
 		// Enqueue styles and scripts
 		add_action('wp_enqueue_scripts', [$this, 'dfinsell_enqueue_styles_and_scripts']);
 
@@ -85,46 +80,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	{
 		return $this->base_url . $endpoint;
 	}
-
-	// ✅ Register Blocks support
-	public function register_block_support() {
-	    if ( class_exists( '\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
-	        require_once plugin_dir_path( __FILE__ ) . 'class-dfinsell-blocks-gateway.php';
-
-	        add_action(
-	            'woocommerce_blocks_payment_method_type_registration',
-	            function( $registry ) {
-	                $registry->register( new DFINSELL_Blocks_Gateway() );
-	            }
-	        );
-	    }
-	}
-
-	// ✅ For block-based checkout
-	public function dfinsell_enqueue_block_scripts() {
-	    wp_register_script(
-	        'dfinsell-blocks-js',
-	        plugins_url( '../assets/js/dfinsell-blocks.js', __FILE__ ),
-	        [ 'wc-blocks-registry', 'wc-settings', 'wp-element', 'wp-hooks' ],
-	        '1.0',
-	        true
-	    );
-
-		$global_settings = get_option('woocommerce_dfinsell_settings', []);
-		$global_settings = maybe_unserialize($global_settings);
-
-	    wp_localize_script( 'dfinsell-blocks-js', 'dfinsell_params', [
-	        'ajax_url'       => admin_url( 'admin-ajax.php' ),
-	        'checkout_url'   => wc_get_checkout_url(),
-	        'dfin_loader'    => plugins_url( '../assets/images/loader.gif', __FILE__ ),
-	        'dfinsell_nonce' => wp_create_nonce( 'dfinsell_payment' ),
-			'settings'=>	$global_settings,
-	        'payment_method' => $this->id,
-	    ] );
-
-	    wp_enqueue_script( 'dfinsell-blocks-js' );
-	}
-
 
 	public function dfinsell_process_admin_options()
 	{
@@ -578,13 +533,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				return ['result' => 'fail'];
 			}
 
-			/* ==========================================================
-			   CHECK MERCHANT STATUS BEFORE USING ACCOUNT
-			   ----------------------------------------------------------
-			   Ensures the current account (merchant) is active and 
-			   approved before proceeding. Skips account if inactive.
-			   ========================================================== */
-
 			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
 
 			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
@@ -836,10 +784,23 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
 				}
+				// return [
+				// 	'payment_link' => esc_url($response_data['data']['payment_link']),
+				// 	'result' => 'success',
+				// ];
+				// return [
+		        //     'result'         => 'success',          // Classic checkout
+		        //     'redirect'       => esc_url($response_data['data']['payment_link']),      // Classic checkout
+		        //     'payment_result' => [                   // Block checkout
+		        //         'status'       => 'success',
+		        //         'redirect_url' => esc_url($response_data['data']['payment_link']),
+		        //     ],
+		        // ];
 				return [
-					'payment_link' => esc_url($response_data['data']['payment_link']),
-					'result' => 'success',
-				];
+		            'result'       => 'success',
+		            'order_id'     => $order->get_id(),
+		            'payment_link' => esc_url($response_data['data']['payment_link']),
+		        ];
 			}
 
 			// **Handle Payment Failure**
@@ -860,9 +821,27 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			if (!empty($lock_key)) {
 				$this->release_lock($lock_key);
 			}
-			return ['result' => 'fail'];
+			// return ['result' => 'fail'];			 
+	        return [
+	            'result'         => 'fail',
+	            'payment_result' => [
+	                'status'  => 'failure',
+	                'message' => 'fail message',
+	            ],
+	        ];
 		}
 	}
+
+	// public function process_payment( $order_id ) {
+	//     $order = wc_get_order( $order_id );
+
+	//     // Example: redirect to a payment popup / external page
+	//     return [
+	//         'result'   => 'success',
+	//         'redirect' => $this->get_return_url( $order ), // or your custom payment URL
+	//     ];
+	// }
+
 
 	// Display the "Test Order" tag in admin order details
 	public function dfinsell_display_test_order_tag($order)
