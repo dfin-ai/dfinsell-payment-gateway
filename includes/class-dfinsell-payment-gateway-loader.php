@@ -52,8 +52,22 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('wp_ajax_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
 		add_filter('cron_schedules', [$this, 'dfinsell_add_cron_interval']);
 		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
+		add_action('wp_ajax_dfinsell_block_gateway_process', [$this,'handle_dfinsell_gateway_ajax']);
+		add_action('wp_ajax_nopriv_dfinsell_block_gateway_process', [$this,'handle_dfinsell_gateway_ajax']); 
+		
 	}
 
+	function handle_dfinsell_gateway_ajax(){
+		$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
+		$orderID = WC()->session->get('store_api_draft_order');
+		$status = [];
+		if($orderID){
+			$status = $dfinPayment->process_payment($orderID);
+		}
+		//print_r($status);
+		wp_send_json($status);
+		die;
+	}
 
 	/**
 	 * Initializes the plugin.
@@ -112,21 +126,24 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 
 	public function register_blocks_assets() {
-	    wp_register_script(
-	        'dfinsell-blocks-js',
-	        plugin_dir_url( DFINSELL_PAYMENT_GATEWAY_FILE ) . 'assets/js/dfinsell-blocks.js',
-	        [ 'wc-blocks-registry', 'wc-settings', 'wp-element' ],
-	        '1.0.0',
-	        true
-	    );
+		if (is_checkout()) {
+			wp_enqueue_script('wc-checkout');
+			wp_register_script(
+				'dfinsell-blocks-js',
+				plugin_dir_url( DFINSELL_PAYMENT_GATEWAY_FILE ) . 'assets/js/dfinsell-blocks.js',
+				[ 'wc-blocks-registry', 'wc-settings', 'wp-element' ],
+				'1.0.0',
+				true
+			);
 
-	    $settings = get_option( 'woocommerce_dfinsell_settings', [] );
+			$settings = get_option( 'woocommerce_dfinsell_settings', [] );
 
-	    wp_localize_script(
-	        'dfinsell-blocks-js',
-	        'dfinsell_params',
-	        [ 'settings' => $settings ]
-	    );
+			wp_localize_script(
+				'dfinsell-blocks-js',
+				'dfinsell_params',
+				[ 'settings' => $settings, 'checkout_url' => wc_get_checkout_url() ]
+			);
+		}
 	}
 
 	private function get_api_url($endpoint)
