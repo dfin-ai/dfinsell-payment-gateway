@@ -1,4 +1,5 @@
 jQuery(function ($) {
+	
 	var isSubmitting = false; // Flag to track form submission
 	var popupInterval; // Interval ID for checking popup status
 	var paymentStatusInterval; // Interval ID for checking payment status
@@ -25,6 +26,15 @@ jQuery(function ($) {
 		}
 	});
 
+	$('form.wc-block-checkout__form button.wc-block-components-checkout-place-order-button').on('click', function () {
+		var selectedPaymentMethod = $('input[name="radio-control-wc-payment-method-options"]:checked').val();
+		// Prevent WooCommerce default behavior for your custom method
+		if (selectedPaymentMethod === dfinsell_params.payment_method) {
+			return false; // Stop WooCommerce default script
+		}
+	});
+
+
 	// Function to bind the form submit handler
 	function bindCheckoutHandler() {
 		if (isHandlerBound) return;
@@ -35,6 +45,14 @@ jQuery(function ($) {
 			// Check if the custom payment method is selected
 			if ($(this).find('input[name="payment_method"]:checked').val() === dfinsell_params.payment_method) {
 				handleFormSubmit.call(this, e);
+				return false; // Prevent other handlers
+			}
+		});
+
+		$('form.wc-block-checkout__form button.wc-block-components-checkout-place-order-button').on("click", function (e) {
+			// Check if the custom payment method is selected
+			if ($('input[name="radio-control-wc-payment-method-options"]:checked').val() === dfinsell_params.payment_method) {
+				handleFormSubmit.call($('form.wc-block-checkout__form'), e);
 				return false; // Prevent other handlers
 			}
 		});
@@ -55,6 +73,7 @@ jQuery(function ($) {
 		e.preventDefault(); // Prevent the form from submitting if already in progress
 
 		var $form = $(this);
+		
 
 		// If a submission is already in progress, prevent further submissions
 		if (isSubmitting) {
@@ -64,7 +83,13 @@ jQuery(function ($) {
 		// Set the flag to true to prevent further submissions
 		isSubmitting = true;
 
-		var selectedPaymentMethod = $form.find('input[name="payment_method"]:checked').val();
+		if ($form.find('input[name="radio-control-wc-payment-method-options"]:checked').val()) {
+			var selectedPaymentMethod = $form.find('input[name="radio-control-wc-payment-method-options"]:checked').val();
+			$button = $form.find('button.wc-block-components-checkout-place-order-button');
+		}else{
+			var selectedPaymentMethod = $form.find('input[name="payment_method"]:checked').val();
+			$button = $form.find('button[type="submit"][name="woocommerce_checkout_place_order"]');
+		}
 
 		if (selectedPaymentMethod !== dfinsell_params.payment_method) {
 			isSubmitting = false; // Reset the flag if not using the custom payment method
@@ -81,21 +106,43 @@ jQuery(function ($) {
 
 		var data = $form.serialize();
 
-		$.ajax({
-			type: 'POST',
-			url: wc_checkout_params.checkout_url,
-			data: data,
-			dataType: 'json',
-			success: function (response) {
-				handleResponse(response, $form);
-			},
-			error: function () {
-				handleError($form);
-			},
-			complete: function () {
-				isSubmitting = false; // Always reset isSubmitting to false in case of success or error
-			},
-		});
+		if ($form.find('input[name="radio-control-wc-payment-method-options"]:checked').val()) {
+			$.ajax({
+				method: 'POST',
+				url: dfinsell_params.ajax_url,
+				data: {
+						action: 'dfinsell_block_gateway_process',
+						nonce: dfinsell_params.dfinsell_nonce
+						
+				},
+				success: function (response) {
+					handleResponse(response, $form);
+				},
+				error: function () {
+					handleError($form);
+				},
+				complete: function () {
+					isSubmitting = false; // Always reset isSubmitting to false in case of success or error
+				},
+			});
+		}else{
+			$.ajax({
+				type: 'POST',
+				url: wc_checkout_params.checkout_url,
+				data: data,
+				dataType: 'json',
+				success: function (response) {
+					handleResponse(response, $form);
+				},
+				error: function () {
+					handleError($form);
+				},
+				complete: function () {
+					isSubmitting = false; // Always reset isSubmitting to false in case of success or error
+				},
+			});
+		}
+		
 
 		e.preventDefault(); // Prevent default form submission
 		return false;

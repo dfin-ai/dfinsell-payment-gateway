@@ -30,7 +30,7 @@
 			{ className: 'dfinsell-edit' },
 			settings.title || 'DFinSell'
 		),
-		canMakePayment: () => {
+		canMakePayment: async () => {
 			console.log( '[DFinSell] canMakePayment called' );
 			return true;
 		},
