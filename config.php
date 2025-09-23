@@ -13,7 +13,7 @@ return [
     'icon' => '',
 
     'protocol' => is_ssl() ? 'https://' : 'http://',
-    'host'     => 'dfin-sell.lcl',
+    'host'     => 'sell.dfin.ai',
 
     'requirements' => [
         'php' => '8.0',
