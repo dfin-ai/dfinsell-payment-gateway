@@ -10,6 +10,9 @@ class DFINSELL_Blocks_Gateway extends AbstractPaymentMethodType {
     }
 
 	public function is_active() {
+		if (has_block( 'woocommerce/cart' )) {
+				return [];
+		}
 	    return ( isset( $this->settings['enabled'] ) && 'yes' === $this->settings['enabled'] );
 	}
 
