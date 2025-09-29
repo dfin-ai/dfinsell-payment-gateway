@@ -40,8 +40,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		add_action('admin_init', [$this, 'dfinsell_handle_environment_check']);
 		add_action('admin_notices', [$this->admin_notices, 'display_notices']);
-		add_action('plugins_loaded', [$this, 'dfinsell_init'], 11);
-		
+		add_action('plugins_loaded', [$this, 'dfinsell_init'], 11);	
 
 		// Register the AJAX action callback for checking payment status
 		add_action('wp_ajax_dfinsell_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
@@ -60,8 +59,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 	function handle_dfinsell_gateway_ajax(){
 		$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
-		$orderID = WC()->session->get('store_api_draft_order');
-		
+		$orderID = WC()->session->get('store_api_draft_order');	
 		$status = [];
 		if($orderID){
 			$status = $dfinPayment->process_payment($orderID);
@@ -88,8 +86,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		// Register blocks gateway
 		$this->dfinsell_init_blocks();
-		
-		
+			
 		add_action( 'enqueue_block_assets', [ $this, 'register_blocks_assets' ] );
 
 		// Initialize REST API
