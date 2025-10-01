@@ -14,6 +14,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	private $secret_key;
 	private $sandbox_secret_key;
 	private $sandbox_public_key;
+	private $version;
 
 	private $admin_notices;
 	private $accounts = [];
@@ -43,6 +44,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$this->icon = !empty($dfinsell_config['icon']) ? $dfinsell_config['icon'] : ''; // Define an icon URL if needed.
 		$this->method_title       = !empty($dfinsell_config['title']) ? $dfinsell_config['title'] : '';
 		$this->method_description = !empty($dfinsell_config['description']) ? $dfinsell_config['description'] : '';
+		$this->version = !empty($dfinsell_config['version']) ? $dfinsell_config['version'] : '';
 
 		// Load the settings
 		$this->dfinsell_init_form_fields();
@@ -531,13 +533,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				return ['result' => 'fail'];
 			}
 
-			/* ==========================================================
-			   CHECK MERCHANT STATUS BEFORE USING ACCOUNT
-			   ----------------------------------------------------------
-			   Ensures the current account (merchant) is active and 
-			   approved before proceeding. Skips account if inactive.
-			   ========================================================== */
-
 			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
 
 			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
@@ -789,10 +784,23 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
 				}
+				// return [
+				// 	'payment_link' => esc_url($response_data['data']['payment_link']),
+				// 	'result' => 'success',
+				// ];
+				// return [
+		        //     'result'         => 'success',          // Classic checkout
+		        //     'redirect'       => esc_url($response_data['data']['payment_link']),      // Classic checkout
+		        //     'payment_result' => [                   // Block checkout
+		        //         'status'       => 'success',
+		        //         'redirect_url' => esc_url($response_data['data']['payment_link']),
+		        //     ],
+		        // ];
 				return [
-					'payment_link' => esc_url($response_data['data']['payment_link']),
-					'result' => 'success',
-				];
+		            'result'       => 'success',
+		            'order_id'     => $order->get_id(),
+		            'payment_link' => esc_url($response_data['data']['payment_link']),
+		        ];
 			}
 
 			// **Handle Payment Failure**
@@ -813,9 +821,27 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			if (!empty($lock_key)) {
 				$this->release_lock($lock_key);
 			}
-			return ['result' => 'fail'];
+			// return ['result' => 'fail'];			 
+	        return [
+	            'result'         => 'fail',
+	            'payment_result' => [
+	                'status'  => 'failure',
+	                'message' => 'fail message',
+	            ],
+	        ];
 		}
 	}
+
+	// public function process_payment( $order_id ) {
+	//     $order = wc_get_order( $order_id );
+
+	//     // Example: redirect to a payment popup / external page
+	//     return [
+	//         'result'   => 'success',
+	//         'redirect' => $this->get_return_url( $order ), // or your custom payment URL
+	//     ];
+	// }
+
 
 	// Display the "Test Order" tag in admin order details
 	public function dfinsell_display_test_order_tag($order)

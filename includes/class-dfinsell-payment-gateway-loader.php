@@ -2,7 +2,7 @@
 if (!defined('ABSPATH')) {
 	exit; // Exit if accessed directly.
 }
-
+use Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType;
 /**
  * Class DFINSELL_PAYMENT_GATEWAY_Loader
  * Handles the loading and initialization of the DFin Sell Payment Gateway plugin.
@@ -40,7 +40,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		add_action('admin_init', [$this, 'dfinsell_handle_environment_check']);
 		add_action('admin_notices', [$this->admin_notices, 'display_notices']);
-		add_action('plugins_loaded', [$this, 'dfinsell_init'], 11);
+		add_action('plugins_loaded', [$this, 'dfinsell_init'], 11);	
 
 		// Register the AJAX action callback for checking payment status
 		add_action('wp_ajax_dfinsell_check_payment_status', array($this, 'dfinsell_handle_check_payment_status_request'));
@@ -52,8 +52,22 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('wp_ajax_dfinsell_manual_sync', [$this, 'dfinsell_manual_sync_callback']);
 		add_filter('cron_schedules', [$this, 'dfinsell_add_cron_interval']);
 		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
+		add_action('wp_ajax_dfinsell_block_gateway_process', [$this,'handle_dfinsell_gateway_ajax']);
+		add_action('wp_ajax_nopriv_dfinsell_block_gateway_process', [$this,'handle_dfinsell_gateway_ajax']); 
+		
 	}
 
+	function handle_dfinsell_gateway_ajax(){
+		$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
+		$orderID = WC()->session->get('store_api_draft_order');	
+		$status = [];
+		if($orderID){
+			$status = $dfinPayment->process_payment($orderID);
+		}
+		
+		wp_send_json($status);
+		die;
+	}
 
 	/**
 	 * Initializes the plugin.
@@ -69,6 +83,11 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		// Initialize gateways
 		$this->dfinsell_init_gateways();
+
+		// Register blocks gateway
+		$this->dfinsell_init_blocks();
+			
+		add_action( 'enqueue_block_assets', [ $this, 'register_blocks_assets' ] );
 
 		// Initialize REST API
 		$rest_api = DFINSELL_PAYMENT_GATEWAY_REST_API::get_instance();
@@ -95,6 +114,48 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		});
 	}
 
+	private function dfinsell_init_blocks() {
+		
+			if ( class_exists( '\Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
+
+				require_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/class-dfinsell-blocks-gateway.php';
+
+				add_action( 'woocommerce_blocks_payment_method_type_registration', function( $registry ) {
+					$registry->register( new DFINSELL_Blocks_Gateway() );
+				});
+			}
+	
+	}
+
+
+	public function register_blocks_assets() {
+		
+		if (is_checkout()) {
+			
+			wp_register_script(
+				'dfinsell-blocks-js',
+				plugin_dir_url( DFINSELL_PAYMENT_GATEWAY_FILE ) . 'assets/js/dfinsell-blocks.js',
+				[ 'wc-blocks-registry', 'wc-settings', 'wp-element' ],
+				'1.0.0',
+				true
+			);
+
+			$settings = get_option( 'woocommerce_dfinsell_settings', [] );
+
+			wp_localize_script(
+				'dfinsell-blocks-js',
+				'dfinsell_params',
+				[ 'settings' => $settings,
+				 'ajax_url' => admin_url('admin-ajax.php'),
+				 'dfin_loader' => plugins_url('../assets/images/loader.gif', __FILE__),
+				 'dfinsell_nonce' => wp_create_nonce('dfinsell_payment'), 
+				 'checkout_url' => wc_get_checkout_url(),
+				 'payment_method' => $this->gateway_id 
+				]
+			);
+	
+		}
+	}
 
 	private function get_api_url($endpoint)
 	{
