@@ -18,7 +18,14 @@ class DFINSELL_Blocks_Gateway extends AbstractPaymentMethodType {
 
     // In class
 	public function get_payment_method_script_handles() {
-	    return [ 'dfinsell-blocks-js' ]; // match your registered handle
+	   	wp_register_script(
+			'dfinsell-blocks-js',
+			plugin_dir_url( DFINSELL_PAYMENT_GATEWAY_FILE ) . 'assets/js/dfinsell-blocks.js',
+			[ 'wc-blocks-registry', 'wc-settings', 'wp-element' ],
+			'1.0.0',
+			true
+		);
+	    	return [ 'dfinsell-blocks-js' ]; // match your registered handle
 	}
 
   	public function get_payment_method_data() {
