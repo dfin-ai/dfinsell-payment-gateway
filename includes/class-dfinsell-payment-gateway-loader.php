@@ -383,53 +383,67 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				wp_die();
 			}
 
-			$payment_return_url = esc_url($order->get_checkout_order_received_url());
+		$payment_return_url = esc_url($order->get_checkout_order_received_url());
+			$txn_status = strtolower(trim($response_data['transaction_status']));
 
+			switch ($txn_status) {
+			    case 'success':
+			    case 'paid':
+			    case 'processing':
+			        try {
+			            $order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
+			            wp_send_json_success([
+			                'status' => $txn_status,
+			                'message' => 'Order status updated successfully.',
+			                'order_id' => $order_id,
+			                'redirect_url' => $payment_return_url
+			            ]);
+			        } catch (Exception $e) {
+			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
+			        }
+			        break;
 
-			if (isset($response_data['transaction_status'])) {
-				// Handle transaction status from API
-				switch ($response_data['transaction_status']) {
-					case 'success':
-					case 'paid':
-					case 'processing':
-						// Update the order status based on the selected value
-						try {
-							$order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
-							wp_send_json_success(['message' => 'Order status updated successfully.', 'order_id' => $order_id, 'redirect_url' => $payment_return_url]);
-						} catch (Exception $e) {
-							wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
-						}
-						break;
+			    case 'failed':
+			        try {
+			            $order->update_status('failed', 'Order marked as failed by DFin Sell.');
+			            wp_send_json_success([
+			                'status' => $txn_status,
+			                'message' => 'Order status updated to failed.',
+			                'order_id' => $order_id,
+			                'redirect_url' => $payment_return_url
+			            ]);
+			        } catch (Exception $e) {
+			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
+			        }
+			        break;
 
-					case 'failed':
-						try {
-							$order->update_status('failed', 'Order marked as failed by DFin Sell.');
-							wp_send_json_success(['message' => 'Order status updated to failed.', 'order_id' => $order_id, 'redirect_url' => $payment_return_url]);
-						} catch (Exception $e) {
-							wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
-						}
-						break;
-					case 'canceled':
-					case 'expired':
-						try {
-							$order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
-							wp_send_json_success(['message' => 'Order status updated to canceled.', 'order_id' => $order_id, 'redirect_url' => $payment_return_url]);
-						} catch (Exception $e) {
-							wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
-						}
-						break;
-					case 'pending':
-					    // Don't mark order, don't redirect
-					    wp_send_json_error([
-					        'code'    => 'pending',
-					        'message' => 'Transaction still pending.',
-					        'order_id' => $order_id
-					    ]);
-					    break;
-					default:
-						wp_send_json_error(['message' => 'Unknown transaction status received.']);
-				}
+			    case 'canceled':
+			    case 'expired':
+			        try {
+			            $order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
+			            wp_send_json_success([
+			                'status' => $txn_status,
+			                'message' => 'Order status updated to canceled.',
+			                'order_id' => $order_id,
+			                'redirect_url' => $payment_return_url
+			            ]);
+			        } catch (Exception $e) {
+			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
+			        }
+			        break;
+
+			    case 'pending':
+			        wp_send_json_error([
+			            'code' => 'pending',
+			            'message' => 'Transaction still pending.',
+			            'order_id' => $order_id
+			        ]);
+			        break;
+
+			    default:
+			        wp_send_json_error(['message' => 'Unknown transaction status received: ' . $txn_status]);
 			}
+
 		} else {
 			// Skip API call if the order status is not 'pending'
 			wp_send_json_success(['message' => 'No update required as the order status is not pending.', 'order_id' => $order_id]);

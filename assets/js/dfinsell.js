@@ -184,14 +184,16 @@ jQuery(function ($) {
 						cache: false,
 						processData: true,
 						success: function (response) {
-							if (response.success === true) {
-								clearInterval(paymentStatusInterval);
-								clearInterval(popupInterval);
-								if (response.data && response.data.redirect_url) {
-									window.location.href = response.data.redirect_url;
-								}
-							}
-							isPollingActive = false; // Reset polling active flag after completion
+						    if (response.success === true) {
+						        clearInterval(paymentStatusInterval);
+						        clearInterval(popupInterval);
+
+						        const status = response.data?.status || '';
+						        if (response.data && response.data.redirect_url && !['expired', 'canceled', 'failed'].includes(status)) {
+						            window.location.href = response.data.redirect_url;
+						        }
+						    }
+						    isPollingActive = false;
 						},
 						error: function (xhr, status, error) {
 							console.error("AJAX Error: ", error);
