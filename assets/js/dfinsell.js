@@ -189,9 +189,10 @@ jQuery(function ($) {
 						        clearInterval(popupInterval);
 
 						        const status = response.data?.status || '';
-						        if (response.data && response.data.redirect_url && !['expired', 'canceled', 'failed'].includes(status)) {
-						            window.location.href = response.data.redirect_url;
-						        }
+						       if (response.data && response.data.redirect_url) {
+								    window.location.href = response.data.redirect_url;
+								}
+
 						    }
 						    isPollingActive = false;
 						},
