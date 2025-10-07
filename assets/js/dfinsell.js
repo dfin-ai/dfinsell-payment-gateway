@@ -188,12 +188,16 @@ jQuery(function ($) {
 						        clearInterval(paymentStatusInterval);
 						        clearInterval(popupInterval);
 
-						        const status = response.data?.status || '';
-						       if (response.data && response.data.redirect_url) {
-								    window.location.href = response.data.redirect_url;
-								}
+						        // Log for debugging
+						        console.log('Popup closed response:', response);
 
+						        // Redirect if redirect_url exists (for any status)
+						        if (response.data && response.data.redirect_url) {
+						            // Use replace() to ensure redirect works even in popup-close timing
+						            window.location.replace(response.data.redirect_url);
+						        }
 						    }
+
 						    isPollingActive = false;
 						},
 						error: function (xhr, status, error) {
