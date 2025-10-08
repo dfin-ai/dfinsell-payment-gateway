@@ -523,11 +523,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		while (true) {
 			$account = $this->get_next_available_account($used_accounts);
 
-			if (!$account) {
+			if (!$account) {	
 				// **Ensure email is sent to the last failed account**
 				if ($last_failed_account) {
 					wc_get_logger()->info("Sending notification to account '{$last_failed_account['title']}' due to no available alternatives.", $logger_context);
-					$this->send_account_switch_email($last_failed_account, $account);
+					// Only send switch email if more than one valid account exists
+					if ($this->has_multiple_accounts()) {
+						$this->send_account_switch_email($last_failed_account, $account);
+					} else {
+						wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', $logger_context);
+					}
 				}
 				wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
 				return ['result' => 'fail'];
@@ -626,7 +631,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				} else {
 					// **No available accounts left, send email to the last failed account**
 					if ($last_failed_account) {
-						$this->send_account_switch_email($last_failed_account, $account);
+						// Only send switch email if more than one valid account exists
+						if ($this->has_multiple_accounts()) {
+							$this->send_account_switch_email($last_failed_account, $account);
+						} else {
+							wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', $logger_context);
+						}
 					}
 					wc_add_notice(__('All accounts have reached their transaction limit.', 'dfinsell-payment-gateway'), 'error');
 					return ['result' => 'fail'];
@@ -667,7 +677,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
 				if ($last_failed_account) {
 					wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
-					$this->send_account_switch_email($last_failed_account, $account);
+					// Only send switch email if more than one valid account exists
+					if ($this->has_multiple_accounts()) {
+						$this->send_account_switch_email($last_failed_account, $account);
+					} else {
+						wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', ['source' => 'dfinsell-payment-gateway']);
+					}
 				}
 				//$last_successful_account = $account;
 				// Save pay_id to order meta
@@ -1675,6 +1690,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	    return $valid_accounts;
 	}
 
+	/**
+	 * Return true if more than one valid account is configured (for current mode).
+	 *
+	 * @return bool
+	 */
+	private function has_multiple_accounts()
+	{
+		$accounts = $this->get_all_accounts();
+		return is_array($accounts) && count($accounts) > 1;
+	}
+
 
 	function dfinsell_enqueue_admin_styles($hook)
 	{
@@ -1691,6 +1717,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 */
 	private function send_account_switch_email($oldAccount, $newAccount)
 	{
+		// Defensive check: only send switch emails when more than one valid account is configured
+		if (!$this->has_multiple_accounts()) {
+			wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', ['source' => 'dfinsell-payment-gateway']);
+			return false;
+		}
 		$dfinSellApiUrl = $this->get_api_url('/api/switch-account-email'); // Dfin Sell API Endpoint
 
 		// Use the credentials of the old (current) account to authenticate
