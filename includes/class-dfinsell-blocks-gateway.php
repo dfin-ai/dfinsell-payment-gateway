@@ -29,7 +29,6 @@ class DFINSELL_Blocks_Gateway extends AbstractPaymentMethodType {
 	}
 
   	public function get_payment_method_data() {
-		 error_log( print_r( $this->settings, true ) );
 	    return [
 	        'id'          => $this->name, // e.g. 'dfinsell'
 			'name'          => $this->name, // e.g. 'dfinsell'
