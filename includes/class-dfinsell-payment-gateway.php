@@ -34,8 +34,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			return;
 		}
 
-        // Instantiate the notices class
-        $this->admin_notices = new DFINSELL_PAYMENT_GATEWAY_Admin_Notices();
+		// Instantiate the notices class
+		$this->admin_notices = new DFINSELL_PAYMENT_GATEWAY_Admin_Notices();
 
 		$this->base_url = DFINSELL_BASE_URL;
 		
@@ -962,21 +962,26 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		];
 	}
 
-        // Retrieve client IP
-        $ip_address = isset($_SERVER['REMOTE_ADDR']) ? sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'])) : '';
-        if (!filter_var($ip_address, FILTER_VALIDATE_IP)) {
-            $ip_address = 'invalid';
-        }
+	// Helper function to get client IP address
+	private function dfinsell_get_client_ip()
+	{
+		$ip = '';
 
-        // **Rate Limiting**
-        $window_size = 30; // 30 seconds
-        $max_requests = 100;
-        $timestamp_key = "rate_limit_{$ip_address}_timestamps";
-        $request_timestamps = get_transient($timestamp_key) ?: [];
+		if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+			// Sanitize the client's IP directly on $_SERVER access
+			$ip = sanitize_text_field(wp_unslash($_SERVER['HTTP_CLIENT_IP']));
+		} elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+			// Sanitize and handle multiple proxies
+			$ip_list = explode(',', sanitize_text_field(wp_unslash($_SERVER['HTTP_X_FORWARDED_FOR'])));
+			$ip = trim($ip_list[0]); // Take the first IP in the list and trim any whitespace
+		} elseif (!empty($_SERVER['REMOTE_ADDR'])) {
+			// Sanitize the remote address directly
+			$ip = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR']));
+		}
 
-        // Remove old timestamps
-        $timestamp = time();
-        $request_timestamps = array_filter($request_timestamps, fn($ts) => $timestamp - $ts <= $window_size);
+		// Validate the IP after retrieving it
+		return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '0.0.0.0';
+	}
 
 	/**
 	 * Add a custom label next to the order status in the order list.
@@ -990,17 +995,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Get the custom meta field value (e.g. '_order_origin')
 		$order_origin = $order->get_meta('_order_origin');
 
-        // **Retrieve Order**
-        $order = wc_get_order($order_id);
-        if (!$order) {
-            wc_add_notice(__('Invalid order.', 'dfinsell-payment-gateway'), 'error');
-            return ['result' => 'fail'];
-        }
+		// Check if the meta exists and has value
+		if (!empty($order_origin)) {
+			// Add the label text to the first item in the order preview
+			$line_items[0]['name'] .= ' <span style="background-color: #ffeb3b; color: #000; padding: 3px 5px; border-radius: 3px; font-size: 12px;">' . esc_html($order_origin) . '</span>';
+		}
 
-        // **Sandbox Mode Handling**
-        if ($this->sandbox) {
-            $test_note = __('This is a test order in sandbox mode.', 'dfinsell-payment-gateway');
-            $existing_notes = get_comments(['post_id' => $order->get_id(), 'type' => 'order_note', 'approve' => 'approve']);
+		return $line_items;
+	}
 
 	/**
 	 * WooCommerce not active notice.
@@ -1012,26 +1014,26 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			esc_html__('DFin Sell Payment Gateway requires WooCommerce to be installed and active.', 'dfinsell-payment-gateway') .
 			'</p>
     </div>';
-    }
+	}
 
-    /**
-     * Payment form on checkout page.
-     */
-    public function payment_fields()
-    {
-        $description = $this->get_option('description');
+	/**
+	 * Payment form on checkout page.
+	 */
+	public function payment_fields()
+	{
+		$description = $this->get_option('description');
 
-        if ($description) {
-            // Apply formatting
-            $formatted_description = wpautop(wptexturize(trim($description)));
-            // Output directly with escaping
-            echo wp_kses_post($formatted_description);
-        }
+		if ($description) {
+			// Apply formatting
+			$formatted_description = wpautop(wptexturize(trim($description)));
+			// Output directly with escaping
+			echo wp_kses_post($formatted_description);
+		}
 
-        // Check if the consent checkbox should be displayed
-        if ('yes' === $this->get_option('show_consent_checkbox')) {
-            // Add user consent checkbox with escaping
-            echo '<p class="form-row form-row-wide">
+		// Check if the consent checkbox should be displayed
+		if ('yes' === $this->get_option('show_consent_checkbox')) {
+			// Add user consent checkbox with escaping
+			echo '<p class="form-row form-row-wide">
                 <label for="dfinsell_consent">
                     <input type="checkbox" id="dfinsell_consent" name="dfinsell_consent" /> ' .
 				esc_html__('I consent to the collection of my data to process this payment', 'dfinsell-payment-gateway') .
@@ -1043,9 +1045,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			wp_nonce_field('dfinsell_payment', 'dfinsell_nonce');
 		}
-
-	    $this->accounts = $valid_accounts;
-	    return $this->accounts;
 	}
 
 	/**
@@ -1066,228 +1065,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				return false;
 			}
 
-        wp_enqueue_style('dfinsell-admin-style', plugin_dir_url(__FILE__) . 'assets/css/admin-style.css', [], '1.0.0');
-    }
+			// Sanitize the consent checkbox input
+			$consent = isset($_POST['dfinsell_consent']) ? sanitize_text_field(wp_unslash($_POST['dfinsell_consent'])) : '';
 
-    /**
-     * Send an email notification via DfinSell API
-     */
-    private function send_account_switch_email($oldAccount, $newAccount)
-    {
-        $dfinSellApiUrl = $this->get_api_url('/api/switch-account-email'); // Dfin Sell API Endpoint
-
-        // Use the credentials of the old (current) account to authenticate
-        $api_key = $this->sandbox ? $oldAccount['sandbox_public_key'] : $oldAccount['live_public_key'];
-        $api_secret = $this->sandbox ? $oldAccount['sandbox_secret_key'] : $oldAccount['live_secret_key'];
-
-        // Prepare data for API request
-        $emailData = [
-            'old_account' => [
-                'title' => $oldAccount['title'],
-                'secret_key' => $api_secret,
-            ],
-            'new_account' => [
-                'title' => $newAccount['title'],
-            ],
-            'message' => "Payment processing account has been switched. Please review the details.",
-        ];
-        $emailData['is_sandbox'] = $this->sandbox;
-
-        // API request headers using old account credentials
-        $headers = [
-            'Content-Type' => 'application/json',
-            'Authorization' => 'Bearer ' . sanitize_text_field($api_key),
-        ];
-
-        // Log API request details
-        //wc_get_logger()->info('Request Data: ' . json_encode($emailData), ['source' => 'dfinsell-payment-gateway']);
-
-        // Send data to DFinSell API
-        $response = wp_remote_post($dfinSellApiUrl, [
-            'method' => 'POST',
-            'timeout' => 30,
-            'body' => json_encode($emailData),
-            'headers' => $headers,
-            'sslverify' => true,
-        ]);
-
-        // Handle API response
-        if (is_wp_error($response)) {
-            wc_get_logger()->error('Failed to send switch email: ' . $response->get_error_message(), ['source' => 'dfinsell-payment-gateway']);
-            return false;
-        }
-
-        $response_code = wp_remote_retrieve_response_code($response);
-        $response_body = wp_remote_retrieve_body($response);
-        $response_data = json_decode($response_body, true);
-
-        // Check if authentication failed
-        if ($response_code == 401 || $response_code == 403 || (!empty($response_data['error']) && strpos($response_data['error'], 'invalid credentials') !== false)) {
-            wc_get_logger()->error('Email Sending Failed : Authentication failed: Invalid API key or secret for old account', ['source' => 'dfinsell-payment-gateway']);
-            return false; // Stop further execution
-        }
-
-        // Check if the API response has errors
-        if (!empty($response_data['error'])) {
-            wc_get_logger()->error('DFinSell API Error: ' . json_encode($response_data), ['source' => 'dfinsell-payment-gateway']);
-            return false;
-        }
-
-       	wc_get_logger()->info("Switch email successfully sent to: '{$oldAccount['title']}'", ['source' => 'dfinsell-payment-gateway']);
-        return true;
-    }
-
-    /**
-     * Get the next available payment account, handling concurrency.
-     */
-    private function get_next_available_account($used_accounts = [])
-    {
-        global $wpdb;
-
-        // Fetch all accounts ordered by priority
-        $settings = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
-		
-        if (is_string($settings)) {
-			$settings = maybe_unserialize($settings);
-		}
-	
-		if (!is_array($settings)) {
-			return false;
-		}
-
-        // Filter out used accounts
-        $available_accounts = array_filter($settings, function ($account) use ($used_accounts) {
-            return !in_array($account['title'], $used_accounts);
-        });
-
-        if (empty($available_accounts)) {
-            return false;
-        }
-
-        // Sort by priority (lower value = higher priority)
-        usort($available_accounts, function ($a, $b) {
-            return $a['priority'] <=> $b['priority'];
-        });
-
-        // Concurrency Handling: Lock the selected account
-        foreach ($available_accounts as $account) {
-            $lock_key = "dfinsell_lock_{$account['title']}";
-
-            // Try to acquire lock
-            if ($this->acquire_lock($lock_key)) {
-                $account['lock_key'] = $lock_key; 
-                // wc_get_logger()->info("Selected account '{$account['title']}' for processing.", ['source' => 'dfinsell-payment-gateway']);
-                return $account;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Acquire a lock to prevent concurrent access to the same account.
-     */
-
-    private function acquire_lock($lock_key)
-    {
-        global $wpdb;
-        $lock_timeout = 10; // Lock expires after 10 seconds
-
-        // Try to insert a lock row in the database
-        $inserted = $wpdb->query(
-            $wpdb->prepare(
-                "INSERT INTO {$wpdb->options} (option_name, option_value, autoload)
-                 VALUES (%s, %s, 'no')
-                 ON DUPLICATE KEY UPDATE option_value = %s",
-                 $lock_key,
-                 time() + $lock_timeout,
-                 time() + $lock_timeout
-             )
-         );
-     
-         if ($inserted === false) {
-             wc_get_logger()->error(
-                 "DB Error: " . $wpdb->last_error, 
-                 ['source' => 'dfinsell-payment-gateway']
-             );
-             return false; // Lock acquisition failed
-         }
-     
-         wc_get_logger()->info("Lock acquired for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
-     
-         return true;
-     }
-     
-
-    /**
-     * Release a lock after payment processing is complete.
-     */
-    private function release_lock($lock_key)
-    {
-        global $wpdb;
-        $wpdb->query($wpdb->prepare("DELETE FROM {$wpdb->options} WHERE option_name = %s", $lock_key));
-        
-            wc_get_logger()->info("Released lock for '{$lock_key}'", ['source' => 'dfinsell-payment-gateway']);
-    }
-
-    function check_for_sql_injection()
-	{
-		$sql_injection_patterns = [
-			'/\b(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\b(?![^{}]*})/i',
-			'/(\-\-|\#|\/\*|\*\/)/i',
-			'/(\b(AND|OR)\b\s*\d+\s*[=<>])/i'
-		];
-	
-		$safe_keys = [
-			'order_comments', 'remarks',
-			'billing_address_1', 'billing_address_2',
-			'billing_city', 'billing_state', 'billing_postcode',
-			'shipping_address_1', 'shipping_address_2',
-			'shipping_city', 'shipping_state', 'shipping_postcode'
-		];
-	
-		$errors = [];
-		$checkout_fields = WC()->checkout()->get_checkout_fields();
-	
-		foreach ($_POST as $key => $value) {
-			// Skip WooCommerce attribution/session tracking fields
-			if (strpos($key, 'wc_order_attribution_') === 0) {
-				continue;
-			}
-	
-			// Skip safe fields
-			if (in_array($key, $safe_keys)) {
-				continue;
-			}
-	
-			if (is_string($value)) {
-				foreach ($sql_injection_patterns as $pattern) {
-					if (preg_match($pattern, $value)) {
-						$field_label = isset($checkout_fields['billing'][$key]['label'])
-							? $checkout_fields['billing'][$key]['label']
-							: (isset($checkout_fields['shipping'][$key]['label'])
-								? $checkout_fields['shipping'][$key]['label']
-								: (isset($checkout_fields['account'][$key]['label'])
-									? $checkout_fields['account'][$key]['label']
-									: (isset($checkout_fields['order'][$key]['label'])
-										? $checkout_fields['order'][$key]['label']
-										: ucfirst(str_replace('_', ' ', $key)))));
-	
-						$errors[] = __("Please remove special characters and enter a valid '$field_label'", 'dfinsell-payment-gateway');
-	
-						break;
-					}
-				}
+			// Validate the consent checkbox was checked
+			if ($consent !== 'on') {
+				wc_add_notice(__('You must consent to the collection of your data to process this payment.', 'dfinsell-payment-gateway'), 'error');
+				return false;
 			}
 		}
-	
-		if (!empty($errors)) {
-			foreach ($errors as $error) {
-				wc_add_notice($error, 'error');
-			}
-			return false;
-		}
-	
+
 		return true;
 	}
 
