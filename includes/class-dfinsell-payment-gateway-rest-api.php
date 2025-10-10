@@ -34,25 +34,33 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		});
 	}
 
-	private function dfinsell_verify_api_key($api_key)
-	{
+	private function dfinsell_verify_api_key($api_key) {
 		// Sanitize the API key parameter early
 		$api_key = sanitize_text_field($api_key);
 
-		// Get DFinSell public key from WooCommerce settings
-		$dfin_sell_settings = get_option('woocommerce_dfinsell_settings');
+		// Get DFinSell settings
+		$dfin_sell_settings = get_option('woocommerce_dfinsell_payment_gateway_accounts');
+		$dfin_settings = get_option('woocommerce_dfinsell_settings');
 
-		// Sanitize WooCommerce settings fields
-		$sandbox = isset($dfin_sell_settings['sandbox']) && 'yes' === sanitize_text_field($dfin_sell_settings['sandbox']);
+		if (!$dfin_sell_settings || empty($dfin_sell_settings)) {
+			return false; // No accounts available
+		}
 
-		// Choose between sandbox and production keys, sanitize them
-		$public_key = $sandbox ? sanitize_text_field($dfin_sell_settings['sandbox_public_key']) : sanitize_text_field($dfin_sell_settings['public_key']);
+		$accounts = $dfin_sell_settings;
 
-		// Ensure public key is not empty and verify API key with a secure hash comparison
-		return !empty($public_key) && hash_equals($public_key, $api_key);
+		$sandbox = isset($dfin_settings['sandbox']) && $dfin_settings['sandbox'] === 'yes';
+
+		foreach ($accounts as $account) {
+			$public_key = $sandbox ? sanitize_text_field($account['sandbox_public_key']) : sanitize_text_field($account['live_public_key']);
+			
+			// Use a secure hash comparison
+			if (!empty($public_key) && hash_equals($public_key, $api_key)) {
+				return true;
+			}
+		}
+
+		return false;
 	}
-
-
 	public function dfinsell_handle_api_request(WP_REST_Request $request)
 	{
 		$parameters = $request->get_json_params();
@@ -81,9 +89,11 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			$this->logger->error('Order not found: ' . $order_id, array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Order not found'], 404);
 		}
+
 		$pay_id = isset($parameters['pay_id']) ? sanitize_text_field($parameters['pay_id']) : '';
 		//Get uuid from WP
 		$payment_token = $order->get_meta('_dfinsell_pay_id');
+
 		if ($payment_token != $pay_id) {
 			$this->logger->error('Pay ID mismatch: ' . $pay_id, array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Pay ID mismatch'], 400);
@@ -127,4 +137,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			return new WP_REST_Response(['error' => 'Failed to update order status'], 500);
 		}
 	}
+
+
+	
 }

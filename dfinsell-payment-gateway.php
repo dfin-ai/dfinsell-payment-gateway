@@ -7,7 +7,7 @@
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfinsell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfinsell-payment-gateway
- * Version: 1.0.12
+ * Version: 1.1.5
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -25,6 +25,9 @@ define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', plugin_dir_path(__FILE__));
 
 // Include utility functions
 require_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/dfinsell-payment-gateway-utils.php';
+
+// Migrations functions
+include_once plugin_dir_path(__FILE__) . 'migration.php';
 
 // Autoload classes
 spl_autoload_register(function ($class) {

@@ -8,7 +8,7 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
 **Tested up to:** 6.2  
-**Stable tag:** 1.0.12  
+**Stable tag:** 1.1.5  
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -132,7 +132,39 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ## Changelog
 
-### Version 1.0.12
+### Version 1.1.5
+
+### Version 1.1.4 (Beta)
+- **Blank screen issue:**  
+  Fixed an issue where a blank screen appeared when placing an order from the order history page.
+
+- **Special Character Validation Fix**:
+  Improved validation for special characters in specific checkout fields to prevent incorrect form submissions.
+
+### Version 1.1.3 (Beta)
+
+- **Unique Payment Token Handling:**  
+  Implemented unique payment token support for orders to prevent duplicate payment processing and ensure more reliable order submissions.
+  
+### Version 1.1.2 (Beta)
+
+- **Unpaid order redirection issue** 
+  Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
+
+### Version 1.1.1 (Beta)
+
+- **Minor Fix: Payment Lock Mechanism** 
+  Improved the payment locking mechanism to prevent simultaneous transactions from conflicting when using multiple accounts.
+
+### Version 1.1.0 (Beta)
+
+- **Multiple Account Selections:** 
+  Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
+
+- **Special Character Validation**:
+  Special character validations have been added to the checkout page to ensure secure and proper data entry, preventing the use of potentially harmful or unsupported characters.
+
+### Version 1.0.12 (Single Account)
 
 - **Blank screen issue:**  
   Fixed an issue where a blank screen appeared when placing an order from the order history page.
