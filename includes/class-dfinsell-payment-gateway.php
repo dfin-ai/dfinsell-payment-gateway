@@ -540,6 +540,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$first_name = sanitize_text_field($order->get_billing_first_name());
 		$last_name = sanitize_text_field($order->get_billing_last_name());
 		$amount = number_format($order->get_total(), 2, '.', '');
+		$email = sanitize_text_field($order->get_billing_email());
+		$phone = sanitize_text_field($order->get_billing_phone());
+
+		// Get billing country (ISO code like "US", "IN", etc.)
+		$country = $order->get_billing_country();
+
+		// Convert to country calling code
+		$country_code = WC()->countries->get_country_calling_code($country);
 
 		// Get billing address details
 		$billing_address_1 = sanitize_text_field($order->get_billing_address_1());
@@ -599,6 +607,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'source' => 'wordpress',
 			'meta_data' => $meta_data_array,
 			'remarks' => 'Order ' . $order->get_order_number(),
+			'email' => $email,
+			'phone_number' => $phone,
+			'country_code' => $country_code,
 			// Add billing address details to the request
 			'billing_address_1' => $billing_address_1,
 			'billing_address_2' => $billing_address_2,
