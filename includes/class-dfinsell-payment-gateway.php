@@ -365,7 +365,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		$transaction_limit_response_data = json_decode($transaction_limit_response_body, true);
 
-		if (isset($transaction_limit_response_data['error'])) {
+		if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'error') {
 			// Display error message to the user
 			wc_add_notice(
 				__('Payment error: ', 'dfinsell-payment-gateway') . "Dfin Sell payment method is currently unavailable. Please contact support for assistance.",
@@ -879,7 +879,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$transaction_limit_response_body = wp_remote_retrieve_body($transaction_limit_response);
 			$transaction_limit_response_data = json_decode($transaction_limit_response_body, true);
 	
-			if (isset($transaction_limit_response_data['error'])) {
+			if (isset($transaction_limit_response_data['status']) && $transaction_limit_response_data['status'] === 'error') {
 				unset($available_gateways[$gateway_id]);
 			}
 		}
