@@ -6,7 +6,7 @@ jQuery(function ($) {
 	var orderId; // To store the order ID
 	var $button; // To store reference to the submit button
 	var originalButtonText; // To store original button text
-	var isPollingActive = false; // Flag to ensure only one polling interval runs
+	// var isPollingActive = false; // Flag to ensure only one polling interval runs
 	let isHandlerBound = false;
 
 	// Sanitize loader URL and append loader image to the body
@@ -169,7 +169,7 @@ jQuery(function ($) {
 				if (popupWindow.closed) {
 					clearInterval(popupInterval);
 					clearInterval(paymentStatusInterval);
-					isPollingActive = false; // Reset polling active flag when popup closes
+					// isPollingActive = false; // Reset polling active flag when popup closes
 
 					// API call when popup closes
 					$.ajax({
@@ -198,7 +198,7 @@ jQuery(function ($) {
 						        }
 						    }
 
-						    isPollingActive = false;
+						    // isPollingActive = false;
 						},
 						error: function (xhr, status, error) {
 							console.error("AJAX Error: ", error);
@@ -211,43 +211,43 @@ jQuery(function ($) {
 			}, 500);
 
 			// Start polling only if it's not already active
-			if (!isPollingActive) {
-				isPollingActive = true;
+			// if (!isPollingActive) {
+			// 	isPollingActive = true;
 
-				console.log('dfinsell_params :', dfinsell_params);
+			// 	console.log('dfinsell_params :', dfinsell_params);
 
 
-				paymentStatusInterval = setInterval(function () {
-					$.ajax({
-						type: 'POST',
-						url: dfinsell_params.ajax_url,
-						data: {
-							action: 'dfinsell_check_payment_status',
-							order_id: orderId,
-							security: dfinsell_params.dfinsell_nonce,
-						},
-						dataType: 'json',
-						cache: false,
-						processData: true,
-						success: function (statusResponse) {
-							if (statusResponse.data.status === 'success') {
-								clearInterval(paymentStatusInterval);
-								clearInterval(popupInterval);
-								if (statusResponse.data && statusResponse.data.redirect_url) {
-									window.location.href = statusResponse.data.redirect_url;
-								}
-							} else if (statusResponse.data.status === 'failed') {
-								clearInterval(paymentStatusInterval);
-								clearInterval(popupInterval);
-								if (statusResponse.data && statusResponse.data.redirect_url) {
-									window.location.href = statusResponse.data.redirect_url;
-								}
-							}
-							isPollingActive = false; // Reset polling active flag after completion
-						},
-					});
-				}, 5000);
-			}
+			// 	paymentStatusInterval = setInterval(function () {
+			// 		$.ajax({
+			// 			type: 'POST',
+			// 			url: dfinsell_params.ajax_url,
+			// 			data: {
+			// 				action: 'dfinsell_check_payment_status',
+			// 				order_id: orderId,
+			// 				security: dfinsell_params.dfinsell_nonce,
+			// 			},
+			// 			dataType: 'json',
+			// 			cache: false,
+			// 			processData: true,
+			// 			success: function (statusResponse) {
+			// 				if (statusResponse.data.status === 'success') {
+			// 					clearInterval(paymentStatusInterval);
+			// 					clearInterval(popupInterval);
+			// 					if (statusResponse.data && statusResponse.data.redirect_url) {
+			// 						window.location.href = statusResponse.data.redirect_url;
+			// 					}
+			// 				} else if (statusResponse.data.status === 'failed') {
+			// 					clearInterval(paymentStatusInterval);
+			// 					clearInterval(popupInterval);
+			// 					if (statusResponse.data && statusResponse.data.redirect_url) {
+			// 						window.location.href = statusResponse.data.redirect_url;
+			// 					}
+			// 				}
+			// 				isPollingActive = false; // Reset polling active flag after completion
+			// 			},
+			// 		});
+			// 	}, 5000);
+			// }
 		}
 	}
 
