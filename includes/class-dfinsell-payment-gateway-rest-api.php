@@ -22,6 +22,29 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		// Initialize the logger
 		$this->logger = wc_get_logger();
 		$this->gateway_id = DFINSELL_PLUGIN_ID;
+
+	    add_action('rest_api_init', function () {
+	        // Remove WordPress's default CORS headers
+	        remove_filter('rest_pre_serve_request', 'rest_send_cors_headers');
+
+	        // Add custom CORS headers
+	        add_filter('rest_pre_serve_request', function ($value) {
+
+	            // Allow specific origin (DFin Sell dashboard)
+	            header('Access-Control-Allow-Origin: '.DFINSELL_BASE_URL);
+	            header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+	            header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, User-Agent, Accept');
+	            header('Access-Control-Allow-Credentials: true');
+
+	            // Handle preflight request
+	            if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+	                status_header(200);
+	                exit;
+	            }
+
+	            return $value;
+	        }, 15);
+	    });
 	}
 
 	public function dfinsell_register_routes()
