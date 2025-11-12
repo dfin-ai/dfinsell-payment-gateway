@@ -1957,7 +1957,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 								? $checkout_fields['shipping'][$key]['label']
 								: (isset($checkout_fields['account'][$key]['label'])
 									? $checkout_fields['account'][$key]['label']
-									: (isset($checkout_fields['order'][$k   ey]['label'])
+									: (isset($checkout_fields['order'][$key]['label'])
 										? $checkout_fields['order'][$key]['label']
 	 									: ucfirst(str_replace('_', ' ', $key)))));
 
