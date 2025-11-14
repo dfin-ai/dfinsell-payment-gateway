@@ -500,11 +500,29 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// **Retrieve Order**
 		$order = wc_get_order($order_id);
+		
 		if (!$order) {
 			wc_get_logger()->error("Invalid order ID: {$order_id}", $logger_context);
 			wc_add_notice(__('Invalid order.', 'dfinsell-payment-gateway'), 'error');
 			return ['result' => 'fail'];
 		}
+		//BeaverTech Code Change start
+		$current_order_status = $order->get_status();
+		if ($current_order_status === 'completed' || $current_order_status === 'cancelled' || $current_order_status === 'failed' || $current_order_status === 'expired') {
+			if (WC()->cart) {
+				WC()->cart->empty_cart();
+			}
+
+			// Return a successful response to DFin Sell API.
+			$payment_return_url = esc_url($order->get_checkout_order_received_url());
+			return [
+				'result'       => 'success',
+				'order_id'     => $order->get_id(),
+				'payment_status'     => 'success',
+				'redirect_url' => esc_url($order->get_checkout_order_received_url()),
+			];
+		}
+		//BeaverTech Code Change end
 
 		// **Sandbox Mode Handling**
 		if ($this->sandbox) {
@@ -523,7 +541,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		while (true) {
 			$account = $this->get_next_available_account($used_accounts);
 
-			if (!$account) {	
+			if (!$account) {
 				// **Ensure email is sent to the last failed account**
 				if ($last_failed_account) {
 					wc_get_logger()->info("Sending notification to account '{$last_failed_account['title']}' due to no available alternatives.", $logger_context);
@@ -650,7 +668,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			$order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
 			$order->save();
-
+			
 			$response = wp_remote_post($url, [
 				'method' => 'POST',
 				'timeout' => 30,
@@ -673,8 +691,28 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			$response_data = json_decode(wp_remote_retrieve_body($response), true);
-
+			//BeaverTech Code Change start
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
+
+				if($response_data['data']['payment_status'] == 'success'){
+					$current_order_status = $order->get_status();
+					$target_order_status = $response_data['data']['payment_status'];
+
+					// **Update Order Status**
+					$order->update_status('processing', 'Order marked as processing by DFin Sell.');
+
+					if (WC()->cart) {
+						WC()->cart->empty_cart();
+					}
+				
+					return [
+						'result'       => 'success',
+						'order_id'     => $order->get_id(),
+						'payment_status'     => $response_data['data']['payment_status'],
+						'redirect_url' => esc_url($order->get_checkout_order_received_url()),
+					];
+				}
+				//BeaverTech Code Change end
 				if ($last_failed_account) {
 					wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
 					// Only send switch email if more than one valid account exists
@@ -900,6 +938,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$billing_postcode = sanitize_text_field($order->get_billing_postcode());
 		$billing_country = sanitize_text_field($order->get_billing_country());
 		$billing_state = sanitize_text_field($order->get_billing_state());
+		$billing_phone = sanitize_text_field($order->get_billing_phone());
 
 		$redirect_url = esc_url_raw(
 			add_query_arg(
@@ -958,6 +997,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'billing_postcode' => $billing_postcode,
 			'billing_country' => $billing_country,
 			'billing_state' => $billing_state,
+			'billing_phone' => $billing_phone,
 			'is_sandbox' => $is_sandbox,
 		];
 	}
@@ -1520,7 +1560,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	private function hide_gateway($available_gateways, $gateway_id)
 	{
-	    unset($available_gateways[$gateway_id]);
+	    //unset($available_gateways[$gateway_id]);
 	    $GLOBALS['dfinsell_gateway_visibility_' . $this->id] = $available_gateways;
 	    return $available_gateways;
 	}
@@ -1900,7 +1940,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		$errors = []; // Store multiple errors
 
-		// Get checkout fields dynamically
+                                  		// Get checkout fields dynamically
 		$checkout_fields = WC()
 			->checkout()
 			->get_checkout_fields();
@@ -1919,7 +1959,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 									? $checkout_fields['account'][$key]['label']
 									: (isset($checkout_fields['order'][$key]['label'])
 										? $checkout_fields['order'][$key]['label']
-										: ucfirst(str_replace('_', ' ', $key)))));
+	 									: ucfirst(str_replace('_', ' ', $key)))));
 
 						// Log error for debugging
 						$ip_address = sanitize_text_field(wp_unslash($_SERVER['REMOTE_ADDR'] ?? ''));

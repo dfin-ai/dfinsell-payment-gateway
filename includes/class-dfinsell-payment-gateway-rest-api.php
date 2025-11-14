@@ -23,7 +23,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$this->logger = wc_get_logger();
 		$this->gateway_id = DFINSELL_PLUGIN_ID;
 
-	    add_action('rest_api_init', function () {
+		add_action('rest_api_init', function () {
 	        // Remove WordPress's default CORS headers
 	        remove_filter('rest_pre_serve_request', 'rest_send_cors_headers');
 
@@ -50,7 +50,18 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	public function dfinsell_register_routes()
 	{
 		// Log incoming request with sanitized parameters
+		
 		add_action('rest_api_init', function () {
+			//BeaverTech Code Change start
+			remove_filter( 'rest_pre_serve_request', 'rest_send_cors_headers' );
+			add_filter( 'rest_pre_serve_request', function( $value ) {
+				header( 'Access-Control-Allow-Origin: https://sell.dfin.ai' );
+				header( 'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS' );
+				header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, User-Agent, Accept' );
+				header( 'Access-Control-Allow-Credentials: true' );
+				return $value;
+			});
+			//BeaverTech Code Change end
 			register_rest_route('dfinsell/v1', '/data', array(
 				'methods' => 'POST',
 				'callback' => array($this, 'dfinsell_handle_api_request'),
@@ -95,7 +106,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	public function dfinsell_handle_api_request(WP_REST_Request $request)
 	{
 		$parameters = $request->get_json_params();
-
+		
 		// Sanitize incoming data to prevent security vulnerabilities.
 		$api_key = isset($parameters['nonce']) ? sanitize_text_field($parameters['nonce']) : '';
 		$order_id = isset($parameters['order_id']) ? intval($parameters['order_id']) : 0;
@@ -141,8 +152,8 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		// --- Idempotency and Order Status Update Logic ---
 		$current_order_status = $order->get_status();
 		$target_order_status = $current_order_status; // Initialize with current status
-
-		if ($api_order_status === 'completed') {
+		//BeaverTech Code Change start
+		if ($api_order_status === 'completed' || $api_order_status === 'cancelled' || $api_order_status === 'failed' || $api_order_status === 'expired') {
 			// Check if the current order status allows for a transition to 'completed' or 'processing'.
 			if (in_array($current_order_status, ['pending', 'failed'])) {
 				// Get the configured order status from the payment gateway settings for successful payments.
@@ -151,7 +162,11 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 				if (isset($payment_gateways[$this->gateway_id])) {
 					$gateway = $payment_gateways[$this->gateway_id];
 					// Default to 'processing' if not explicitly set in gateway options.
-					$target_order_status = sanitize_text_field($gateway->get_option('order_status', 'processing'));
+					if ($api_order_status === 'completed'){
+						$target_order_status = sanitize_text_field($gateway->get_option('order_status', 'processing'));
+					}else{
+						$target_order_status = $api_order_status;
+					}
 				} else {
 					$this->logger->error('DFin Sell payment gateway settings not found.', array('source' => 'dfinsell-payment-gateway'));
 					return new WP_REST_Response(['error' => 'Payment gateway configuration error'], 500);
@@ -187,7 +202,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			$payment_return_url = esc_url($order->get_checkout_order_received_url());
 			return new WP_REST_Response(['success' => true, 'message' => 'Request received, no status change performed based on API status', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 		}
-
+		//BeaverTech Code Change end
 		// Only attempt to update the order status if the target status is different from the current status.
 		// WooCommerce's internal `update_status` also has idempotency, but this explicit check is clearer.
 		if ('wc-' . $target_order_status !== $current_order_status) {
@@ -220,7 +235,4 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		$payment_return_url = esc_url($order->get_checkout_order_received_url());
 		return new WP_REST_Response(['success' => true, 'message' => 'Order status processed successfully', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 	}
-
-
-	
 }
