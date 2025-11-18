@@ -258,6 +258,10 @@ jQuery(function ($) {
 		try {
 			if (response.result === 'success') {
 				orderId = response.order_id;
+				if(response.payment_status == 'success'){
+					 window.location.href = response.redirect_url
+					 return false;
+				}
 				var paymentLink = response.payment_link;
 				openPaymentLink(paymentLink);
 				$form.removeAttr('data-result');
