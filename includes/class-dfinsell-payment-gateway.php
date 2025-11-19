@@ -691,6 +691,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			$response_data = json_decode(wp_remote_retrieve_body($response), true);
+
+			wc_get_logger()->error('Payment raw response: ' . print_r($response_data, true), $logger_context);
+
 			//BeaverTech Code Change start
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
 
@@ -845,7 +848,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			// **Handle Payment Failure**
-			$error_message = isset($response_data['message']) ? sanitize_text_field($response_data['message']) : __('Payment failed.', 'dfinsell-payment-gateway');
+			if (!empty($response_data['message'])) {
+				$error_message = sanitize_text_field($response_data['message']);
+			} elseif (!empty($response_data['error'])) {
+				$error_message = sanitize_text_field($response_data['error']);
+			} elseif (!empty($response_data['data']['error'])) {
+				$error_message = sanitize_text_field($response_data['data']['error']);
+			} else {
+				$error_message = __('Unknown error occurred.', 'dfinsell-payment-gateway');
+			}
+
 			wc_get_logger()->error("Final payment failure using '{$account['title']}': $error_message", $logger_context);
 			// **Add Order Note for Failed Payment**
 			$order->add_order_note(
