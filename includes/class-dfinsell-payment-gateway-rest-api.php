@@ -52,16 +52,6 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		// Log incoming request with sanitized parameters
 		
 		add_action('rest_api_init', function () {
-			//BeaverTech Code Change start
-			remove_filter( 'rest_pre_serve_request', 'rest_send_cors_headers' );
-			add_filter( 'rest_pre_serve_request', function( $value ) {
-				header( 'Access-Control-Allow-Origin: https://sell.dfin.ai' );
-				header( 'Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS' );
-				header( 'Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, User-Agent, Accept' );
-				header( 'Access-Control-Allow-Credentials: true' );
-				return $value;
-			});
-			//BeaverTech Code Change end
 			register_rest_route('dfinsell/v1', '/data', array(
 				'methods' => 'POST',
 				'callback' => array($this, 'dfinsell_handle_api_request'),
