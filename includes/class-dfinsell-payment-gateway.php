@@ -837,18 +837,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				if (!empty($lock_key)) {
 					$this->release_lock($lock_key);
 				}
-				// return [
-				// 	'payment_link' => esc_url($response_data['data']['payment_link']),
-				// 	'result' => 'success',
-				// ];
-				// return [
-		        //     'result'         => 'success',          // Classic checkout
-		        //     'redirect'       => esc_url($response_data['data']['payment_link']),      // Classic checkout
-		        //     'payment_result' => [                   // Block checkout
-		        //         'status'       => 'success',
-		        //         'redirect_url' => esc_url($response_data['data']['payment_link']),
-		        //     ],
-		        // ];
 				return [
 		            'result'       => 'success',
 		            'order_id'     => $order->get_id(),

@@ -418,7 +418,6 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			        break;
 
 			    case 'canceled':
-			    case 'expired':
 			        try {
 			            $order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
 			            wp_send_json_success([
