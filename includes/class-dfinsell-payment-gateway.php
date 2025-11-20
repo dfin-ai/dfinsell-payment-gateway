@@ -508,7 +508,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}
 		//BeaverTech Code Change start
 		$current_order_status = $order->get_status();
-		if ($current_order_status === 'completed' || $current_order_status === 'cancelled' || $current_order_status === 'failed' || $current_order_status === 'expired') {
+		if ($current_order_status === 'completed') {
 			if (WC()->cart) {
 				WC()->cart->empty_cart();
 			}
@@ -521,6 +521,30 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'payment_status'     => 'success',
 				'redirect_url' => esc_url($order->get_checkout_order_received_url()),
 			];
+		}elseif($current_order_status === 'failed'){
+			if (WC()->cart) {
+				WC()->cart->empty_cart();
+			}
+			$failed_url = $order->get_checkout_payment_url() . '&order_failed=1';
+			return [
+				'result'       => 'success',
+				'order_id'     => $order->get_id(),
+				'payment_status'     => 'success',
+				'redirect_url' => esc_url($failed_url),
+			];
+			
+		}elseif($current_order_status === 'cancelled'|| $current_order_status === 'expired'){
+			if (WC()->cart) {
+				WC()->cart->empty_cart();
+			}
+			
+			return [
+				'result'       => 'success',
+				'order_id'     => $order->get_id(),
+				'payment_status'     => 'success',
+				'redirect_url' => esc_url($order->get_cancel_order_url()),
+			];
+			
 		}
 		//BeaverTech Code Change end
 
