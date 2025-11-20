@@ -511,6 +511,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		if ($current_order_status === 'completed') {
 			if (WC()->cart) {
 				WC()->cart->empty_cart();
+				WC()->session->cleanup_sessions();
+				WC()->session->destroy_session();
+				WC()->session->set_customer_session_cookie( false );
+
 			}
 
 			// Return a successful response to DFin Sell API.
@@ -524,6 +528,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}elseif($current_order_status === 'failed'){
 			if (WC()->cart) {
 				WC()->cart->empty_cart();
+				WC()->session->cleanup_sessions();
+				WC()->session->destroy_session();
+				WC()->session->set_customer_session_cookie( false );
 			}
 			$failed_url = $order->get_checkout_payment_url() . '&order_failed=1';
 			return [
@@ -536,6 +543,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		}elseif($current_order_status === 'cancelled'|| $current_order_status === 'expired'){
 			if (WC()->cart) {
 				WC()->cart->empty_cart();
+				WC()->session->cleanup_sessions();
+				WC()->session->destroy_session();
+				WC()->session->set_customer_session_cookie( false );
 			}
 			
 			return [
