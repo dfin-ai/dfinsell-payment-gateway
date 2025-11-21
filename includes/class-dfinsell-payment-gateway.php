@@ -575,7 +575,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		while (true) {
 			$account = $this->get_next_available_account($used_accounts);
 
-			if (!$account) {
+			if (empty($account) || !is_array($account)) {
 				// **Ensure email is sent to the last failed account**
 				if ($last_failed_account) {
 					wc_get_logger()->info("Sending notification to account '{$last_failed_account['title']}' due to no available alternatives.", $logger_context);
@@ -1594,7 +1594,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	private function hide_gateway($available_gateways, $gateway_id)
 	{
-	    //unset($available_gateways[$gateway_id]);
+	    unset($available_gateways[$gateway_id]);
 	    $GLOBALS['dfinsell_gateway_visibility_' . $this->id] = $available_gateways;
 	    return $available_gateways;
 	}
