@@ -405,13 +405,12 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			    case 'failed':
 			        try {
-			            $payment_return_url = $order->get_checkout_payment_url() . '&order_failed=1';
-			            $order->update_status('failed', 'Order marked as failed by DFin Sell.');
+						$order->update_status('failed', 'Order marked as failed by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
 			                'message' => 'Order status updated to failed.',
 			                'order_id' => $order_id,
-			                'redirect_url' => $payment_return_url
+							'notices' => 'Payment failed: The Payment method rejected your transaction. Please use another card.'
 			            ]);
 			        } catch (Exception $e) {
 			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
@@ -420,12 +419,13 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			    case 'canceled':
 			        try {
-			            $order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
+						$order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
 			                'message' => 'Order status updated to canceled.',
 			                'order_id' => $order_id,
-			                'redirect_url' => esc_url($order->get_cancel_order_url())
+			                'redirect_url' => esc_url($order->get_cancel_order_url()),
+							'notices' => 'Payment cancelled: The Payment method cencelled your transaction.'
 			            ]);
 			        } catch (Exception $e) {
 			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
@@ -446,7 +446,8 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		} else {
 			// Skip API call if the order status is not 'pending'
-			wp_send_json_success(['message' => 'No update required as the order status is not pending.', 'order_id' => $order_id]);
+			
+			wp_send_json_success(['message' => 'No payment update required as the order status is not pending.', 'order_id' => $order_id,'notices' => 'No update required as the order status is not pending.']);
 		}
 
 		wp_die();

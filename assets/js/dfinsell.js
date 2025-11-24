@@ -56,6 +56,7 @@ jQuery(function ($) {
 				return false; // Prevent other handlers
 			}
 		});
+
 	}
 
 	// Rebind after checkout updates
@@ -195,7 +196,10 @@ jQuery(function ($) {
 						        if (response.data && response.data.redirect_url) {
 						            // Use replace() to ensure redirect works even in popup-close timing
 						            window.location.replace(response.data.redirect_url);
-						        }
+						        }else{
+									 $(".wc-block-checkout__form").prepend('<div class="wc-block-components-notice-banner is-error">'+response.data.notices+'<div>');
+									 window.scrollTo(0, 0);
+								}
 						    }
 
 						    // isPollingActive = false;

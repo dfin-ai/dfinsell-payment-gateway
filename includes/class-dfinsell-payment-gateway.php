@@ -525,22 +525,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'payment_status'     => 'success',
 				'redirect_url' => esc_url($order->get_checkout_order_received_url()),
 			];
-		}elseif($current_order_status === 'failed'){
-			if (WC()->cart) {
-				WC()->cart->empty_cart();
-				WC()->session->cleanup_sessions();
-				WC()->session->destroy_session();
-				WC()->session->set_customer_session_cookie( false );
-			}
-			$failed_url = $order->get_checkout_payment_url() . '&order_failed=1';
-			return [
-				'result'       => 'success',
-				'order_id'     => $order->get_id(),
-				'payment_status'     => 'success',
-				'redirect_url' => esc_url($failed_url),
-			];
-			
-		}elseif($current_order_status === 'cancelled'|| $current_order_status === 'expired'){
+		}elseif($current_order_status === 'cancelled'){
 			if (WC()->cart) {
 				WC()->cart->empty_cart();
 				WC()->session->cleanup_sessions();
