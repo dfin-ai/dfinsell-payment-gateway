@@ -383,7 +383,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				wp_die();
 			}
 
-		$payment_return_url = esc_url($order->get_checkout_order_received_url());
+			$payment_return_url = esc_url($order->get_checkout_order_received_url());
 			$txn_status = strtolower(trim($response_data['transaction_status']));
 
 			switch ($txn_status) {
@@ -405,6 +405,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			    case 'failed':
 			        try {
+			            $payment_return_url = $order->get_checkout_payment_url() . '&order_failed=1';
 			            $order->update_status('failed', 'Order marked as failed by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
@@ -424,7 +425,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			                'status' => $txn_status,
 			                'message' => 'Order status updated to canceled.',
 			                'order_id' => $order_id,
-			                'redirect_url' => $payment_return_url
+			                'redirect_url' => esc_url($order->get_cancel_order_url())
 			            ]);
 			        } catch (Exception $e) {
 			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
