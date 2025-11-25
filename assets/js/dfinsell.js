@@ -96,11 +96,17 @@ jQuery(function ($) {
 			isSubmitting = false; // Reset the flag if not using the custom payment method
 			return true; // Allow default WooCommerce behavior
 		}
-
-		// Disable the submit button immediately to prevent further clicks
-		$button = $form.find('button[type="submit"][name="woocommerce_checkout_place_order"]');
-		originalButtonText = $button.text();
-		$button.prop('disabled', true).text('Processing...');
+		if ($form.find('input[name="radio-control-wc-payment-method-options"]:checked').val()) {
+			// Disable the submit button immediately to prevent further clicks
+			$button = $('form.wc-block-checkout__form button.wc-block-components-checkout-place-order-button');
+			originalButtonText = $button.text();
+			$button.prop('disabled', true).text('Processing...');
+		}else{
+			// Disable the submit button immediately to prevent further clicks
+			$button = $form.find('button[type="submit"][name="woocommerce_checkout_place_order"]');
+			originalButtonText = $button.text();
+			$button.prop('disabled', true).text('Processing...');
+		}
 
 		// Show loader
 		$('.dfinsell-loader-background, .dfinsell-loader').show();
@@ -197,7 +203,8 @@ jQuery(function ($) {
 						            // Use replace() to ensure redirect works even in popup-close timing
 						            window.location.replace(response.data.redirect_url);
 						        }else{
-									 $(".wc-block-checkout__form").prepend('<div class="wc-block-components-notice-banner is-error">'+response.data.notices+'<div>');
+						                         $(".wc-block-components-notice-banner").remove();
+									 $(".wc-block-checkout__form").prepend('<div class="wc-block-components-notice-banner is-error"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true" focusable="false"><path d="M12 3.2c-4.8 0-8.8 3.9-8.8 8.8 0 4.8 3.9 8.8 8.8 8.8 4.8 0 8.8-3.9 8.8-8.8 0-4.8-4-8.8-8.8-8.8zm0 16c-4 0-7.2-3.3-7.2-7.2C4.8 8 8 4.8 12 4.8s7.2 3.3 7.2 7.2c0 4-3.2 7.2-7.2 7.2zM11 17h2v-6h-2v6zm0-8h2V7h-2v2z"></path></svg>'+response.data.notices+'<div>');
 									 window.scrollTo(0, 0);
 								}
 						    }
