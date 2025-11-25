@@ -427,7 +427,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			                'message' => 'Order status updated to canceled.',
 			                'order_id' => $order_id,
 			                'redirect_url' => esc_url($order->get_cancel_order_url()),
-							'notices' => 'Payment Cancelled: The Payment method cencelled your transaction.'
+					'notices' => 'Payment Cancelled: The Payment method cencelled your transaction.'
 			            ]);
 			        } catch (Exception $e) {
 			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
@@ -435,10 +435,12 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			        break;
 
 			    case 'pending':
+			        wc_add_notice( 'Payment Pending: The Payment Transaction still pending.', 'error' );
 			        wp_send_json_error([
 			            'code' => 'pending',
 			            'message' => 'Transaction still pending.',
-			            'order_id' => $order_id
+			            'order_id' => $order_id,
+			            'notices' => 'Payment Pending: The Payment Transaction still pending.'
 			        ]);
 			        break;
 
