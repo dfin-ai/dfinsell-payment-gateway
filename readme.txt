@@ -2,8 +2,8 @@
 Contributors: DFin Sell
 Tags: woocommerce, payment gateway, fiat, DFin Sell
 Requires at least: 5.0
-Tested up to: 6.7
-Stable tag: 1.0.12
+Tested up to: 6.8
+Stable tag: 1.1.5
 License: GPLv3 or later
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
 
@@ -27,7 +27,27 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 
 == Changelog ==
 
-= 1.0.12 =
+= 1.1.5 =
+* Added a Sync button to map accounts between Dfinsell and WordPress for better integration.
+* Implemented order cancellation handling to keep transaction statuses accurate.
+
+= 1.1.4-Beta =
+* Applied a lightweight security check enhancement to improve request validation and reinforce data integrity.
+
+= 1.1.3-Beta =
+* Implemented unique payment token handling for orders to prevent duplicate payment processing and enhance order reliability.
+
+= 1.1.2-Beta =
+* Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
+
+= 1.1.1-Beta =
+* Fixed: Improved the payment lock mechanism to prevent simultaneous transactions from conflicting when using multiple accounts.
+
+= 1.1.0-Beta =
+* Multiple Payment Accounts: Add and manage multiple accounts with unique API keys and settings for flexible configurations.
+* Special Character Validation: Ensures secure data entry during checkout by preventing unsupported or harmful characters.
+
+= 1.0.12 (Single Account) =
 * Resolved blank screen issue and special characters validation issue.
 
 = 1.0.11 =
@@ -74,6 +94,26 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 * Initial release.
 
 == Upgrade Notice ==
+
+= 1.1.5 =
+* Adds account sync functionality and handles order cancellations for improved accuracy and integration.
+
+= 1.1.4 (Beta) =
+* Fixed blank screen issue during order placement.
+* Improved special character validation across form fields.
+
+= 1.1.3 (Beta) =
+* Implemented unique payment token handling for orders to prevent duplicate payment processing and enhance order reliability.
+
+= 1.1.2 (Beta) =
+* Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
+
+= 1.1.1 (Beta) =
+* Fixed: Improved the payment lock mechanism to prevent simultaneous transactions from conflicting when using multiple accounts.
+
+= 1.1.0 (Beta) =
+* Added Multiple Payment Accounts: Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
+* Added special character validation on the checkout page to ensure secure data entry, preventing the use of unsupported or potentially harmful characters.
 
 = 1.0.12 =
 * Resolved blank screen issue and special characters validation issue.
