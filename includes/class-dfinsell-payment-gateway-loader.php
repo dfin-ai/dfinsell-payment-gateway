@@ -383,17 +383,14 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				wp_die();
 			}
 
-			$order_received_url = $order->get_checkout_order_received_url();
-			$payment_return_url = str_replace("#038;", "&", $order_received_url);
-		
+			$payment_return_url = esc_url($order->get_checkout_order_received_url());
 			$txn_status = strtolower(trim($response_data['transaction_status']));
-			wc_clear_notices();
+
 			switch ($txn_status) {
 			    case 'success':
 			    case 'paid':
 			    case 'processing':
 			        try {
-			            wc_clear_notices();
 			            $order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
@@ -408,7 +405,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			    case 'failed':
 			        try {
-			            wc_add_notice( 'Payment Failed: Transaction declined, please try another card.', 'error' );
+			            wc_add_notice( 'Payment Failed: The Payment method rejected your transaction. Please use another card.', 'error' );
 						$order->update_status('failed', 'Order marked as failed by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
@@ -423,14 +420,14 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			    case 'canceled':
 			        try {
-			           wc_add_notice( 'Payment Cancelled: The Payment method cancelled your transaction.', 'error' );
+			           wc_add_notice( 'Payment Cancelled: The Payment method cencelled your transaction.', 'error' );
 						$order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
 			                'message' => 'Order status updated to canceled.',
 			                'order_id' => $order_id,
 			                'redirect_url' => esc_url($order->get_cancel_order_url()),
-					'notices' => 'Payment Cancelled: The Payment method cancelled your transaction.'
+					'notices' => 'Payment Cancelled: The Payment method cencelled your transaction.'
 			            ]);
 			        } catch (Exception $e) {
 			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
@@ -438,11 +435,12 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			        break;
 
 			    case 'pending':
-			        wc_clear_notices();
+			        wc_add_notice( 'Payment Pending: The Payment Transaction still pending.', 'error' );
 			        wp_send_json_error([
 			            'code' => 'pending',
 			            'message' => 'Transaction still pending.',
-			            'order_id' => $order_id
+			            'order_id' => $order_id,
+			            'notices' => 'Payment Pending: The Payment Transaction still pending.'
 			        ]);
 			        break;
 
@@ -452,8 +450,8 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		} else {
 			// Skip API call if the order status is not 'pending'
-			wc_add_notice( 'Payment Cancelled.', 'error' );
-			wp_send_json_success(['message' => 'No payment update required as the order status is not pending.', 'order_id' => $order_id,'notices' => 'Payment Cancelled.']);
+			wc_add_notice( 'Payment Cancelled: The Payment order status is not pending.', 'error' );
+			wp_send_json_success(['message' => 'No payment update required as the order status is not pending.', 'order_id' => $order_id,'notices' => 'Payment Cancelled: The Payment order status is not pending.']);
 		}
 
 		wp_die();
