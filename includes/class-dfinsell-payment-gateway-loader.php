@@ -65,8 +65,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			$status = $dfinPayment->process_payment($orderID);
 		}
 		
-		wp_send_json($status);
-		die;
+		wp_send_json($status); // wp_send_json already calls wp_die()
 	}
 
 	/**
@@ -231,29 +230,20 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	 */
 	public function dfinsell_check_payment_status($order_id)
 	{
-	    // Get the order details
-	    $order = wc_get_order($order_id);
+		// Get the order details
+		$order = wc_get_order($order_id);
 
-	    if (!$order) {
-	        return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
-	    }
+		if (!$order) {
+			return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
+		}
 
 		$payment_token = $order->get_meta('_dfinsell_pay_id');
 		$public_key    = $order->get_meta('_dfinsell_public_key');
 		$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
-		$response = wp_remote_post($transactionStatusApiUrl, [
-			'method'    => 'POST',
-			'body'      => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
-			'headers'   => [
-				'Content-Type'  => 'application/json',
-				'Authorization' => 'Bearer ' . $public_key,
-			],
-			'timeout'   => 15,
-		]);
 
-		$response_body = wp_remote_retrieve_body($response);
-		$response_data = json_decode($response_body, true);
-			
+		// Get transaction status from DFin Sell API
+		$txn_status = $this->get_transaction_status($order_id);
+
 		$payment_return_url = $order->get_checkout_order_received_url();
 
 		$payment_gateways = WC()->payment_gateways->payment_gateways();
@@ -265,20 +255,23 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			wp_die();
 		}
 
+		// Normalize transaction status
+		$txn_status = strtolower(trim($txn_status));
+
 		// Determine order status
-		if ($order->is_paid() || (isset($response_data['transaction_status']) && ($response_data['transaction_status'] == "success" || $response_data['transaction_status'] == "paid" || $response_data['transaction_status'] == "processing"))) {
+		if ($order->is_paid() || in_array($txn_status, ['success', 'paid', 'processing'])) {
 			$order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by Dfinsell.');
 			wp_send_json_success(['status' => 'success', 'redirect_url' => $payment_return_url]);
 			exit;
 		}
-		
-		if ($order->has_status('failed') || (isset($response_data['transaction_status']) && $response_data['transaction_status'] == "failed")) {
+
+		if ($order->has_status('failed') || $txn_status === 'failed') {
 			$order->update_status('failed', 'Order marked as failed by Dfinsell.');
 			wp_send_json_success(['status' => 'failed', 'redirect_url' => $payment_return_url]);
 			exit;
 		}
-		
-		if ($order->has_status('cancelled') || (isset($response_data['transaction_status']) && $response_data['transaction_status'] == "canceled")) {
+
+		if ($order->has_status('cancelled') || $txn_status === 'canceled') {
 			$order->update_status('cancelled', 'Order marked as canceled by Dfinsell.');
 			wp_send_json_success(['status' => 'cancelled', 'redirect_url' => $payment_return_url]);
 			exit;
@@ -321,48 +314,22 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			wp_die();
 		}
 
-		//Get uuid from WP
-		$payment_token = $order->get_meta('_dfinsell_pay_id');
-
-		$public_key    = $order->get_meta('_dfinsell_public_key');
-
 		// Proceed only if the order status is 'pending'
 		if ($order->get_status() === 'pending') {
-			// Call the DFin Sell to update status
-			$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
-			$response = wp_remote_post($transactionStatusApiUrl, [
-				'method'    => 'POST',
-				'body'      => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
-				'headers'   => [
-					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $public_key,
-				],
-				'timeout'   => 15,
-			]);
+			// Get transaction status from DFin Sell API
+			$txn_status = $this->get_transaction_status($order_id);
 
-			// Check for errors in the API request
-			if (is_wp_error($response)) {
-				wp_send_json_error(['message' => 'Failed to connect to the DFin Sell.']);
-				wp_die();
-			}
-
-			// Parse the API response
-			$response_body = wp_remote_retrieve_body($response);
-			$response_data = json_decode($response_body, true);
-
-			$log_message = 'Popup closed. Transaction status received from DFin Sell.';
-
-			wc_get_logger()->info($log_message, [
+			wc_get_logger()->info('Popup closed. Transaction status received from DFin Sell.', [
 				'source'  => 'dfinsell-payment-gateway',
 				'context' => [
 					'order_id'           => $order_id,
-					'transaction_status' => $response_data['transaction_status'] ?? 'unknown'
+					'transaction_status' => $txn_status ?? 'unknown'
 				],
 			]);
 
-			// Ensure the response contains the expected data
-			if (!isset($response_data['transaction_status'])) {
-				wp_send_json_error(['message' => 'Invalid response from DFin Sell.']);
+			// Ensure we got a valid transaction status
+			if (!$txn_status) {
+				wp_send_json_error(['message' => 'Unable to fetch transaction status.']);
 				wp_die();
 			}
 
@@ -385,79 +352,85 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			$order_received_url = $order->get_checkout_order_received_url();
 			$payment_return_url = str_replace("#038;", "&", $order_received_url);
-			$txn_status = strtolower(trim($response_data['transaction_status']));
+			$txn_status = strtolower(trim($txn_status));
 
+			// Handle different transaction statuses
 			switch ($txn_status) {
-			    case 'success':
-			    case 'paid':
-			    case 'processing':
+				case 'success':
+				case 'paid':
+				case 'processing':
 					wc_clear_notices();
-			        try {
-			            $order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
-			            wp_send_json_success([
-			                'status' => $txn_status,
-			                'message' => 'Order status updated successfully.',
-			                'order_id' => $order_id,
-			                'redirect_url' => $payment_return_url
-			            ]);
-			        } catch (Exception $e) {
-			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
-			        }
-			        break;
+					try {
+						$order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
+						wp_send_json_success([
+							'status'       => $txn_status,
+							'message'      => 'Order status updated successfully.',
+							'order_id'     => $order_id,
+							'redirect_url' => $payment_return_url
+						]);
+					} catch (Exception $e) {
+						wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
+					}
+					break;
 
-			    case 'failed':
-			        try {
-			            wc_add_notice( 'Payment Failed: Transaction declined, please try another card.', 'error' );
+				case 'failed':
+					try {
+						wc_add_notice('Payment Failed: Transaction declined, please try another card.', 'error');
 						$order->update_status('failed', 'Order marked as failed by DFin Sell.');
-			            wp_send_json_success([
-			                'status' => $txn_status,
-			                'message' => 'Order status updated to failed.',
-			                'order_id' => $order_id,
-							'notices' => 'Payment Failed: The Payment method rejected your transaction. Please use another card.'
-			            ]);
-			        } catch (Exception $e) {
-			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
-			        }
-			        break;
+						wp_send_json_success([
+							'status'   => $txn_status,
+							'message'  => 'Order status updated to failed.',
+							'order_id' => $order_id,
+							'notices'  => 'Payment Failed: The Payment method rejected your transaction. Please use another card.'
+						]);
+					} catch (Exception $e) {
+						wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
+					}
+					break;
 
-			    case 'canceled':
-			        try {
-			           wc_add_notice( 'Payment Cancelled: The Payment method cancelled your transaction.', 'error' );
+				case 'canceled':
+					try {
+						wc_add_notice('Payment Cancelled: The Payment method cancelled your transaction.', 'error');
 						$order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
-			            wp_send_json_success([
-			                'status' => $txn_status,
-			                'message' => 'Order status updated to canceled.',
-			                'order_id' => $order_id,
-			                'redirect_url' => esc_url($order->get_cancel_order_url()),
-					'notices' => 'Payment Cancelled: The Payment method cencelled your transaction.'
-			            ]);
-			        } catch (Exception $e) {
-			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
-			        }
-			        break;
+						wp_send_json_success([
+							'status'       => $txn_status,
+							'message'      => 'Order status updated to canceled.',
+							'order_id'     => $order_id,
+							'redirect_url' => esc_url($order->get_cancel_order_url()),
+							'notices'      => 'Payment Cancelled: The Payment method cancelled your transaction.'
+						]);
+					} catch (Exception $e) {
+						wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
+					}
+					break;
 
-			    case 'pending':
-			        wc_clear_notices();
-			        wp_send_json_error([
-			            'code' => 'pending',
-			            'message' => 'Transaction still pending.',
-			            'order_id' => $order_id,
-			            'notices' => 'Payment Pending: The Payment Transaction still pending.'
-			        ]);
-			        break;
+				case 'pending':
+					wc_clear_notices();
+					wp_send_json_error([
+						'code'     => 'pending',
+						'message'  => 'Transaction still pending.',
+						'order_id' => $order_id,
+						'notices'  => 'Payment Pending: The Payment Transaction still pending.'
+					]);
+					break;
 
-			    default:
-			        wp_send_json_error(['message' => 'Unknown transaction status received: ' . $txn_status]);
+				default:
+					wp_send_json_error(['message' => 'Unknown transaction status received: ' . $txn_status]);
 			}
 
 		} else {
 			// Skip API call if the order status is not 'pending'
-			wc_add_notice( 'Payment Cancelled.', 'error' );
-			wp_send_json_success(['message' => 'No payment update required as the order status is not pending.', 'order_id' => $order_id,'notices' => 'Payment Cancelled.']);
+			wc_add_notice('Payment Cancelled.', 'error');
+			wp_send_json_success([
+				'message'  => 'No payment update required as the order status is not pending.',
+				'order_id' => $order_id,
+				'notices'  => 'Payment Cancelled.'
+			]);
 		}
 
 		wp_die();
 	}
+
 
 	/**
      * Add custom cron schedules.
@@ -668,4 +641,43 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 		wp_die(); // Always include this
 	}
+
+	/**
+	 * Get the transaction status from DFin Sell API.
+	 *
+	 * @param int $order_id
+	 * @return string|null
+	 */
+	private function get_transaction_status($order_id)
+	{
+		$order = wc_get_order($order_id);
+		if (!$order) {
+			return null;
+		}
+
+		$payment_token = $order->get_meta('_dfinsell_pay_id');
+		$public_key    = $order->get_meta('_dfinsell_public_key');
+
+		$api_url = $this->get_api_url('/api/update-txn-status');
+
+		$response = wp_remote_post($api_url, [
+			'method'  => 'POST',
+			'body'    => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
+			'headers' => [
+				'Content-Type'  => 'application/json',
+				'Authorization' => 'Bearer ' . $public_key,
+			],
+			'timeout' => 15,
+		]);
+
+		if (is_wp_error($response)) {
+			return null;
+		}
+
+		$response_body = wp_remote_retrieve_body($response);
+		$response_data = json_decode($response_body, true);
+
+		return isset($response_data['transaction_status']) ? strtolower(trim($response_data['transaction_status'])) : null;
+	}
+
 }

@@ -17,7 +17,35 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
-$config = require __DIR__ . '/config.php';
+/**
+ * ------------------------------------------------------------
+ * SAFE LOAD CONFIG
+ * ------------------------------------------------------------
+ */
+$config_file = __DIR__ . '/config.php';
+
+if (! file_exists($config_file)) {
+    error_log('DFINSELL: missing config.php at ' . $config_file);
+    return; // STOP plugin from loading (prevents fatal crash)
+}
+
+$config = require $config_file;
+
+if (! is_array($config)) {
+    error_log('DFINSELL: config.php did not return an array');
+    return;
+}
+
+// Define constants only if not already defined
+if (! defined('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR')) {
+    define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', $config['paths']['dir']);
+}
+if (! defined('DFINSELL_PAYMENT_GATEWAY_FILE')) {
+    define('DFINSELL_PAYMENT_GATEWAY_FILE', $config['paths']['file']);
+}
+if (! defined('DFINSELL_ASSETS_URL')) {
+    define('DFINSELL_ASSETS_URL', $config['paths']['assets']);
+}
 
 // Define as global (only once, avoid redeclaring)
 $GLOBALS['dfinsell_config'] = $config;
@@ -37,10 +65,6 @@ define('DFINSELL_PLUGIN_HOST', $config['host']);
 define('DFINSELL_PROTOCOL', $config['protocol']);
 define('DFINSELL_BASE_URL', DFINSELL_PROTOCOL . DFINSELL_PLUGIN_HOST);
 
-define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', $config['paths']['dir']);
-define('DFINSELL_PAYMENT_GATEWAY_FILE', $config['paths']['file']);
-define('DFINSELL_ASSETS_URL', $config['paths']['assets']);
-
 // Requirements
 define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $config['requirements']['php']);
 define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $config['requirements']['wc']);
@@ -53,9 +77,6 @@ define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $config['requirements']['wc']);
 require_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/dfinsell-payment-gateway-utils.php';
 include_once DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'migration.php';
 
-// Migrations functions
-include_once plugin_dir_path(__FILE__) . 'migration.php';
-
 // Autoload classes
 spl_autoload_register(function ($class) {
     if (strpos($class, 'DFINSELL_PAYMENT_GATEWAY') === 0) {
@@ -66,13 +87,40 @@ spl_autoload_register(function ($class) {
     }
 });
 
-// Immediately after including the loader class
-add_filter(
-    'plugin_action_links_' . plugin_basename(__FILE__),
-    ['DFINSELL_PAYMENT_GATEWAY_Loader', 'dfinsell_plugin_action_links']
-);
+/**
+ * ------------------------------------------------------------
+ * SAFE LOAD LOADER CLASS
+ * ------------------------------------------------------------
+ */
+$loader_class_file = DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR . 'includes/class-dfinsell-payment-gateway-loader.php';
 
-DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
+if (! class_exists('DFINSELL_PAYMENT_GATEWAY_Loader')) {
+    if (file_exists($loader_class_file)) {
+        require_once $loader_class_file;
+    } else {
+        error_log('DFINSELL: Loader file missing: ' . $loader_class_file);
+        return;
+    }
+}
+
+/**
+ * Plugin action links
+ */
+if (method_exists('DFINSELL_PAYMENT_GATEWAY_Loader', 'dfinsell_plugin_action_links')) {
+    add_filter(
+        'plugin_action_links_' . plugin_basename(DFINSELL_PAYMENT_GATEWAY_FILE),
+        ['DFINSELL_PAYMENT_GATEWAY_Loader', 'dfinsell_plugin_action_links']
+    );
+}
+
+/**
+ * Initialize main loader
+ */
+if (is_callable(['DFINSELL_PAYMENT_GATEWAY_Loader', 'get_instance'])) {
+    DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
+} else {
+    error_log('DFINSELL: get_instance() not available on Loader class.');
+}
 
 /**
  * ==========================================================
