@@ -96,24 +96,22 @@ Visit the DFin website and log in to your account. Navigate to Developer Setting
 == Upgrade Notice ==
 
 = 1.1.5 =
-* Adds account sync functionality and handles order cancellations for improved accuracy and integration.
+* Adds account sync functionality and handles order cancellations for improved integration.
 
 = 1.1.4 (Beta) =
-* Fixed blank screen issue during order placement.
-* Improved special character validation across form fields.
+* Fixed blank screen during order placement and improved special character validation.
 
 = 1.1.3 (Beta) =
-* Implemented unique payment token handling for orders to prevent duplicate payment processing and enhance order reliability.
+* Implemented unique payment token handling to prevent duplicate payments.
 
 = 1.1.2 (Beta) =
-* Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
+* Fixes redirection of unpaid orders; only successful payments now go to the thank you page.
 
 = 1.1.1 (Beta) =
-* Fixed: Improved the payment lock mechanism to prevent simultaneous transactions from conflicting when using multiple accounts.
+* Improved payment lock mechanism to prevent conflicts with multiple accounts.
 
 = 1.1.0 (Beta) =
-* Added Multiple Payment Accounts: Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
-* Added special character validation on the checkout page to ensure secure data entry, preventing the use of unsupported or potentially harmful characters.
+* Users can add/manage multiple accounts with unique API keys; added special character validation.
 
 = 1.0.12 =
 * Resolved blank screen issue and special characters validation issue.

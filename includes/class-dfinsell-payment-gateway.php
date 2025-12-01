@@ -299,7 +299,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			],
 		];
 
-		return apply_filters('woocommerce_gateway_settings_fields_' . $this->id, $form_fields, $this);
+		return apply_filters(
+			'dfinsell_woocommerce_gateway_settings_fields_' . $this->id,
+			$form_fields,
+			$this
+		);
 	}
 
 	public function generate_accounts_repeater_html($key, $data)
@@ -585,8 +589,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			];
 
 			// Use cache for status check
-			$cache_key = 'merchant_status_' . md5($public_key);
-			$merchant_status_response = $this->get_cached_api_response($accStatusApiUrl, $merchant_status_data, $cache_key);
+			$dfinsell_cache_key = 'merchant_status_' . md5($public_key);
+			$merchant_status_response = $this->get_cached_api_response($accStatusApiUrl, $merchant_status_data, $dfinsell_cache_key);
 
 			if (
 			    !is_array($merchant_status_response) ||
@@ -711,7 +715,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			$response_data = json_decode(wp_remote_retrieve_body($response), true);
 
-			wc_get_logger()->error('Payment raw response: ' . print_r($response_data, true), $logger_context);
+			// Ensure sensitive data is sanitized or omitted if necessary.
+			$response_data_str = is_array($response_data) ? json_encode($response_data) : (string)$response_data;
+
+			// Log the response data.
+			wc_get_logger()->error('Payment raw response: ' . $response_data_str, $logger_context);
 
 			//BeaverTech Code Change start
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
@@ -757,10 +765,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				$table_name = $wpdb->prefix . 'order_payment_link';
 
 				// Add simple cache to avoid hitting DB on every request
-				$cache_key    = 'dfinsell_table_exists_' . md5($table_name);
+				$dfinsell_cache_key    = 'dfinsell_table_exists_' . md5($table_name);
 				$cache_group  = 'dfinsell_payment_gateway';
 
-				$table_exists = wp_cache_get($cache_key, $cache_group);
+				$table_exists = wp_cache_get($dfinsell_cache_key, $cache_group);
 
 				if (false === $table_exists) {
 				    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
@@ -769,7 +777,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				    );
 
 				    // Cache result for 1 hour
-				    wp_cache_set($cache_key, $table_exists, $cache_group, HOUR_IN_SECONDS);
+				    wp_cache_set($dfinsell_cache_key, $table_exists, $cache_group, HOUR_IN_SECONDS);
 				}
 
 				if ($table_exists !== $table_name) {
@@ -1283,8 +1291,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	        return $available_gateways;
 	    }
 
-	    $cache_key = 'dfinsell_gateway_visibility_' . $gateway_id;
-
 		 // Unique cache/log key per cart state
 	    $cart_hash = WC()->cart ? WC()->cart->get_cart_hash() : 'no_cart';
 
@@ -1293,7 +1299,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	        return $available_gateways;
 	    }
 
-	    $cache_key = 'dfinsell_gateway_visibility_' . $gateway_id . '_' . $cart_hash;
+	    // Unique cache/log key per gateway and cart state
+		$dfinsell_cache_key = 'dfinsell_gateway_visibility_' . $gateway_id . '_' . $cart_hash;
+
 
 	    // ✅ Avoid running multiple times for the same cart_hash in the same request
 	    static $processed_hashes = [];
@@ -1329,8 +1337,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	    $amount = 0.00;
 
-	    if (isset($GLOBALS[$cache_key])) {
-	        return $GLOBALS[$cache_key];
+	    if (isset($GLOBALS[$dfinsell_cache_key])) {
+	        return $GLOBALS[$dfinsell_cache_key];
 	    }
 
 	    if (!is_checkout() && !$is_ajax_order_review) {
@@ -1573,7 +1581,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		);
 
 
-	    $GLOBALS[$cache_key] = $available_gateways;
+	    $GLOBALS[$dfinsell_cache_key] = $available_gateways;
 	    return $available_gateways;
 	}
 
@@ -1669,7 +1677,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		return ['valid_accounts' => $valid_accounts];
 	}
 
-	private function get_cached_api_response($url, $data, $cache_key, $ttl = 120, $force_refresh = false)
+	private function get_cached_api_response($url, $data, $dfinsell_cache_key, $ttl = 120, $force_refresh = false)
 	{
 	    // Allow ?refresh_accounts=1&_wpnonce=... in URL to force-refresh cache (useful for testing)
 		if (
@@ -1684,12 +1692,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	    // If not forcing refresh, return cached version if it exists
 	    if (!$force_refresh) {
-	        $cached_response = get_transient($cache_key);
+	        $cached_response = get_transient($dfinsell_cache_key);
 	        if ($cached_response !== false) {
 	            return $cached_response;
 	        }
 	    } else {
-	        delete_transient($cache_key); // Clear previous cached version
+	        delete_transient($dfinsell_cache_key); // Clear previous cached version
 	    }
 
 	    // Make the API call
@@ -1712,7 +1720,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	    $response_data = json_decode($response_body, true);
 
 	    // Cache the response
-	    set_transient($cache_key, $response_data, $ttl);
+	    set_transient($dfinsell_cache_key, $response_data, $ttl);
 
 	    return $response_data;
 	}

@@ -17,10 +17,10 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
-$config = require __DIR__ . '/config.php';
+$dfinsell_config = require __DIR__ . '/config.php';
 
 // Define as global (only once, avoid redeclaring)
-$GLOBALS['dfinsell_config'] = $config;
+$GLOBALS['dfinsell_config'] = $dfinsell_config;
 
 /**
  * ==========================================================
@@ -28,22 +28,22 @@ $GLOBALS['dfinsell_config'] = $config;
  * ==========================================================
  */
 // Core plugin info
-define('DFINSELL_PLUGIN_ID', $config['id']);
-define('DFINSELL_PLUGIN_NAME', $config['name']);
-define('DFINSELL_PLUGIN_VERSION', $config['version']);
+define('DFINSELL_PLUGIN_ID', $dfinsell_config['id']);
+define('DFINSELL_PLUGIN_NAME', $dfinsell_config['name']);
+define('DFINSELL_PLUGIN_VERSION', $dfinsell_config['version']);
 
 // URLs & Paths
-define('DFINSELL_PLUGIN_HOST', $config['host']);
-define('DFINSELL_PROTOCOL', $config['protocol']);
+define('DFINSELL_PLUGIN_HOST', $dfinsell_config['host']);
+define('DFINSELL_PROTOCOL', $dfinsell_config['protocol']);
 define('DFINSELL_BASE_URL', DFINSELL_PROTOCOL . DFINSELL_PLUGIN_HOST);
 
-define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', $config['paths']['dir']);
-define('DFINSELL_PAYMENT_GATEWAY_FILE', $config['paths']['file']);
-define('DFINSELL_ASSETS_URL', $config['paths']['assets']);
+define('DFINSELL_PAYMENT_GATEWAY_PLUGIN_DIR', $dfinsell_config['paths']['dir']);
+define('DFINSELL_PAYMENT_GATEWAY_FILE', $dfinsell_config['paths']['file']);
+define('DFINSELL_ASSETS_URL', $dfinsell_config['paths']['assets']);
 
 // Requirements
-define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $config['requirements']['php']);
-define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $config['requirements']['wc']);
+define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $dfinsell_config['requirements']['php']);
+define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $dfinsell_config['requirements']['wc']);
 
 /**
  * ==========================================================
@@ -158,7 +158,7 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 	}
 
 	// ====== Cancel Payment Link API ======
-	$table_name   = $wpdb->prefix . 'order_payment_link';
+	$table_name   = esc_sql($wpdb->prefix . 'order_payment_link');
 	$cache_key    = 'dfinsell_payment_row_' . $order_id;
 	$cache_group  = 'dfinsell_payment_gateway';
 
@@ -171,7 +171,7 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 	        $wpdb->prepare(
 	            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table_name is not user input
 	            "SELECT * FROM `{$table_name}` WHERE `order_id` = %d LIMIT 1",
-	            $order_id
+	            (int) $order_id
 	        ),
 	        ARRAY_A
 	    );

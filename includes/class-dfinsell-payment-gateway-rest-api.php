@@ -36,11 +36,15 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	            header('Access-Control-Allow-Headers: Authorization, Content-Type, X-WP-Nonce, User-Agent, Accept');
 	            header('Access-Control-Allow-Credentials: true');
 
-	            // Handle preflight request
-	            if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-	                status_header(200);
-	                exit;
-	            }
+	           // Safely get the request method
+				$request_method = isset($_SERVER['REQUEST_METHOD']) ? wp_unslash($_SERVER['REQUEST_METHOD']) : '';
+				$request_method = sanitize_text_field($request_method);
+
+				// Handle preflight request
+				if ($request_method === 'OPTIONS') {
+					status_header(200);
+					exit;
+				}
 
 	            return $value;
 	        }, 15);
@@ -177,7 +181,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 				if (WC()->cart) {
 					WC()->cart->empty_cart();
 				}
-				$payment_return_url = esc_url($order->get_checkout_order_received_url());
+				$payment_return_url = $order->get_checkout_order_received_url();
 				return new WP_REST_Response(['success' => true, 'message' => 'Order status already updated or no change required', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 			}
 		} else {
@@ -189,7 +193,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			$this->logger->info('DFin Sell API requested status "' . esc_html($api_order_status) . '" for order ' . esc_html($order_id) . '. Current status is "' . esc_html($current_order_status) . '". No specific action for this API status defined.', array('source' => 'dfinsell-payment-gateway'));
 
 			// If no action is needed for this specific API status, we still return success to acknowledge receipt.
-			$payment_return_url = esc_url($order->get_checkout_order_received_url());
+			$payment_return_url = $order->get_checkout_order_received_url();
 			return new WP_REST_Response(['success' => true, 'message' => 'Request received, no status change performed based on API status', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 		}
 		//BeaverTech Code Change end
@@ -222,7 +226,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		}
 
 		// Return a successful response to DFin Sell API.
-		$payment_return_url = esc_url($order->get_checkout_order_received_url());
+		$payment_return_url = $order->get_checkout_order_received_url();
 		return new WP_REST_Response(['success' => true, 'message' => 'Order status processed successfully', 'payment_return_url' => $payment_return_url, 'order_status'    => $order->get_status()], 200);
 	}
 }
