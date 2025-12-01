@@ -1018,6 +1018,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'billing_state' => $billing_state,
 			'billing_phone' => $billing_phone,
 			'is_sandbox' => $is_sandbox,
+			'plugin_version' => $this->version,
 		];
 	}
 
