@@ -327,7 +327,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		$public_key    = $order->get_meta('_dfinsell_public_key');
 
 		// Proceed only if the order status is 'pending'
-		if ($order->get_status() === 'pending') {
+		if ($order->get_status() === 'pending' || $order->get_status() === 'processing' || $order->get_status() === 'canceled') {
 			// Call the DFin Sell to update status
 			$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
 			$response = wp_remote_post($transactionStatusApiUrl, [
@@ -385,14 +385,15 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			$order_received_url = $order->get_checkout_order_received_url();
 			$payment_return_url = str_replace("#038;", "&", $order_received_url);
+		
 			$txn_status = strtolower(trim($response_data['transaction_status']));
-
+			wc_clear_notices();
 			switch ($txn_status) {
 			    case 'success':
 			    case 'paid':
 			    case 'processing':
-					wc_clear_notices();
 			        try {
+			            wc_clear_notices();
 			            $order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
@@ -422,14 +423,14 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 			    case 'canceled':
 			        try {
-			           wc_add_notice( 'Payment Cancelled: The Payment method cancelled your transaction.', 'error' );
+			           wc_add_notice( 'Payment Canceled: The Payment method canceled your transaction.', 'error' );
 						$order->update_status('canceled', 'Order marked as canceled by DFin Sell.');
 			            wp_send_json_success([
 			                'status' => $txn_status,
 			                'message' => 'Order status updated to canceled.',
 			                'order_id' => $order_id,
 			                'redirect_url' => esc_url($order->get_cancel_order_url()),
-					'notices' => 'Payment Cancelled: The Payment method cencelled your transaction.'
+					'notices' => 'Payment Canceled: The Payment method cancelled your transaction.'
 			            ]);
 			        } catch (Exception $e) {
 			            wp_send_json_error(['message' => 'Failed to update order status: ' . $e->getMessage()]);
@@ -441,8 +442,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			        wp_send_json_error([
 			            'code' => 'pending',
 			            'message' => 'Transaction still pending.',
-			            'order_id' => $order_id,
-			            'notices' => 'Payment Pending: The Payment Transaction still pending.'
+			            'order_id' => $order_id
 			        ]);
 			        break;
 
