@@ -391,6 +391,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 			    case 'success':
 			    case 'paid':
 			    case 'processing':
+				case 'uncaptured':
 			        try {
 			            wc_clear_notices();
 			            $order->update_status($configured_order_status, 'Order marked as ' . $configured_order_status . ' by DFin Sell.');
