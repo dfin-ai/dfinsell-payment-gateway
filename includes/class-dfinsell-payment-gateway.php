@@ -719,7 +719,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$response_data_str = is_array($response_data) ? json_encode($response_data) : (string)$response_data;
 
 			// Log the response data.
-			wc_get_logger()->error('Payment raw response: ' . $response_data_str, $logger_context);
+			wc_get_logger()->info('Payment raw response: ' . $response_data_str, $logger_context);
 
 			//BeaverTech Code Change start
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
