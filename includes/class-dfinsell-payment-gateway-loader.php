@@ -383,8 +383,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				wp_die();
 			}
 
-			$order_received_url = $order->get_checkout_order_received_url();
-			$payment_return_url = str_replace("#038;", "&", $order_received_url);
+			$payment_return_url = $order->get_checkout_order_received_url();
 		
 			$txn_status = strtolower(trim($response_data['transaction_status']));
 			wc_clear_notices();
