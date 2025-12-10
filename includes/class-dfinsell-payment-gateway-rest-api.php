@@ -37,8 +37,8 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	            header('Access-Control-Allow-Credentials: true');
 
 	           // Safely get the request method
-				$request_method = isset($_SERVER['REQUEST_METHOD']) ? wp_unslash($_SERVER['REQUEST_METHOD']) : '';
-				$request_method = sanitize_text_field($request_method);
+				$request_method = filter_input(INPUT_SERVER, 'REQUEST_METHOD', FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+				$request_method = $request_method ? strtoupper($request_method) : '';
 
 				// Handle preflight request
 				if ($request_method === 'OPTIONS') {
