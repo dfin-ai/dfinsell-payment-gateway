@@ -7,8 +7,8 @@ The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept f
 **Contributors:** DFin Sell  
 **Tags:** woocommerce, payment gateway, fiat, DFin Sell  
 **Requires at least:** 6.2  
-**Tested up to:** 6.2  
-**Stable tag:** 1.0.12  
+**Tested up to:** 6.7  
+**Stable tag:** 1.1.5  
 **License:** GPLv3 or later  
 **License URI:** [GPLv3 License](https://www.gnu.org/licenses/gpl-3.0.html)
 
@@ -76,15 +76,25 @@ For any issues or enhancement requests with this plugin, please contact the DFin
   Click on the `Payments` tab at the top of the settings page.
 - **Select DFin Sell Payment Gateway:**
   Scroll down to find and select the DFin Sell Payment Gateway among the available payment methods.
-- **Enter API Keys and Order Status:**
-  Enter the API keys obtained from your DFin account into the respective fields:
-  - Title: DFin Sell Payment Gateway
-  - Description: Secure payments with DFin Sell Payment Gateway.
-  - Public Key: [Your Public Key]
-  - Secret Key: [Your Secret Key]
-  - Order Status: Select `Processing` or `Completed` based on your preference.
-- **Enable or Disable Payment Option:**
-  Check the box to enable DFin Sell Payment Gateway as a payment option.
+
+- **Add Plugin General Details:**
+
+  - **Title** : DFin Sell Payment Gateway
+    Description
+  - **Description** : Secure payments with DFin Sell Payment Gateway.
+  - **Enable/Disable Sandbox Mode** : Toggle sandbox mode per account.
+  - **Payment Accounts (Add Multiple Accounts)** :
+    - **Adding a New Account**
+      1. Click on **Add Account** to create a new account.
+      2. Enter a **unique account title**.
+      3. Provide details for each account:
+         - _Account Title_
+         - _Priority:_ Set an order for the accounts.
+         - _Live Mode:_ Public & Secret Keys (mandatory)
+         - _Sandbox Mode:_ Public & Secret Keys (optional)
+  - **Order Status** : Select Processing or Completed.
+  - **Show Consent Checkbox** : Enabling this option will display a consent checkbox on the checkout page.
+
 - **Save Changes:**
   Click `Save changes` at the bottom of the page to update and save your API key settings.
 
@@ -132,7 +142,44 @@ The official documentation for this plugin is available at: [https://www.dfin.ai
 
 ## Changelog
 
-### Version 1.0.12
+### Version 1.1.5
+
+- **Account Sync Feature:**  
+  Added a **Sync** button to map accounts between Dfinsell and WordPress, enabling smoother integration and management.
+  Account statuses are also updated automatically every 2 hours to keep data in sync.
+
+- **Order Cancellation Handling:**  
+  Implemented logic to handle order cancellations, ensuring transaction statuses remain accurate and up to date.
+
+### Version 1.1.4 (Beta)
+
+- **Minor Security Validation Fix:**  
+  Applied a lightweight security check enhancement to improve request validation and reinforce data integrity.
+
+### Version 1.1.3 (Beta)
+
+- **Unique Payment Token Handling:**  
+  Implemented unique payment token support for orders to prevent duplicate payment processing and ensure more reliable order submissions.
+  
+### Version 1.1.2 (Beta)
+
+- **Unpaid order redirection issue** 
+  Fixes incorrect redirection of unpaid orders to the thank you page by ensuring only successful payments are redirected there. Unpaid orders are now handled appropriately.
+
+### Version 1.1.1 (Beta)
+
+- **Minor Fix: Payment Lock Mechanism** 
+  Improved the payment locking mechanism to prevent simultaneous transactions from conflicting when using multiple accounts.
+
+### Version 1.1.0 (Beta)
+
+- **Multiple Account Selections:** 
+  Users can now add and manage multiple payment accounts, each with its own API keys and settings, allowing flexible payment configurations.
+
+- **Special Character Validation**:
+  Special character validations have been added to the checkout page to ensure secure and proper data entry, preventing the use of potentially harmful or unsupported characters.
+
+### Version 1.0.12 (Single Account)
 
 - **Blank screen issue:**  
   Fixed an issue where a blank screen appeared when placing an order from the order history page.
