@@ -964,13 +964,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$phone_for_normalization = $original_phone ?: $phone;
 
 		// Normalize and validate phone number
-		$normalized = $this->bytenft_normalize_phone($phone_for_normalization, $country_code);
+		$normalized = $this->dfinsell_normalize_phone($phone_for_normalization, $country_code);
 
 		// Handle validation failure
 		if (empty($normalized['is_valid']) || empty($normalized['phone'])) {
-			$error_message = $normalized['error'] ?? __('Phone number is required and cannot be empty.', 'bytenft-payment-gateway');
+			$error_message = $normalized['error'] ?? __('Phone number is required and cannot be empty.', 'dfinsell-payment-gateway');
 			wc_get_logger()->error('Phone number validation failed', [
-				'source' => 'bytenft-payment-gateway',
+				'source' => 'dfinsell-payment-gateway',
 				'order_id' => $order->get_id(),
 				'original_phone' => $original_phone,
 				'error' => $error_message
@@ -1063,7 +1063,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 * @param string $country_code Country code (e.g. "+1", "91", "+44")
 	 * @return array ['phone' => string, 'country_code' => string, 'is_valid' => bool, 'error' => string|null]
 	 */
-	private function bytenft_normalize_phone($phone, $country_code)
+	private function dfinsell_normalize_phone($phone, $country_code)
 	{
 		// Step 1: Clean inputs
 		$cleanedPhone = preg_replace('/[()\s-]/', '', $phone ?? '');
