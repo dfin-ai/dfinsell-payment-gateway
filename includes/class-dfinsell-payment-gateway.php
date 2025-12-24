@@ -629,6 +629,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
 			$data = $this->dfinsell_prepare_payment_data($order, $public_key, $secret_key);
 
+			if (isset($data['error']) && $data['result'] === 'fail') {
+				return ['result' => 'fail'];
+			}
+
 			// **Check Transaction Limit**
 			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
 			$transaction_limit_response = wp_remote_post($transactionLimitApiUrl, [
