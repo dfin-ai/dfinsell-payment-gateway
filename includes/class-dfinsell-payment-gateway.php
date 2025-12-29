@@ -1107,7 +1107,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		if ($requires10Digits) {
 			// US: exactly 10 digits required
 			if ($localLength !== 10) {
-				$error = sprintf('Phone number must be exactly 10 digits.');
+				$error = $localLength < 10 
+					? sprintf('Phone number is too short. Must have exactly 10 digits. Your number has %d digits.', $localLength)
+					: sprintf('Phone number is too long. Must have exactly 10 digits. Your number has %d digits.', $localLength);
 				return [
 					'phone' => $normalizedPhone,
 					'country_code' => '+' . $countryCode,
