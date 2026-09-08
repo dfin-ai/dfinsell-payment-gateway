@@ -43,6 +43,7 @@ define('DFINSELL_ASSETS_URL', $dfinsell_config['paths']['assets']);
 
 // Requirements
 define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $dfinsell_config['requirements']['php']);
+define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $dfinsell_config['requirements']['wc']);
 
 /**
  * ==========================================================
@@ -237,4 +238,3 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 		]);
 	}
 }
-
