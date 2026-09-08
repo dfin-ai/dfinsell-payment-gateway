@@ -16,39 +16,50 @@ function dfinsell_check_system_requirements()
 		);
 	}
 
-	// Get WooCommerce versions
-	$wc_db_version = get_option('woocommerce_db_version');
+	/*
+	 * 'woocommerce_db_version' is deliberately NOT consulted here.
+	 *
+	 * WooCommerce keeps that option at the last release which actually shipped
+	 * a database migration - WC_Install::update_db_version() stores
+	 * array_key_last( self::$db_updates ) - rather than the running version. On
+	 * WooCommerce 11.1.0 the option therefore reads '11.1.0-1', and any release
+	 * without migrations leaves it further behind still. Comparing it against
+	 * WC_VERSION reported a mismatch on entirely healthy sites.
+	 *
+	 * That was not cosmetic: a returned message makes dfinsell_activation_check()
+	 * call wp_die(), and makes dfinsell_init() return before registering the
+	 * gateway - so DFin Sell silently disappeared from the checkout.
+	 *
+	 * A genuinely pending database update is WooCommerce's own business and it
+	 * raises its own notice for it. WC_VERSION is the authoritative signal for
+	 * whether this plugin can run.
+	 */
+
+	// Check if WooCommerce is available.
 	$wc_plugin_version = defined('WC_VERSION') ? WC_VERSION : null;
 
-	// Check if the WooCommerce database version is outdated
-	if (!$wc_db_version || version_compare($wc_db_version, DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER, '<')) {
-		return sprintf(
-			// translators: %1$s is the minimum required WooCommerce database version, %2$s is the current WooCommerce database version (or "undefined" if not available)
-			__('The DFin Sell Payment Gateway plugin requires WooCommerce database version %1$s or greater. You are running %2$s.', 'dfinsell-payment-gateway'),
-			DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER,
-			$wc_db_version ? $wc_db_version : __('undefined', 'dfinsell-payment-gateway')
+	if (!$wc_plugin_version) {
+		return __(
+			'The DFin Sell Payment Gateway plugin requires WooCommerce to be installed and active.',
+			'dfinsell-payment-gateway'
 		);
 	}
 
-	// Check if WooCommerce plugin version is outdated
-	if (!$wc_plugin_version || version_compare($wc_plugin_version, DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER, '<')) {
-		return sprintf(
-			// translators: %1$s is the minimum required WooCommerce plugin version, %2$s is the current WooCommerce plugin version (or "undefined" if not available)
-			__('The DFin Sell Payment Gateway plugin requires WooCommerce plugin version %1$s or greater. You are running %2$s.', 'dfinsell-payment-gateway'),
-			DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER,
-			$wc_plugin_version ? $wc_plugin_version : __('undefined', 'dfinsell-payment-gateway')
-		);
-	}
-
-	// Check if WooCommerce plugin version and database version are different
-	if ($wc_plugin_version && $wc_db_version && $wc_plugin_version !== $wc_db_version) {
-		return sprintf(
-			// translators: %1$s is the WooCommerce plugin version, %2$s is the WooCommerce database version
-			__('Warning: The WooCommerce plugin version (%1$s) and database version (%2$s) do not match. Please ensure both are synchronized.', 'dfinsell-payment-gateway'),
-			$wc_plugin_version,
-			$wc_db_version
-		);
-	}
+	/*
+	 * No WooCommerce version floor is enforced.
+	 *
+	 * The plugin only uses long-standing WooCommerce APIs - wc_get_order(),
+	 * wc_add_notice(), wc_get_logger() and the CRUD meta methods, all present
+	 * since WooCommerce 3.0 - and everything newer is feature-detected rather
+	 * than version-gated: dfinsell_init_gateways() checks for
+	 * WC_Payment_Gateway and dfinsell_init_blocks() checks for
+	 * AbstractPaymentMethodType before loading either integration. An older
+	 * WooCommerce therefore degrades quietly instead of failing.
+	 *
+	 * Version gates in this file have twice disabled the gateway on healthy
+	 * sites, so the only precondition kept is the one that is actually
+	 * required: WooCommerce has to be there.
+	 */
 
 	return false;
 }
