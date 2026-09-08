@@ -6,7 +6,7 @@
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfinsell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfinsell-payment-gateway
- * Version: 1.1.5
+ * Version: 1.1.6
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -43,7 +43,6 @@ define('DFINSELL_ASSETS_URL', $dfinsell_config['paths']['assets']);
 
 // Requirements
 define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $dfinsell_config['requirements']['php']);
-define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $dfinsell_config['requirements']['wc']);
 
 /**
  * ==========================================================
