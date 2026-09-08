@@ -43,7 +43,6 @@ define('DFINSELL_ASSETS_URL', $dfinsell_config['paths']['assets']);
 
 // Requirements
 define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $dfinsell_config['requirements']['php']);
-define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $dfinsell_config['requirements']['wc']);
 
 /**
  * ==========================================================
