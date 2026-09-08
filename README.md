@@ -1,6 +1,6 @@
 # DFin Sell Payment Gateway
 
-The DFin Sell Payment Gateway plugin allows you to accept fiat payments to sell products on your WooCommerce store.
+The DFin Sell Payment Gateway plugin for WooCommerce 8.9+ allows you to accept fiat payments to sell products on your WooCommerce store.
 
 ## Plugin Information
 
