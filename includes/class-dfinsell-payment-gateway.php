@@ -724,7 +724,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			//BeaverTech Code Change start
 			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
 
-				if($response_data['data']['payment_status'] == 'success'){
+				if(isset($response_data['data']['payment_status']) && $response_data['data']['payment_status'] == 'success'){
 					$current_order_status = $order->get_status();
 					$target_order_status = $response_data['data']['payment_status'];
 
@@ -739,6 +739,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 						'result'       => 'success',
 						'order_id'     => $order->get_id(),
 						'payment_status'     => $response_data['data']['payment_status'],
+						'redirect' => esc_url($order->get_checkout_order_received_url()),
 						'redirect_url' => esc_url($order->get_checkout_order_received_url()),
 					];
 				}
@@ -870,6 +871,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				return [
 		            'result'       => 'success',
 		            'order_id'     => $order->get_id(),
+		            'redirect' => esc_url($response_data['data']['payment_link']),
 		            'payment_link' => esc_url($response_data['data']['payment_link']),
 		        ];
 			}
@@ -967,7 +969,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$billing_state = sanitize_text_field($order->get_billing_state());
 		$billing_phone = sanitize_text_field($order->get_billing_phone());
 
-		$redirect_url = esc_url_raw(
+		$webhook_url = esc_url_raw(
 			add_query_arg(
 				[
 					'order_id' => $order_id, // Include order ID or any other identifier
@@ -978,6 +980,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				$this->dfinsell_get_return_url_base() // Use the updated base URL method
 			)
 		);
+		
+		$redirect_url = esc_url_raw($order->get_checkout_order_received_url());
 
 		$ip_address = sanitize_text_field($this->dfinsell_get_client_ip());
 
@@ -1009,6 +1013,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'request_for' => $request_for,
 			'amount' => $amount,
 			'redirect_url' => $redirect_url,
+			'webhook_url' => $webhook_url,
 			'redirect_time' => 3,
 			'ip_address' => $ip_address,
 			'source' => 'wordpress',
@@ -1123,6 +1128,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// Check for SQL injection attempts
 		if (!$this->check_for_sql_injection()) {
 			return false;
+		}
+
+		// Bypass validation if this is a REST API request (like WooCommerce Blocks checkout)
+		if (defined('REST_REQUEST') && REST_REQUEST) {
+			return true;
 		}
 		// Check if the consent checkbox setting is enabled
 		if ($this->get_option('show_consent_checkbox') === 'yes') {

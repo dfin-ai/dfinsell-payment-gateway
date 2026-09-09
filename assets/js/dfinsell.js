@@ -26,13 +26,7 @@ jQuery(function ($) {
 		}
 	});
 
-	$('form.wc-block-checkout__form button.wc-block-components-checkout-place-order-button').on('click', function () {
-		var selectedPaymentMethod = $('input[name="radio-control-wc-payment-method-options"]:checked').val();
-		// Prevent WooCommerce default behavior for your custom method
-		if (selectedPaymentMethod === dfinsell_params.payment_method) {
-			return false; // Stop WooCommerce default script
-		}
-	});
+
 
 
 	// Function to bind the form submit handler
@@ -49,13 +43,7 @@ jQuery(function ($) {
 			}
 		});
 
-		$('form.wc-block-checkout__form button.wc-block-components-checkout-place-order-button').on("click", function (e) {
-			// Check if the custom payment method is selected
-			if ($('input[name="radio-control-wc-payment-method-options"]:checked').val() === dfinsell_params.payment_method) {
-				handleFormSubmit.call($('form.wc-block-checkout__form'), e);
-				return false; // Prevent other handlers
-			}
-		});
+
 
 	}
 
