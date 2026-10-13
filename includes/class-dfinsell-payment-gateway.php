@@ -569,8 +569,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		// voucher, and the payment link behind its button is created when they
 		// open it. All this plugin does is ask for that email and repeat what
 		// DFinSell says about it.
-		$order->update_status('pending', __('Awaiting voucher purchase.', 'dfinsell-payment-gateway'));
-
 		$voucher = $this->dfinsell_request_voucher_email($order);
 
 		if (!$voucher['success']) {
@@ -591,6 +589,9 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'success'  => false,
 			];
 		}
+
+		// Only now is there a voucher to await.
+		$order->update_status('pending', __('Awaiting voucher purchase.', 'dfinsell-payment-gateway'));
 
 		$this->dfinsell_record_voucher_sent($order, $voucher['data']);
 
@@ -621,8 +622,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					// Shown on the checkout exactly as DFinSell worded it.
 					'message'      => $voucher['message'],
 					'reference'    => $voucher['data']['reference'] ?? '',
-					// The email button's own link, so "Not receiving the email?
-					// Click here" opens exactly what the email would.
+					// The same link the email's button carries, so "Not receiving the
+					// email? Click here" opens exactly what the email would.
 					'purchase_url' => esc_url_raw((string) ($voucher['data']['purchase_url'] ?? ''), ['https', 'http']),
 				],
 				// Followed by non-AJAX submissions such as the order-pay page.
@@ -693,6 +694,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 	/**
 	 * Ask DFinSell to email the customer their voucher.
+	 *
+	 * Nothing is created here. DFinSell records what the payment will be for,
+	 * emails a signed link, and only when the customer opens that link does it
+	 * call request-payment and raise the actual payment link. The plugin's part
+	 * is to ask for the email and repeat what DFinSell says about it.
 	 *
 	 * @param WC_Order $order Order being paid.
 	 * @return array ['success' => bool, 'message' => string, 'data' => array]
@@ -767,6 +773,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 
 			$limit_data = json_decode(wp_remote_retrieve_body($limit_resp), true);
+			$limit_data = is_array($limit_data) ? $limit_data : [];
 
 			if (($limit_data['status'] ?? '') === 'error') {
 				wc_get_logger()->warning(
@@ -817,31 +824,61 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$body = json_decode(wp_remote_retrieve_body($response), true);
 			$body = is_array($body) ? $body : [];
 
-			$message = isset($body['message']) ? sanitize_text_field($body['message']) : '';
+			// A remote service can answer with anything; indexing a non-array
+			// data member would be a fatal on PHP 8 rather than a failed order.
+			$payload = isset($body['data']) && is_array($body['data']) ? $body['data'] : [];
+
+			$purchase_url = $this->dfinsell_clean_payment_link($payload['purchase_url'] ?? '');
 
 			wc_get_logger()->info(
 				$log_prefix . ' Voucher API response received',
 				[
-					'source'     => 'dfinsell-payment-gateway',
-					'order_id'   => $order_id,
-					'http_code'  => $code,
-					'status'     => $body['status'] ?? null,
-					'voucher_id' => $body['data']['voucher_id'] ?? null,
-					'reference'  => $body['data']['reference'] ?? null,
+					'source'           => 'dfinsell-payment-gateway',
+					'order_id'         => $order_id,
+					'http_code'        => $code,
+					'status'           => $body['status'] ?? null,
+					'account_title'    => $account['title'] ?? null,
+					'voucher_id'       => $payload['voucher_id'] ?? null,
+					'reference'        => $payload['reference'] ?? null,
+					'has_purchase_url' => '' !== $purchase_url,
 				]
 			);
 
 			if (($body['status'] ?? '') === 'success') {
 
+				$payload['purchase_url'] = $purchase_url;
+
 				return [
 					'success' => true,
-					'message' => $message,
-					'data'    => isset($body['data']) && is_array($body['data']) ? $body['data'] : [],
+					'message' => isset($body['message']) ? sanitize_text_field($body['message']) : '',
+					'data'    => $payload,
 				];
 			}
 
+			// Same message precedence the direct payment flow reads failures with.
+			$message = '';
+
+			foreach ([$body['message'] ?? '', $body['error'] ?? '', $payload['error'] ?? ''] as $candidate) {
+
+				if (is_string($candidate) && '' !== $candidate) {
+					$message = sanitize_text_field($candidate);
+					break;
+				}
+			}
+
+			wc_get_logger()->error(
+				$log_prefix . ' Voucher request rejected: ' . ($message ?: 'no message returned'),
+				[
+					'source'        => 'dfinsell-payment-gateway',
+					'order_id'      => $order_id,
+					'http_code'     => $code,
+					'account_title' => $account['title'] ?? null,
+				]
+			);
+
 			$last_message = $message ?: $last_message;
 
+			// Only a transport-level or auth failure is worth another account.
 			if (!in_array($code, [401, 403, 500, 502, 503, 504], true)) {
 				break;
 			}
@@ -871,6 +908,34 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'message' => $last_message ?: __('We could not email your voucher. Please try again in a moment.', 'dfinsell-payment-gateway'),
 			'data'    => [],
 		];
+	}
+
+	/**
+	 * Only an http(s) link is worth putting in front of a customer.
+	 *
+	 * @param mixed $link Link as the API gave it.
+	 * @return string The link, or '' when it is not one a customer can open.
+	 */
+	private function dfinsell_clean_payment_link($link) {
+
+		if (!is_scalar($link)) {
+			return '';
+		}
+
+		$link = esc_url_raw(trim((string) $link), ['https', 'http']);
+
+		if ('' === $link) {
+			return '';
+		}
+
+		$scheme = wp_parse_url($link, PHP_URL_SCHEME);
+		$host   = wp_parse_url($link, PHP_URL_HOST);
+
+		if (!in_array($scheme, ['https', 'http'], true) || empty($host)) {
+			return '';
+		}
+
+		return $link;
 	}
 
 	/**
@@ -944,13 +1009,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	 * Note on the order that DFinSell has the voucher in hand.
 	 *
 	 * @param WC_Order $order   Order being paid.
-	 * @param array    $voucher data block from /api/voucher/send.
+	 * @param array    $voucher Data block from /api/voucher/send.
 	 * @return void
 	 */
 	private function dfinsell_record_voucher_sent($order, $voucher) {
 
 		$reference = isset($voucher['reference']) ? sanitize_text_field($voucher['reference']) : '';
 		$to        = sanitize_email($voucher['customer_email'] ?? $order->get_billing_email());
+		$link      = $this->dfinsell_clean_payment_link($voucher['purchase_url'] ?? '');
 
 		// Read by the order-received notice to say payment is still to come.
 		$order->update_meta_data('_dfinsell_voucher_emailed_at', time());
@@ -959,8 +1025,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$order->update_meta_data('_dfinsell_voucher_id', sanitize_text_field($voucher['voucher_id']));
 		}
 
-		if ($reference !== '') {
+		if ('' !== $reference) {
 			$order->update_meta_data('_dfinsell_voucher_reference', $reference);
+		}
+
+		// The email button's own link, so the order-received page can offer the
+		// same way in for a customer whose email has not turned up.
+		if ('' !== $link) {
+			$order->update_meta_data('_dfinsell_voucher_purchase_url', $link);
 		}
 
 		$order->add_order_note(
@@ -1020,6 +1092,17 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'<strong>' . esc_html($this->dfinsell_mask_email($order->get_billing_email())) . '</strong>'
 			)
 		);
+
+		$link = $this->dfinsell_clean_payment_link($order->get_meta('_dfinsell_voucher_purchase_url'));
+
+		if ('' !== $link) {
+
+			printf(
+				'<p class="dfinsell-thankyou-payment-link"><a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a></p>',
+				esc_url($link),
+				esc_html__('Purchase your voucher', 'dfinsell-payment-gateway')
+			);
+		}
 	}
 
 	private function is_block_checkout_request() {

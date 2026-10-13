@@ -363,7 +363,7 @@ jQuery(function ($) {
 				: '',
 
 			$('<p>', { 'class': 'dfinsell-order-received__lead' }).text(
-				'As part of our secure checkout process, next you’ll receive your digital redemption voucher along with an NFT confirmation. This voucher can be used to redeem your order. You’ll get an email shortly, on your own time, to purchase the voucher and complete this transaction.'
+				'As part of our secure checkout process, next you’ll receive your digital redemption voucher by email. You’ll get that email shortly, and can open it on your own time to purchase the voucher and complete this transaction.'
 			),
 
 			$summary,
