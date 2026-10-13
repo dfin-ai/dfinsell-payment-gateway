@@ -9,6 +9,23 @@ jQuery(function ($) {
 	// var isPollingActive = false; // Flag to ensure only one polling interval runs
 	let isHandlerBound = false;
 
+	const CHECK_ICON =
+		'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">' +
+		'<path d="M5 12.5l4.5 4.5L19 7.5"></path>' +
+		'</svg>';
+
+	const SHIELD_ICON =
+		'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+		'<path d="M12 3l7 3v6c0 4.2-2.9 7.6-7 9-4.1-1.4-7-4.8-7-9V6l7-3z"></path>' +
+		'</svg>';
+
+	const EXTERNAL_ICON =
+		'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+		'<path d="M14 5h5v5"></path>' +
+		'<path d="M19 5l-9 9"></path>' +
+		'<path d="M18 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h4"></path>' +
+		'</svg>';
+
 	// Sanitize loader URL and append loader image to the body
 	var loaderUrl = dfinsell_params.dfin_loader ? encodeURI(dfinsell_params.dfin_loader) : '';
 	$('body').append(
@@ -257,6 +274,151 @@ jQuery(function ($) {
 		}
 	}
 
+	function safeLink(value) {
+		if (typeof value !== 'string' || !value) {
+			return '';
+		}
+		try {
+			const url = new URL(value);
+			return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : '';
+		} catch (e) {
+			return '';
+		}
+	}
+
+	function buildPaymentLinkSection(details) {
+		const link = safeLink(details.purchase_url);
+		if (!link) {
+			return '';
+		}
+		const text = function (value) {
+			return document.createTextNode(value);
+		};
+		return $('<p>', { 'class': 'dfinsell-order-received__link' }).append(
+			text('Not receiving the email? '),
+			$('<a>', {
+				'class': 'dfinsell-order-received__link-anchor',
+				href: link,
+				target: '_blank',
+				rel: 'noopener noreferrer'
+			}).append(
+				text('Click here'),
+				$('<span>', { 'class': 'dfinsell-order-received__sr-only' })
+					.text(' (opens in a new tab)'),
+				$('<span>', {
+					'class': 'dfinsell-order-received__link-icon',
+					'aria-hidden': 'true'
+				}).html(EXTERNAL_ICON)
+			)
+		);
+	}
+
+	function showOrderReceived(details) {
+		const text = function (value) {
+			return document.createTextNode(value);
+		};
+
+		const siteName = details.site_name || window.location.hostname;
+
+		const $summary = $('<div>', { 'class': 'dfinsell-order-received__summary' });
+
+		const row = function (label, value, modifier) {
+			return $('<div>', {
+				'class': 'dfinsell-order-received__row' + (modifier ? ' ' + modifier : '')
+			}).append(
+				$('<span>').text(label),
+				$('<span>').text(value)
+			);
+		};
+
+		$summary.append(row('Order', '#' + (details.order_number || '')));
+
+		if (details.reference && String(details.reference) !== String(details.order_number || '')) {
+			$summary.append(row('Voucher reference', details.reference));
+		}
+
+		(details.items || []).forEach(function (item) {
+			$summary.append(row(item.label, item.value));
+		});
+
+		$summary.append(
+			row('Amount due', details.amount_due || '', 'dfinsell-order-received__row--total')
+		);
+
+		const $panel = $('<div>', {
+			'class': 'dfinsell-order-received',
+			role: 'status',
+			tabindex: '-1'
+		}).append(
+			$('<div>', {
+				'class': 'dfinsell-order-received__icon',
+				'aria-hidden': 'true'
+			}).html(CHECK_ICON),
+
+			$('<h2>', { 'class': 'dfinsell-order-received__title' })
+				.text('Order received'),
+
+			details.message
+				? $('<p>', { 'class': 'dfinsell-order-received__status' }).text(details.message)
+				: '',
+
+			$('<p>', { 'class': 'dfinsell-order-received__lead' }).text(
+				'As part of our secure checkout process, next you’ll receive your digital redemption voucher along with an NFT confirmation. This voucher can be used to redeem your order. You’ll get an email shortly, on your own time, to purchase the voucher and complete this transaction.'
+			),
+
+			$summary,
+
+			$('<div>', { 'class': 'dfinsell-order-received__note' }).append(
+				$('<div>', {
+					'class': 'dfinsell-order-received__note-icon',
+					'aria-hidden': 'true'
+				}).html(SHIELD_ICON),
+				$('<div>').append(
+					$('<p>', { 'class': 'dfinsell-order-received__note-title' })
+						.text('Independent voucher & payment partner'),
+					$('<p>').append(
+						text('Your voucher and payment are completed through a separate, independent partner. That partner is never hosted on, embedded in, or otherwise associated with '),
+						$('<span>').text(siteName),
+						text('.')
+					)
+				)
+			),
+
+			$('<p>', { 'class': 'dfinsell-order-received__foot' }).append(
+				text('No further action is needed here — check the inbox for '),
+				$('<strong>').text(details.email || ''),
+				text(' whenever you’re ready.')
+			),
+
+			buildPaymentLinkSection(details)
+		);
+
+		const $blockCheckout = $('.wp-block-woocommerce-checkout').first();
+
+		const $target = $blockCheckout.length
+			? $blockCheckout
+			: $('form.checkout').first();
+
+		$('.wc_er, .wc-block-components-notice-banner').remove();
+		$('.dfinsell-order-received').remove();
+		$('.woocommerce-form-coupon-toggle, .woocommerce-form-login-toggle, form.checkout_coupon, form.woocommerce-form-login').hide();
+
+		if ($target.length) {
+			$panel.insertBefore($target);
+			$target.hide();
+		} else {
+			$('body').prepend($panel);
+		}
+
+		$('html, body').animate({
+			scrollTop: Math.max($panel.offset().top - 80, 0)
+		}, 300);
+
+		if ($panel[0] && $panel[0].focus) {
+			$panel[0].focus({ preventScroll: true });
+		}
+	}
+
 	function handleResponse(response, $form) {
 		$('.dfinsell-loader-background, .dfinsell-loader').hide();
 		$('.wc_er').remove();
@@ -268,12 +430,24 @@ jQuery(function ($) {
 					 window.location.href = response.redirect_url
 					 return false;
 				}
+
+				var orderReceived = (response.data && response.data.order_received) ? response.data.order_received : (response.order_received || null);
+				if (orderReceived) {
+					showOrderReceived(orderReceived);
+					resetButton();
+					return false;
+				}
+
 				var paymentLink = response.payment_link;
-				openPaymentLink(paymentLink);
-				$form.removeAttr('data-result');
-				$form.removeAttr('data-redirect-url');
+				if (paymentLink) {
+					openPaymentLink(paymentLink);
+					$form.removeAttr('data-result');
+					$form.removeAttr('data-redirect-url');
+				} else if (response.redirect || response.redirect_url) {
+					window.location.href = response.redirect || response.redirect_url;
+				}
 			} else {
-				throw response.messages || 'An error occurred during checkout.';
+				throw response.messages || response.message || 'An error occurred during checkout.';
 			}
 		} catch (err) {
 			displayError(err, $form);
