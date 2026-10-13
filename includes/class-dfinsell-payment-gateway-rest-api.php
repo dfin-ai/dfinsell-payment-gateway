@@ -133,8 +133,42 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 			return new WP_REST_Response(['error' => 'Order not found'], 404);
 		}
 
+		$action = isset($parameters['action']) ? sanitize_text_field($parameters['action']) : '';
+
+		// 2b. PAYMENT LINK RECORD
+		if (
+			!empty($pay_id) &&
+			$order->get_payment_method() === 'dfinsell' &&
+			function_exists('dfinsell_store_order_payment_link')
+		) {
+			dfinsell_store_order_payment_link($order, [
+				'uuid'           => $pay_id,
+				'payment_link'   => $parameters['payment_link'] ?? '',
+				'customer_email' => $parameters['customer_email'] ?? '',
+				'amount'         => $parameters['amount'] ?? '',
+			]);
+		}
+
+		if ($action === 'store_payment_link') {
+			if (empty($order->get_meta('_dfinsell_pay_id')) && !empty($pay_id)) {
+				$order->update_meta_data('_dfinsell_pay_id', $pay_id);
+				$order->save();
+			}
+
+			return new WP_REST_Response([
+				'success' => true,
+				'message' => 'Payment link stored successfully',
+			], 200);
+		}
+
 		// Retrieve the stored payment token (pay_id) from the order meta.
 		$stored_payment_token = $order->get_meta('_dfinsell_pay_id');
+
+		if (empty($stored_payment_token) && !empty($pay_id)) {
+			$order->update_meta_data('_dfinsell_pay_id', $pay_id);
+			$order->save();
+			$stored_payment_token = $pay_id;
+		}
 
 		// Crucial check: Ensure the received pay_id matches the one stored with the order.
 		// This prevents unauthorized updates to orders by supplying a valid order_id but a different pay_id.

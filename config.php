@@ -8,8 +8,8 @@ return [
     'id'   => 'dfinsell',
     'name' => 'DFin Sell Payment Gateway',
     'version' => '1.1.6',
-	'title' => 'DFin Sell Payment Gateway',
-    'description' => 'This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security',
+	'title' => 'Voucher Pay',
+    'description' => 'Purchase and pay quickly with a voucher',
     'icon' => '',
 
     'protocol' => is_ssl() ? 'https://' : 'http://',

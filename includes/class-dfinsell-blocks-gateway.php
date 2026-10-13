@@ -32,8 +32,8 @@ class DFINSELL_Blocks_Gateway extends AbstractPaymentMethodType {
 	    return [
 	        'id'          => $this->name, // e.g. 'dfinsell'
 			'name'          => $this->name, // e.g. 'dfinsell'
-	        'title'       => isset( $this->settings['title'] ) ? $this->settings['title'] : '',
-	        'description' => isset( $this->settings['description'] ) ? $this->settings['description'] : '',
+	        'title'       => !empty( $this->settings['title'] ) ? $this->settings['title'] : 'Voucher Pay',
+	        'description' => !empty( $this->settings['description'] ) ? $this->settings['description'] : 'Purchase and pay quickly with a voucher',
 	        'supports'    => [ 'products' ],
 	        'is_active'   => ( isset( $this->settings['enabled'] ) && 'yes' === $this->settings['enabled'] ),
 	        // extra settings you want to pass
