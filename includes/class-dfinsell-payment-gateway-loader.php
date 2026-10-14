@@ -58,15 +58,142 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	}
 
 	function handle_dfinsell_gateway_ajax(){
-		$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
-		$orderID = WC()->session->get('store_api_draft_order');	
+
+		// Nonce verification
+		$nonce = isset($_POST['nonce'])
+			? sanitize_text_field(wp_unslash($_POST['nonce']))
+			: '';
+
+		if (empty($nonce) || !wp_verify_nonce($nonce, 'dfinsell_payment')) {
+			wp_send_json(['result' => 'fail', 'error' => 'Security check failed.']);
+			die;
+		}
+
+		// Pull the already-initialised gateway from the WC registry.
+		$gateways    = WC()->payment_gateways()->payment_gateways();
+		$dfinPayment = $gateways['dfinsell'] ?? null;
+
+		if (!$dfinPayment) {
+			$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
+			$dfinPayment->init_settings();
+		}
+
+		$orderID = WC()->session
+			? ( WC()->session->get('store_api_draft_order') ?: WC()->session->get('order_awaiting_payment') )
+			: null;
+
+		if ( ! empty( WC()->cart ) && ! WC()->cart->is_empty() ) {
+			$orderID = $this->dfinsell_create_block_order() ?: $orderID;
+		}
+
 		$status = [];
 		if($orderID){
 			$status = $dfinPayment->process_payment($orderID);
+		}else{
+			wc_add_notice(__('Invalid order.', 'dfinsell-payment-gateway'), 'error');
+			$status = ['result' => 'fail','error' => 'Invalid order.'];
 		}
 		
 		wp_send_json($status);
 		die;
+	}
+
+	/**
+	 * Create the WooCommerce order for a block checkout payment.
+	 *
+	 * Delegates to WC_Checkout::create_order() so line items, shipping lines,
+	 * coupons, taxes and totals are built by WooCommerce itself.
+	 *
+	 * @return int Order ID, or 0 on failure.
+	 */
+	private function dfinsell_create_block_order() {
+
+		$checkout = WC()->checkout();
+		$data     = $checkout->get_posted_data();
+		$customer = WC()->customer;
+
+		if ( $customer ) {
+
+			$fields = [
+				'first_name',
+				'last_name',
+				'company',
+				'address_1',
+				'address_2',
+				'city',
+				'state',
+				'postcode',
+				'country',
+				'phone',
+				'email',
+			];
+
+			foreach ( $fields as $field ) {
+
+				$key = 'billing_' . $field;
+
+				if ( ! empty( $data[ $key ] ) ) {
+					continue;
+				}
+
+				$getter = 'get_' . $key;
+
+				if ( is_callable( [ $customer, $getter ] ) ) {
+					$data[ $key ] = $customer->$getter();
+				}
+			}
+		}
+
+		if ( empty( $data['payment_method'] ) ) {
+			$data['payment_method'] = 'dfinsell';
+		}
+
+		// Prevent reusing an order if the email address OR phone number doesn't match
+		if ( WC()->session ) {
+			$awaiting_order_id = WC()->session->get('order_awaiting_payment') ?: WC()->session->get('store_api_draft_order');
+			if ( $awaiting_order_id ) {
+				$awaiting_order = wc_get_order( $awaiting_order_id );
+				$posted_email   = sanitize_email( $data['billing_email'] ?? '' );
+				$posted_phone   = sanitize_text_field( $data['billing_phone'] ?? '' );
+				
+				if ( $awaiting_order && ( $awaiting_order->get_billing_email() !== $posted_email || $awaiting_order->get_billing_phone() !== $posted_phone ) ) {
+					WC()->session->set( 'order_awaiting_payment', null );
+					WC()->session->set( 'store_api_draft_order', null );
+				}
+			}
+		}
+
+		$order_id = $checkout->create_order( $data );
+
+		if ( is_wp_error( $order_id ) ) {
+
+			wc_get_logger()->error(
+				'Could not create order for block checkout: ' . $order_id->get_error_message(),
+				[
+					'source' => 'dfinsell-payment-gateway',
+				]
+			);
+
+			return 0;
+		}
+
+		if ( WC()->session ) {
+			WC()->session->set( 'order_awaiting_payment', $order_id );
+		}
+
+		$created = wc_get_order( $order_id );
+
+		wc_get_logger()->info(
+			'Created order for block checkout',
+			[
+				'source'   => 'dfinsell-payment-gateway',
+				'order_id' => $order_id,
+				'total'    => $created ? $created->get_total() : null,
+				'email'    => $created ? $created->get_billing_email() : null,
+			]
+		);
+
+		return $order_id;
 	}
 
 	/**

@@ -6,7 +6,7 @@
  * Author URI: https://www.dfin.ai/
  * Text Domain: dfinsell-payment-gateway
  * Plugin URI: https://github.com/dfin-ai/dfinsell-payment-gateway
- * Version: 1.1.5
+ * Version: 1.1.6
  * License: GPLv3 or later
  * License URI: https://www.gnu.org/licenses/gpl-3.0.html
  *
@@ -43,7 +43,6 @@ define('DFINSELL_ASSETS_URL', $dfinsell_config['paths']['assets']);
 
 // Requirements
 define('DFINSELL_PAYMENT_GATEWAY_MIN_PHP_VER', $dfinsell_config['requirements']['php']);
-define('DFINSELL_PAYMENT_GATEWAY_MIN_WC_VER', $dfinsell_config['requirements']['wc']);
 
 /**
  * ==========================================================
@@ -81,9 +80,39 @@ DFINSELL_PAYMENT_GATEWAY_Loader::get_instance();
  */
 add_action('woocommerce_cancel_unpaid_order', 'dfinsell_cancel_unpaid_order_action');
 add_action('woocommerce_order_status_cancelled', 'dfinsell_cancel_unpaid_order_action');
+add_action('woocommerce_order_status_changed', 'dfinsell_cancel_unpaid_order_action', 10, 4);
+
+add_filter('woocommerce_get_checkout_order_received_url', function ($url, $order) {
+
+	if (!$order || !is_a($order, 'WC_Order')) {
+		return $url;
+	}
+
+	// Only police DFinSell orders
+	if ($order->get_payment_method() !== 'dfinsell') {
+		return $url;
+	}
+
+	$wc_status    = $order->get_status();
+	$engine_state = $order->get_meta('_dfinsell_state');
+	$success_meta = $order->get_meta('_dfinsell_payment_success');
+	$voucher_sent = $order->get_meta('_dfinsell_voucher_emailed_at');
+
+	$is_valid = in_array($wc_status, ['processing', 'completed', 'pending'], true) || $success_meta === 'yes' || $engine_state === 'success' || !empty($voucher_sent);
+
+	if (!$is_valid) {
+		return wc_get_checkout_url();
+	}
+
+	return $url;
+
+}, 10, 2);
 
 /**
  * Cancels an unpaid order after a specified timeout.
+ *
+ * For voucher orders, the payment link may not exist yet because it is
+ * created only after the customer clicks the purchase button in the email.
  *
  * @param int $order_id The ID of the order to cancel.
  */
@@ -149,7 +178,7 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 		$order->update_status('cancelled', 'Order automatically cancelled due to unpaid timeout.');
 		wc_reduce_stock_levels($order_id);
 		wp_cache_delete('dfinsell_payment_link_uuid_' . $order_id, 'dfinsell_payment_gateway');
-		wp_cache_delete('dfinsell_payment_row_' . $order_id, 'dfinsell_payment_gateway'); // Clear row cache
+		wp_cache_delete('dfinsell_payment_row_' . $order_id, 'dfinsell_payment_gateway');
 
 		wc_get_logger()->info('Order auto-cancelled due to unpaid timeout.', [
 			'source'  => 'dfinsell-payment-gateway',
@@ -158,27 +187,45 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 	}
 
 	// ====== Cancel Payment Link API ======
-	$table_name   = esc_sql($wpdb->prefix . 'order_payment_link');
-	$cache_key    = 'dfinsell_payment_row_' . $order_id;
+	$table_name   = dfinsell_get_order_payment_link_table();
+	$cache_key    = 'dfinsell_payment_row_' . intval($order_id);
 	$cache_group  = 'dfinsell_payment_gateway';
 
 	$payment_row = wp_cache_get($cache_key, $cache_group);
 
 	if (false === $payment_row) {
-	    // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table_name is safe, built from $wpdb->prefix
-	    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- direct query is safe and properly prepared
-	    $payment_row = $wpdb->get_row(
-	        $wpdb->prepare(
-	            // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- $table_name is not user input
-	            "SELECT * FROM `{$table_name}` WHERE `order_id` = %d LIMIT 1",
-	            (int) $order_id
-	        ),
-	        ARRAY_A
-	    );
+		$safe_table_name = esc_sql($table_name);
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery
+		$payment_row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM `{$safe_table_name}` WHERE `order_id` = %d LIMIT 1",
+				intval($order_id)
+			),
+			ARRAY_A
+		);
 
-	    if ($payment_row) {
-	        wp_cache_set($cache_key, $payment_row, $cache_group, 5 * MINUTE_IN_SECONDS);
-	    }
+		if ($payment_row) {
+			wp_cache_set($cache_key, $payment_row, $cache_group, 5 * MINUTE_IN_SECONDS);
+		}
+	}
+
+	/*
+	 * Voucher flow can legitimately have no payment-link row yet.
+	 * The payment link is created only after the customer opens the
+	 * button in their email.
+	 */
+	if (empty($payment_row)) {
+		wc_get_logger()->info(
+			'DFinSell order cancelled before payment link was created. No payment link to cancel.',
+			[
+				'source'  => 'dfinsell-payment-gateway',
+				'context' => [
+					'order_id' => $order_id,
+				],
+			]
+		);
+
+		return;
 	}
 
 	$uuid           = sanitize_text_field($payment_row['uuid'] ?? '');
@@ -187,10 +234,25 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 	$amount         = number_format(floatval($payment_row['amount'] ?? 0), 8, '.', '');
 
 	if (empty($uuid)) {
-		wc_get_logger()->error('Missing or invalid UUID in payment link table.', [
+		wc_get_logger()->warning('DFinSell payment link exists but UUID is missing. Skipping cancellation API call.', [
 			'source'  => 'dfinsell-payment-gateway',
 			'context' => ['order_id' => $order_id, 'uuid' => $uuid],
 		]);
+		return;
+	}
+
+	if ($order->get_meta('_dfinsell_cancelled_link_uuid') === $uuid) {
+		wc_get_logger()->info(
+			'DFinSell payment link already cancelled. Skipping duplicate cancellation API call.',
+			[
+				'source'  => 'dfinsell-payment-gateway',
+				'context' => [
+					'order_id' => $order_id,
+					'uuid'     => $uuid,
+				],
+			]
+		);
+
 		return;
 	}
 
@@ -221,21 +283,27 @@ function dfinsell_cancel_unpaid_order_action($order_id)
 				'error'    => $response->get_error_message(),
 			],
 		]);
-	} else {
-		$response_body    = wp_remote_retrieve_body($response);
-		$decoded_response = json_decode($response_body, true);
-
-		wc_get_logger()->info("Cancel API response received for Order ID: {$order_id}.", [
-			'source'  => 'dfinsell-payment-gateway',
-			'context' => [
-				'order_id'       => $order_id,
-				'uuid'           => $uuid,
-				'payment_link'   => $payment_link,
-				'customer_email' => $customer_email,
-				'amount'         => number_format((float) $amount, 2, '.', ''),
-				'response'       => $decoded_response,
-			],
-		]);
+		return;
 	}
+
+	$response_body    = wp_remote_retrieve_body($response);
+	$decoded_response = json_decode($response_body, true);
+
+	if (!empty($decoded_response['status'])) {
+		$order->update_meta_data('_dfinsell_cancelled_link_uuid', $uuid);
+		$order->save();
+	}
+
+	wc_get_logger()->info("Cancel API response received for Order ID: {$order_id}.", [
+		'source'  => 'dfinsell-payment-gateway',
+		'context' => [
+			'order_id'       => $order_id,
+			'uuid'           => $uuid,
+			'payment_link'   => $payment_link,
+			'customer_email' => $customer_email,
+			'amount'         => number_format((float) $amount, 2, '.', ''),
+			'response'       => $decoded_response,
+		],
+	]);
 }
 
