@@ -1153,6 +1153,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			$order->update_meta_data('_dfinsell_voucher_purchase_url', $link);
 		}
 
+		// Ensure customer receives their voucher payment email with the payment link.
+		if ('' !== $link) {
+			$this->dfinsell_send_voucher_email($order, $link);
+		}
+
 		$order->add_order_note(
 			$reference !== ''
 				? sprintf(
@@ -1169,6 +1174,65 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		);
 
 		$order->save();
+	}
+
+	/**
+	 * Send the voucher payment email directly to the customer with their payment/redemption link.
+	 *
+	 * @param WC_Order $order
+	 * @param string   $purchase_url
+	 * @return bool
+	 */
+	public function dfinsell_send_voucher_email($order, $purchase_url) {
+		$to = sanitize_email($order->get_billing_email());
+		if (empty($to) || empty($purchase_url)) {
+			return false;
+		}
+
+		$site_title   = wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES);
+		$order_number = $order->get_order_number();
+		$total        = $this->dfinsell_plain_price($order->get_total(), $order);
+		$first_name   = $order->get_billing_first_name();
+
+		$subject = sprintf(
+			/* translators: 1: site title, 2: order number, 3: total */
+			__('%1$s: Complete your order #%2$s (%3$s) - Payment Voucher', 'dfinsell-payment-gateway'),
+			$site_title,
+			$order_number,
+			$total
+		);
+
+		$message  = '<div style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #374151; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">';
+		$message .= '<div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px;">';
+		$message .= '<h2 style="color: #4338ca; margin: 0; font-size: 22px;">' . esc_html__('Complete Your Order Payment', 'dfinsell-payment-gateway') . '</h2>';
+		$message .= '</div>';
+		$message .= '<p style="font-size: 16px;">' . sprintf(esc_html__('Hi %s,', 'dfinsell-payment-gateway'), esc_html($first_name ?: __('Customer', 'dfinsell-payment-gateway'))) . '</p>';
+		$message .= '<p style="font-size: 15px; line-height: 1.5;">' . sprintf(esc_html__('Thank you for placing order #%1$s at %2$s. Your payment voucher has been generated for %3$s.', 'dfinsell-payment-gateway'), '<strong>' . esc_html($order_number) . '</strong>', '<strong>' . esc_html($site_title) . '</strong>', '<strong style="color: #4338ca;">' . esc_html($total) . '</strong>') . '</p>';
+		$message .= '<p style="font-size: 15px; line-height: 1.5;">' . esc_html__('Please click the button below to purchase your voucher and complete your payment securely:', 'dfinsell-payment-gateway') . '</p>';
+		$message .= '<div style="text-align: center; margin: 32px 0;">';
+		$message .= '<a href="' . esc_url($purchase_url) . '" target="_blank" rel="noopener noreferrer" style="background-color: #4338ca; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; display: inline-block;">' . esc_html__('Purchase Voucher & Pay Now', 'dfinsell-payment-gateway') . '</a>';
+		$message .= '</div>';
+		$message .= '<p style="font-size: 13px; color: #6b7280; line-height: 1.4;">' . esc_html__('If the button above does not work, copy and paste this link into your browser:', 'dfinsell-payment-gateway') . '<br><a href="' . esc_url($purchase_url) . '" style="color: #4338ca; word-break: break-all;">' . esc_url($purchase_url) . '</a></p>';
+		$message .= '<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">';
+		$message .= '<p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">' . sprintf(esc_html__('This payment request was generated for Order #%s.', 'dfinsell-payment-gateway'), esc_html($order_number)) . '</p>';
+		$message .= '</div>';
+
+		$headers = [
+			'Content-Type: text/html; charset=UTF-8',
+			'From: ' . $site_title . ' <' . (get_option('admin_email') ?: 'no-reply@' . (wp_parse_url(home_url(), PHP_URL_HOST) ?: 'localhost')) . '>',
+		];
+
+		$sent = wp_mail($to, $subject, $message, $headers);
+
+		wc_get_logger()->info(
+			"[Order #{$order->get_id()}] Voucher payment email " . ($sent ? 'sent successfully' : 'failed to send') . " to {$to}",
+			[
+				'source'       => 'dfinsell-payment-gateway',
+				'payment_link' => $purchase_url,
+			]
+		);
+
+		return $sent;
 	}
 
 	/**
@@ -1310,19 +1374,18 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$billing_state = sanitize_text_field($order->get_billing_state());
 		$billing_phone = sanitize_text_field($order->get_billing_phone());
 
-		$webhook_url = esc_url_raw(
+		$redirect_url = esc_url_raw(
 			add_query_arg(
 				[
-					'order_id' => $order_id, // Include order ID or any other identifier
-					'key' => $order->get_order_key(),
-					'nonce' => wp_create_nonce('dfinsell_payment_nonce'), // Create a nonce for verification
-					'mode' => 'wp',
+					'order_id' => $order_id,
+					'key'      => $order->get_order_key(),
+					'nonce'    => wp_create_nonce('dfinsell_payment_nonce'),
+					'mode'     => 'wp',
 				],
-				$this->dfinsell_get_return_url_base() // Use the updated base URL method
+				$this->dfinsell_get_return_url_base()
 			)
 		);
-		
-		$redirect_url = esc_url_raw($order->get_checkout_order_received_url());
+		$webhook_url = $redirect_url;
 
 		$ip_address = sanitize_text_field($this->dfinsell_get_client_ip());
 
@@ -1372,6 +1435,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'billing_state' => $billing_state,
 			'billing_phone' => $billing_phone,
 			'is_sandbox' => $is_sandbox,
+			'curr_code' => sanitize_text_field($order->get_currency()),
 			'plugin_version' => $this->version,
 			'plugin_source' => 'dfinsell',
 		];

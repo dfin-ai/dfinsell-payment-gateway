@@ -57,7 +57,7 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		
 		add_action('rest_api_init', function () {
 			register_rest_route('dfinsell/v1', '/data', array(
-				'methods' => 'POST',
+				'methods' => ['GET', 'POST'],
 				'callback' => array($this, 'dfinsell_handle_api_request'),
 				'permission_callback' => '__return_true',
 			));
@@ -67,6 +67,9 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	private function dfinsell_verify_api_key($api_key)
 	{
 		$api_key = trim($api_key);
+		if (empty($api_key)) {
+			return false;
+		}
 
 		// Get DFinSell settings
 		$dfin_sell_settings = get_option('woocommerce_dfinsell_payment_gateway_accounts');
@@ -100,6 +103,9 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 	public function dfinsell_handle_api_request(WP_REST_Request $request)
 	{
 		$parameters = $request->get_json_params();
+		if (empty($parameters)) {
+			$parameters = $request->get_params();
+		}
 		
 		// Sanitize incoming data to prevent security vulnerabilities.
 		$api_key = isset($parameters['nonce']) ? sanitize_text_field($parameters['nonce']) : '';
@@ -114,8 +120,9 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		    ],
 		]);
 
-		// Validate API key first to secure the endpoint.
-		if (!$this->dfinsell_verify_api_key(base64_decode($api_key))) {
+		// Validate API key first (supports both raw and base64-encoded keys).
+		$key_valid = (!empty($api_key) && ($this->dfinsell_verify_api_key($api_key) || $this->dfinsell_verify_api_key(base64_decode($api_key))));
+		if (!$key_valid) {
 			$this->logger->error('Unauthorized access attempt due to invalid API key.', array('source' => 'dfinsell-payment-gateway'));
 			return new WP_REST_Response(['error' => 'Unauthorized'], 401);
 		}
@@ -233,7 +240,11 @@ class DFINSELL_PAYMENT_GATEWAY_REST_API
 		//BeaverTech Code Change end
 		// Only attempt to update the order status if the target status is different from the current status.
 		// WooCommerce's internal `update_status` also has idempotency, but this explicit check is clearer.
-		if ('wc-' . $target_order_status !== $current_order_status) {
+		if ($target_order_status !== $current_order_status && 'wc-' . $target_order_status !== $current_order_status) {
+			if ($api_order_status === 'completed') {
+				$order->payment_complete($pay_id ?: '');
+			}
+
 			$updated = $order->update_status(
 				$target_order_status,
 				sprintf(
