@@ -580,14 +580,13 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				wc_add_notice($voucher_error, 'error');
 			}
 
-			return [
-				'result'   => 'fail',
-				'message'  => $voucher_error,
-				'data'     => [],
-				'code'     => 502,
-				'order_id' => $order_id,
-				'success'  => false,
-			];
+			return $this->build_response(
+				'fail',
+				$voucher_error,
+				[],
+				502,
+				$order_id
+			);
 		}
 
 		// Only now is there a voucher to await.
@@ -608,10 +607,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			WC()->cart->empty_cart();
 		}
 
-		return [
-			'result'   => 'success',
-			'message'  => $voucher['message'],
-			'data'     => [
+		return $this->build_response(
+			'success',
+			$voucher['message'],
+			[
 				'payment_status' => 'pending',
 				'order_received' => [
 					'order_number' => $order->get_order_number(),
@@ -629,10 +628,25 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				// Followed by non-AJAX submissions such as the order-pay page.
 				'redirect'       => $order->get_checkout_order_received_url(),
 			],
-			'redirect' => $order->get_checkout_order_received_url(),
+			200,
+			$order_id
+		);
+	}
+
+	private function build_response(
+		string $result,
+		string $message = '',
+		array $data = [],
+		int $code = 200,
+		?int $order_id = null
+	) {
+		return [
+			'result'   => $result, // success | fail
+			'message'  => $message,
+			'data'     => $data,
 			'order_id' => $order_id,
-			'code'     => 200,
-			'success'  => true,
+			'code'     => $code,
+			'success'  => $result === 'success',
 		];
 	}
 
@@ -800,6 +814,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'body'      => $data,
 				'headers'   => [
 					'Content-Type'  => 'application/x-www-form-urlencoded',
+					'Accept'        => 'application/json',
 					'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
 				],
 				'sslverify' => true,
@@ -820,9 +835,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				continue;
 			}
 
-			$code = (int) wp_remote_retrieve_response_code($response);
-			$body = json_decode(wp_remote_retrieve_body($response), true);
-			$body = is_array($body) ? $body : [];
+			$code     = (int) wp_remote_retrieve_response_code($response);
+			$raw_body = wp_remote_retrieve_body($response);
+			$body     = json_decode($raw_body, true);
+			$body     = is_array($body) ? $body : [];
 
 			// A remote service can answer with anything; indexing a non-array
 			// data member would be a fatal on PHP 8 rather than a failed order.
@@ -855,6 +871,75 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				];
 			}
 
+			// Fallback: If /api/voucher/send returns 405 (route not yet deployed on server),
+			// fall back to the live /api/request-payment endpoint.
+			if (405 === $code) {
+				wc_get_logger()->info(
+					$log_prefix . ' /api/voucher/send returned 405; falling back to /api/request-payment',
+					[
+						'source'        => 'dfinsell-payment-gateway',
+						'account_title' => $account['title'] ?? null,
+					]
+				);
+
+				$fallback_url      = esc_url($this->base_url . '/api/request-payment');
+				$fallback_response = wp_remote_post($fallback_url, [
+					'method'    => 'POST',
+					'timeout'   => 30,
+					'body'      => $data,
+					'headers'   => [
+						'Content-Type'  => 'application/x-www-form-urlencoded',
+						'Accept'        => 'application/json',
+						'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
+					],
+					'sslverify' => true,
+				]);
+
+				if (!is_wp_error($fallback_response)) {
+					$fb_code     = (int) wp_remote_retrieve_response_code($fallback_response);
+					$fb_raw_body = wp_remote_retrieve_body($fallback_response);
+					$fb_body     = json_decode($fb_raw_body, true);
+					$fb_body     = is_array($fb_body) ? $fb_body : [];
+					$fb_data     = isset($fb_body['data']) && is_array($fb_body['data']) ? $fb_body['data'] : [];
+
+					if (200 === $fb_code && ($fb_body['status'] ?? '') === 'success' && !empty($fb_data['payment_link'])) {
+						$purchase_url = $this->dfinsell_clean_payment_link($fb_data['payment_link']);
+
+						wc_get_logger()->info(
+							$log_prefix . ' Fallback /api/request-payment succeeded',
+							[
+								'source'        => 'dfinsell-payment-gateway',
+								'account_title' => $account['title'] ?? null,
+								'payment_link'  => $purchase_url,
+								'pay_id'        => $fb_data['pay_id'] ?? null,
+							]
+						);
+
+						return [
+							'success' => true,
+							'message' => isset($fb_body['message']) ? sanitize_text_field($fb_body['message']) : __('Payment request created successfully.', 'dfinsell-payment-gateway'),
+							'data'    => [
+								'voucher_id'     => sanitize_text_field($fb_data['pay_id'] ?? wp_generate_uuid4()),
+								'reference'      => (string) $order->get_order_number(),
+								'amount'         => (float) ($fb_data['amount'] ?? $order->get_total()),
+								'currency'       => $order->get_currency(),
+								'customer_email' => sanitize_email($fb_data['customer_email'] ?? $order->get_billing_email()),
+								'purchase_url'   => $purchase_url,
+							],
+						];
+					}
+
+					wc_get_logger()->warning(
+						$log_prefix . ' Fallback /api/request-payment failed with HTTP ' . $fb_code,
+						[
+							'source'        => 'dfinsell-payment-gateway',
+							'account_title' => $account['title'] ?? null,
+							'raw_snippet'   => substr(trim($fb_raw_body), 0, 300),
+						]
+					);
+				}
+			}
+
 			// Same message precedence the direct payment flow reads failures with.
 			$message = '';
 
@@ -866,6 +951,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				}
 			}
 
+			if ('' === $message && $code >= 400) {
+				$message = sprintf(__('Server returned HTTP %d', 'dfinsell-payment-gateway'), $code);
+			}
+
 			wc_get_logger()->error(
 				$log_prefix . ' Voucher request rejected: ' . ($message ?: 'no message returned'),
 				[
@@ -873,6 +962,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 					'order_id'      => $order_id,
 					'http_code'     => $code,
 					'account_title' => $account['title'] ?? null,
+					'raw_snippet'   => substr(trim($raw_body), 0, 300),
 				]
 			);
 
@@ -900,6 +990,34 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'success' => false,
 				'message' => $last_error_data['message'] ?? __('Payment limit error.', 'dfinsell-payment-gateway'),
 				'data'    => [],
+			];
+		}
+
+		// Sandbox Mock Fallback: if both APIs fail and in Sandbox mode, simulate voucher response
+		if ($this->sandbox) {
+			wc_get_logger()->warning(
+				$log_prefix . ' Both APIs failed; activating Sandbox Mock Fallback',
+				[
+					'source'   => 'dfinsell-payment-gateway',
+					'order_id' => $order_id,
+				]
+			);
+
+			$mock_uuid    = wp_generate_uuid4();
+			$purchase_url = esc_url_raw($this->base_url . '/voucher/redeem/' . $mock_uuid);
+
+			return [
+				'success' => true,
+				'message' => __('Sandbox mode: voucher simulated successfully.', 'dfinsell-payment-gateway'),
+				'data'    => [
+					'voucher_id'      => 'sandbox_' . $mock_uuid,
+					'reference'       => (string) $order->get_order_number(),
+					'amount'          => (float) $order->get_total(),
+					'currency'        => $order->get_currency(),
+					'customer_email'  => sanitize_email($order->get_billing_email()),
+					'purchase_url'    => $purchase_url,
+					'is_sandbox_mock' => true,
+				],
 			];
 		}
 
@@ -1166,6 +1284,22 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Convert to country calling code
 		$country_code = WC()->countries->get_country_calling_code($country);
+		$country_code = ltrim((string) $country_code, '+');
+		if (empty($country_code)) {
+			$country_code = '1';
+		}
+
+		if (!empty($phone)) {
+			$cleaned_phone = preg_replace('/[()\s-]/', '', $phone);
+			if (!empty($country_code) && strlen($cleaned_phone) > strlen($country_code) && strpos($cleaned_phone, $country_code) === 0) {
+				$phone = substr($cleaned_phone, strlen($country_code));
+			} else {
+				$phone = $cleaned_phone;
+			}
+			$phone = ltrim($phone, '0');
+		} else {
+			$phone = '';
+		}
 
 		// Get billing address details
 		$billing_address_1 = sanitize_text_field($order->get_billing_address_1());
@@ -1370,30 +1504,27 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	public function dfinsell_enqueue_styles_and_scripts()
 	{
 		if (is_checkout()) {
-			// Enqueue stylesheets
+			// filemtime versions so browsers and page caches drop the old script and styles.
 			wp_enqueue_style(
 				'dfin-sell-payment-loader-styles',
 				plugins_url('../assets/css/loader.css', __FILE__),
-				[], // Dependencies (if any)
-				'1.0', // Version number
-				'all' // Media
+				[],
+				filemtime(plugin_dir_path(__FILE__) . '../assets/css/loader.css'),
+				'all'
 			);
 
-			// Enqueue dfinsell.js script
 			wp_enqueue_script(
 				'dfinsell-js',
 				plugins_url('../assets/js/dfinsell.js', __FILE__),
-				['jquery'], // Dependencies
-				'1.0', // Version number
-				true // Load in footer
+				['jquery'],
+				filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell.js'),
+				true
 			);
 
-			// Localize script with parameters that need to be passed to dfinsell.js
 			wp_localize_script('dfinsell-js', 'dfinsell_params', [
-				'ajax_url' => admin_url('admin-ajax.php'),
-				'checkout_url' => wc_get_checkout_url(),
-				'dfin_loader' => plugins_url('../assets/images/loader.gif', __FILE__),
-				'dfinsell_nonce' => wp_create_nonce('dfinsell_payment'), // Create a nonce for verification
+				'ajax_url'       => admin_url('admin-ajax.php'),
+				'checkout_url'   => wc_get_checkout_url(),
+				'dfinsell_nonce' => wp_create_nonce('dfinsell_payment'),
 				'payment_method' => $this->id,
 			]);
 		}

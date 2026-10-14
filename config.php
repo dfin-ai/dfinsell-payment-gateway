@@ -12,7 +12,7 @@ return [
     'description' => 'Purchase and pay quickly with a voucher',
     'icon' => '',
 
-    'protocol' => is_ssl() ? 'https://' : 'http://',
+    'protocol' => 'https://',
     'host'     => 'sell.dfin.ai',
 
     'requirements' => [
