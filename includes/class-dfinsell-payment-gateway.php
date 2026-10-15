@@ -864,6 +864,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				$payload['purchase_url'] = $purchase_url;
 
+				if ('' !== $purchase_url) {
+					$this->dfinsell_send_remote_payment_link($purchase_url, $order, $public_key, $secret_key);
+				}
+
 				return [
 					'success' => true,
 					'message' => isset($body['message']) ? sanitize_text_field($body['message']) : '',
@@ -871,11 +875,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				];
 			}
 
-			// Fallback: If /api/voucher/send returns 405 (route not yet deployed on server),
+			// Fallback: If /api/voucher/send returns 405 or 404 (route not yet deployed on server),
 			// fall back to the live /api/request-payment endpoint.
-			if (405 === $code) {
+			if (405 === $code || 404 === $code) {
 				wc_get_logger()->info(
-					$log_prefix . ' /api/voucher/send returned 405; falling back to /api/request-payment',
+					$log_prefix . ' /api/voucher/send returned ' . $code . '; falling back to /api/request-payment',
 					[
 						'source'        => 'dfinsell-payment-gateway',
 						'account_title' => $account['title'] ?? null,
@@ -915,15 +919,32 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 							]
 						);
 
+						$voucher_id = sanitize_text_field($fb_data['pay_id'] ?? wp_generate_uuid4());
+						$ref        = (string) $order->get_order_number();
+						$amount     = (float) ($fb_data['amount'] ?? $order->get_total());
+						$cust_email = sanitize_email($fb_data['customer_email'] ?? $order->get_billing_email());
+
+						if (function_exists('dfinsell_store_order_payment_link')) {
+							dfinsell_store_order_payment_link($order, [
+								'uuid'           => $voucher_id,
+								'payment_link'   => $purchase_url,
+								'customer_email' => $cust_email,
+								'amount'         => $amount,
+							]);
+						}
+
+						// Also notify remote DFinSell backend to send payment link if route exists
+						$this->dfinsell_send_remote_payment_link($purchase_url, $order, $public_key, $secret_key);
+
 						return [
 							'success' => true,
 							'message' => isset($fb_body['message']) ? sanitize_text_field($fb_body['message']) : __('Payment request created successfully.', 'dfinsell-payment-gateway'),
 							'data'    => [
-								'voucher_id'     => sanitize_text_field($fb_data['pay_id'] ?? wp_generate_uuid4()),
-								'reference'      => (string) $order->get_order_number(),
-								'amount'         => (float) ($fb_data['amount'] ?? $order->get_total()),
+								'voucher_id'     => $voucher_id,
+								'reference'      => $ref,
+								'amount'         => $amount,
 								'currency'       => $order->get_currency(),
-								'customer_email' => sanitize_email($fb_data['customer_email'] ?? $order->get_billing_email()),
+								'customer_email' => $cust_email,
 								'purchase_url'   => $purchase_url,
 							],
 						];
@@ -1233,6 +1254,41 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		);
 
 		return $sent;
+	}
+
+	/**
+	 * Dispatch payment link through the DFinSell platform's remote notification endpoint if available.
+	 *
+	 * @param string   $payment_link
+	 * @param WC_Order $order
+	 * @param string   $public_key
+	 * @param string   $secret_key
+	 */
+	private function dfinsell_send_remote_payment_link($payment_link, $order, $public_key, $secret_key) {
+		$send_url = esc_url($this->base_url . '/api/payment-link/send');
+		$email    = sanitize_email($order->get_billing_email());
+		$phone    = sanitize_text_field($order->get_billing_phone());
+
+		$body = [
+			'payment_link' => $payment_link,
+			'email'        => $email,
+		];
+		if (!empty($phone)) {
+			$body['phone'] = $phone;
+		}
+
+		wp_remote_post($send_url, [
+			'method'    => 'POST',
+			'timeout'   => 15,
+			'body'      => $body,
+			'headers'   => [
+				'Content-Type'  => 'application/x-www-form-urlencoded',
+				'Accept'        => 'application/json',
+				'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
+				'x-api-secret'  => sanitize_text_field($secret_key),
+			],
+			'sslverify' => true,
+		]);
 	}
 
 	/**
