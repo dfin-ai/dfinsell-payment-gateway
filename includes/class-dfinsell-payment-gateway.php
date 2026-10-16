@@ -864,10 +864,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 				$payload['purchase_url'] = $purchase_url;
 
-				if ('' !== $purchase_url) {
-					$this->dfinsell_send_remote_payment_link($purchase_url, $order, $public_key, $secret_key);
-				}
-
 				return [
 					'success' => true,
 					'message' => isset($body['message']) ? sanitize_text_field($body['message']) : '',
@@ -932,9 +928,6 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 								'amount'         => $amount,
 							]);
 						}
-
-						// Also notify remote DFinSell backend to send payment link if route exists
-						$this->dfinsell_send_remote_payment_link($purchase_url, $order, $public_key, $secret_key);
 
 						return [
 							'success' => true,
