@@ -956,8 +956,10 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 			// Same message precedence the direct payment flow reads failures with.
 			$message = '';
+			$response_body = !empty($fb_body) ? $fb_body : $body;
+			$response_payload = !empty($fb_data) ? $fb_data : $payload;
 
-			foreach ([$body['message'] ?? '', $body['error'] ?? '', $payload['error'] ?? ''] as $candidate) {
+			foreach ([$response_body['message'] ?? '', $response_body['error'] ?? '', $response_payload['error'] ?? ''] as $candidate) {
 
 				if (is_string($candidate) && '' !== $candidate) {
 					$message = sanitize_text_field($candidate);
@@ -1007,8 +1009,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			];
 		}
 
-		// Sandbox Mock Fallback: if both APIs fail and in Sandbox mode, simulate voucher response
-		if ($this->sandbox) {
+		// Sandbox Mock Fallback: if both APIs fail to respond and in Sandbox mode without an explicit rejection message, simulate voucher response
+		if ($this->sandbox && empty($last_message)) {
 			wc_get_logger()->warning(
 				$log_prefix . ' Both APIs failed; activating Sandbox Mock Fallback',
 				[
