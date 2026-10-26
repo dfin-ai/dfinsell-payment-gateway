@@ -54,19 +54,244 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		add_action('dfinsell_cron_event', [$this, 'handle_cron_event']);
 		add_action('wp_ajax_dfinsell_block_gateway_process', [$this,'handle_dfinsell_gateway_ajax']);
 		add_action('wp_ajax_nopriv_dfinsell_block_gateway_process', [$this,'handle_dfinsell_gateway_ajax']); 
-		
+
+		add_action('woocommerce_before_checkout_form', [$this, 'dfinsell_show_checkout_error']);
+
+		// Prevent order reuse on standard checkout for this gateway if identity changes
+		add_action('woocommerce_before_checkout_process', function() {
+			if ( isset( $_POST['payment_method'] ) && 'dfinsell' === $_POST['payment_method'] ) {
+				if ( function_exists('WC') && WC()->session ) {
+					$awaiting_order_id = WC()->session->get('order_awaiting_payment');
+					if ( $awaiting_order_id ) {
+						$awaiting_order = wc_get_order( $awaiting_order_id );
+						$posted_email   = isset($_POST['billing_email']) ? sanitize_email($_POST['billing_email']) : '';
+						$posted_phone   = isset($_POST['billing_phone']) ? sanitize_text_field($_POST['billing_phone']) : '';
+						
+						if ( $awaiting_order && ( $awaiting_order->get_billing_email() !== $posted_email || $awaiting_order->get_billing_phone() !== $posted_phone ) ) {
+							WC()->session->set( 'order_awaiting_payment', null );
+						} else {
+							$this->dfinsell_reopen_retryable_order( $awaiting_order_id );
+						}
+					}
+				}
+			}
+		});
 	}
 
 	function handle_dfinsell_gateway_ajax(){
-		$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
-		$orderID = WC()->session->get('store_api_draft_order');	
+
+		// Nonce verification
+		$nonce = isset($_POST['nonce'])
+			? sanitize_text_field(wp_unslash($_POST['nonce']))
+			: '';
+
+		if (empty($nonce) || !wp_verify_nonce($nonce, 'dfinsell_payment')) {
+			wp_send_json(['result' => 'fail', 'error' => 'Security check failed.']);
+			die;
+		}
+
+		// Pull the already-initialised gateway from the WC registry.
+		$gateways    = WC()->payment_gateways()->payment_gateways();
+		$dfinPayment = $gateways['dfinsell'] ?? null;
+
+		if (!$dfinPayment) {
+			$dfinPayment = new DFINSELL_PAYMENT_GATEWAY();
+			$dfinPayment->init_settings();
+		}
+
+		$orderID = WC()->session
+			? ( WC()->session->get('store_api_draft_order') ?: WC()->session->get('order_awaiting_payment') )
+			: null;
+
+		if ( ! empty( WC()->cart ) && ! WC()->cart->is_empty() ) {
+			$orderID = $this->dfinsell_create_block_order() ?: $orderID;
+		}
+
 		$status = [];
 		if($orderID){
 			$status = $dfinPayment->process_payment($orderID);
+		}else{
+			wc_add_notice(__('Invalid order.', 'dfinsell-payment-gateway'), 'error');
+			$status = ['result' => 'fail','error' => 'Invalid order.'];
 		}
 		
 		wp_send_json($status);
 		die;
+	}
+
+	/**
+	 * Put a retryable order back in play so a retry keeps its order number.
+	 *
+	 * WooCommerce resumes 'order_awaiting_payment' only while the order is
+	 * still pending or failed. A cancelled one is abandoned and the retry is
+	 * given a brand new order number, which is how the same customer walks away
+	 * with orders #1001, #1002, #1003 for one purchase - and why the
+	 * application, which counts failed attempts against a WooCommerce order id,
+	 * sees a first attempt every time and never reaches the merchant's limit.
+	 *
+	 * Re-opening keeps order #1001 across attempts 1..N, so the attempt count
+	 * accumulates where the merchant configured it and a later success
+	 * finalizes that same order.
+	 *
+	 * Only this gateway's own unpaid orders qualify: anything already paid, or
+	 * belonging to another gateway, is left exactly as it is.
+	 *
+	 * @param int $order_id Order the session is still pointing at.
+	 * @return void
+	 */
+	private function dfinsell_reopen_retryable_order( $order_id ) {
+
+		$order = $order_id ? wc_get_order( $order_id ) : false;
+
+		if ( ! $order instanceof WC_Order || $order->get_payment_method() !== 'dfinsell' ) {
+			return;
+		}
+
+		// Pending and failed are resumed by WooCommerce itself; nothing to do.
+		if ( ! $order->has_status( [ 'cancelled', 'on-hold' ] ) ) {
+			return;
+		}
+
+		/*
+		 * Never reopen a payment that went through. A paid order is finished,
+		 * and reopening it would put it back in the queue for another one.
+		 */
+		if (
+			$order->get_date_paid( 'edit' ) ||
+			$order->get_meta( '_dfinsell_payment_success' ) === 'yes' ||
+			$order->get_meta( '_dfinsell_state' ) === 'success'
+		) {
+			return;
+		}
+
+		$order->update_status(
+			'pending',
+			__( 'Reopened for a new Voucher Pay payment attempt.', 'dfinsell-payment-gateway' )
+		);
+
+		wc_get_logger()->info(
+			'[Order #' . $order->get_id() . '] Reopened for a new payment attempt; order number preserved.',
+			[ 'source' => 'dfinsell-payment-gateway', 'order_id' => $order->get_id() ]
+		);
+	}
+
+	/**
+	 * ── FIXED ──────────────────────────────────────────────────────────────────
+	 * Handle the block checkout AJAX payment request.
+	 *
+	 * Instead of creating a bare order with $order->save() and populating it by
+	 * hand, this runs the cart through the full WooCommerce checkout pipeline
+	 * so every item, fee, coupon, tax, shipping line and total is created
+	 * correctly from the start.
+	 *
+	 * Returns 0 if WooCommerce was unable to build the order from the session cart.
+	 *
+	 * In WooCommerce Blocks checkout, the cart and customer are populated in
+	 * session, but WC()->checkout()->create_order() relies on $_POST.
+	 *
+	 * We populate the missing POST fields from the session customer so that
+	 * coupons, taxes and totals are built by WooCommerce itself.
+	 *
+	 * @return int Order ID, or 0 on failure.
+	 */
+	private function dfinsell_create_block_order() {
+
+		$checkout = WC()->checkout();
+		$data     = $checkout->get_posted_data();
+		$customer = WC()->customer;
+
+		if ( $customer ) {
+
+			$fields = [
+				'first_name',
+				'last_name',
+				'company',
+				'address_1',
+				'address_2',
+				'city',
+				'state',
+				'postcode',
+				'country',
+				'phone',
+				'email',
+			];
+
+			foreach ( $fields as $field ) {
+
+				$key = 'billing_' . $field;
+
+				if ( ! empty( $data[ $key ] ) ) {
+					continue;
+				}
+
+				$getter = 'get_' . $key;
+
+				if ( is_callable( [ $customer, $getter ] ) ) {
+					$data[ $key ] = $customer->$getter();
+				}
+			}
+		}
+
+		if ( empty( $data['payment_method'] ) ) {
+			$data['payment_method'] = 'dfinsell';
+		}
+
+		// Prevent reusing an order if the email address OR phone number doesn't match
+		if ( WC()->session ) {
+			$awaiting_order_id = WC()->session->get('order_awaiting_payment') ?: WC()->session->get('store_api_draft_order');
+			if ( $awaiting_order_id ) {
+				$awaiting_order = wc_get_order( $awaiting_order_id );
+				$posted_email   = sanitize_email( $data['billing_email'] ?? '' );
+				$posted_phone   = sanitize_text_field( $data['billing_phone'] ?? '' );
+				
+				if ( $awaiting_order && ( $awaiting_order->get_billing_email() !== $posted_email || $awaiting_order->get_billing_phone() !== $posted_phone ) ) {
+					WC()->session->set( 'order_awaiting_payment', null );
+					WC()->session->set( 'store_api_draft_order', null );
+				} else {
+					/*
+					 * Same customer retrying: keep their order number so the
+					 * application's per-order attempt count keeps counting.
+					 * create_order() below reads 'order_awaiting_payment', so
+					 * the pointer is moved there when the draft order is the
+					 * only one the session still holds.
+					 */
+					WC()->session->set( 'order_awaiting_payment', $awaiting_order_id );
+					$this->dfinsell_reopen_retryable_order( $awaiting_order_id );
+				}
+			}
+		}
+
+		$order_id = $checkout->create_order( $data );
+
+		if ( is_wp_error( $order_id ) ) {
+
+			wc_get_logger()->error(
+				'Could not create order for block checkout: ' . $order_id->get_error_message(),
+				[
+					'source' => 'dfinsell-payment-gateway',
+				]
+			);
+
+			return 0;
+		}
+
+		if ( WC()->session ) {
+			WC()->session->set( 'order_awaiting_payment', $order_id );
+		}
+
+		$created = wc_get_order( $order_id );
+
+		wc_get_logger()->info(
+			'Created order for block checkout',
+			[
+				'source'   => 'dfinsell-payment-gateway',
+				'order_id' => $order_id,
+				'total'    => $created ? $created->get_total() : null,
+				'email'    => $created ? $created->get_billing_email() : null,
+			]
+		);
+
+		return $order_id;
 	}
 
 	/**
@@ -194,6 +419,27 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 		return $links;
 	}
 
+	public function dfinsell_show_checkout_error()
+	{
+		if (!function_exists('WC') || !WC()->session) return;
+
+		$error = WC()->session->get('dfinsell_error');
+		if (!$error) return;
+
+		$messages = [
+			'failed'    => 'Payment failed. Please try again.',
+			'cancelled' => 'Payment was cancelled.',
+			'expired'   => 'Payment session expired. Please try again.'
+		];
+
+		// Clear error immediately
+		WC()->session->__unset('dfinsell_error');
+
+		if (isset($messages[$error])) {
+			wc_add_notice($messages[$error], 'error');
+		}
+	}
+
 	/**
 	 * Check the environment and display notices if necessary.
 	 */
@@ -212,8 +458,6 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	 */
 	public function dfinsell_handle_check_payment_status_request()
 	{
-		check_ajax_referer('dfinsell_payment', 'security');
-
 		// Sanitize and validate the order ID from $_POST
 		$order_id = isset($_POST['order_id']) ? intval(sanitize_text_field(wp_unslash($_POST['order_id']))) : null;
 		if (!$order_id) {
@@ -238,15 +482,64 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 	        return new WP_REST_Response(['error' => esc_html__('Order not found', 'dfinsell-payment-gateway')], 404);
 	    }
 
-		$payment_token = $order->get_meta('_dfinsell_pay_id');
-		$public_key    = $order->get_meta('_dfinsell_public_key');
+		$order_key = isset($_POST['order_key'])
+			? sanitize_text_field(wp_unslash($_POST['order_key']))
+			: '';
+
+		$security = isset($_POST['security'])
+			? sanitize_text_field(wp_unslash($_POST['security']))
+			: '';
+
+		$log_prefix = "[Order #{$order_id}]";
+
+		// -------------------------
+		// SECURITY CHECK (NONCE OR ORDER KEY)
+		// -------------------------
+		$is_nonce_valid = !empty($security) && wp_verify_nonce($security, 'dfinsell_payment');
+		$is_key_valid   = !empty($order_key) && hash_equals($order->get_order_key(), $order_key);
+
+		if (!$is_nonce_valid && !$is_key_valid) {
+
+			wc_get_logger()->info(
+				$log_prefix . ' CheckStatus | Invalid security token / order key',
+				['source' => 'dfinsell-payment-gateway']
+			);
+
+			wp_send_json_error([
+				'message'      => 'Security check failed.',
+				'stop_polling' => true
+			]);
+
+			wp_die();
+		}
+
+		$payment_token = $order->get_meta('_dfinsell_pay_id') ?: $order->get_meta('_dfinsell_pay_id');
+
+		$public_key = $order->get_meta('_dfinsell_public_key');
+		if (empty($public_key)) {
+			$accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
+			if (is_string($accounts)) {
+				$accounts = maybe_unserialize($accounts);
+			}
+			$settings = get_option('woocommerce_dfinsell_settings', []);
+			$is_sandbox = ($settings['sandbox'] ?? 'no') === 'yes';
+			if (!empty($accounts) && is_array($accounts)) {
+				if (isset($accounts['live_public_key']) || isset($accounts['sandbox_public_key'])) {
+					$first_account = $accounts;
+				} else {
+					$first_account = reset($accounts);
+				}
+				$public_key = $is_sandbox ? ($first_account['sandbox_public_key'] ?? '') : ($first_account['live_public_key'] ?? '');
+			}
+		}
+
 		$transactionStatusApiUrl = $this->get_api_url('/api/update-txn-status');
 		$response = wp_remote_post($transactionStatusApiUrl, [
 			'method'    => 'POST',
 			'body'      => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
 			'headers'   => [
 				'Content-Type'  => 'application/json',
-				'Authorization' => 'Bearer ' . $public_key,
+				'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
 			],
 			'timeout'   => 15,
 		]);
@@ -301,30 +594,83 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 
 	public function handle_popup_close()
 	{
-		check_ajax_referer('dfinsell_payment', 'security');
+		$order_id = isset($_POST['order_id'])
+			? sanitize_text_field(wp_unslash($_POST['order_id']))
+			: 'unknown';
 
-		// Get the order ID from the request
-		$order_id = isset($_POST['order_id']) ? sanitize_text_field(wp_unslash($_POST['order_id'])) : null;
+		$order_key = isset($_POST['order_key'])
+			? sanitize_text_field(wp_unslash($_POST['order_key']))
+			: '';
 
-		// Validate order ID
-		if (!$order_id) {
-			wp_send_json_error(['message' => 'Order ID is missing.']);
+		$security = isset($_POST['security'])
+			? sanitize_text_field(wp_unslash($_POST['security']))
+			: '';
+
+		$log_prefix = "[Order #{$order_id}]";
+
+		// -------------------------
+		// ORDER CHECK
+		// -------------------------
+		$order = wc_get_order($order_id);
+
+		if (!$order) {
+
+			wc_get_logger()->info(
+				$log_prefix . ' PopupClose | Order not found',
+				['source' => 'dfinsell-payment-gateway']
+			);
+
+			wp_send_json_error([
+				'reload'       => false,
+				'stop_polling' => true,
+				'message'      => 'Order not found.'
+			]);
+
 			wp_die();
 		}
 
-		// Fetch the WooCommerce order
-		$order = wc_get_order($order_id);
+		// -------------------------
+		// SECURITY CHECK (NONCE OR ORDER KEY)
+		// -------------------------
+		$is_nonce_valid = !empty($security) && wp_verify_nonce($security, 'dfinsell_payment');
+		$is_key_valid   = !empty($order_key) && hash_equals($order->get_order_key(), $order_key);
 
-		// Check if the order exists
-		if (!$order) {
-			wp_send_json_error(['message' => 'Order not found in WordPress.']);
+		if (!$is_nonce_valid && !$is_key_valid) {
+
+			wc_get_logger()->info(
+				$log_prefix . ' PopupClose | Invalid security token / order key',
+				['source' => 'dfinsell-payment-gateway']
+			);
+
+			wp_send_json_error([
+				'reload'       => false,
+				'stop_polling' => true,
+				'message'      => 'Security verification failed.'
+			]);
+
 			wp_die();
 		}
 
 		//Get uuid from WP
-		$payment_token = $order->get_meta('_dfinsell_pay_id');
+		$payment_token = $order->get_meta('_dfinsell_pay_id') ?: $order->get_meta('_dfinsell_pay_id');
 
-		$public_key    = $order->get_meta('_dfinsell_public_key');
+		$public_key = $order->get_meta('_dfinsell_public_key');
+		if (empty($public_key)) {
+			$accounts = get_option('woocommerce_dfinsell_payment_gateway_accounts', []);
+			if (is_string($accounts)) {
+				$accounts = maybe_unserialize($accounts);
+			}
+			$settings = get_option('woocommerce_dfinsell_settings', []);
+			$is_sandbox = ($settings['sandbox'] ?? 'no') === 'yes';
+			if (!empty($accounts) && is_array($accounts)) {
+				if (isset($accounts['live_public_key']) || isset($accounts['sandbox_public_key'])) {
+					$first_account = $accounts;
+				} else {
+					$first_account = reset($accounts);
+				}
+				$public_key = $is_sandbox ? ($first_account['sandbox_public_key'] ?? '') : ($first_account['live_public_key'] ?? '');
+			}
+		}
 
 		// Proceed only if the order status is 'pending'
 		if ($order->get_status() === 'pending' || $order->get_status() === 'processing' || $order->get_status() === 'canceled') {
@@ -335,7 +681,7 @@ class DFINSELL_PAYMENT_GATEWAY_Loader
 				'body'      => wp_json_encode(['order_id' => $order_id, 'payment_token' => $payment_token]),
 				'headers'   => [
 					'Content-Type'  => 'application/json',
-					'Authorization' => 'Bearer ' . $public_key,
+					'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
 				],
 				'timeout'   => 15,
 			]);

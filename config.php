@@ -7,17 +7,16 @@ if (!defined('ABSPATH')) {
 return [
     'id'   => 'dfinsell',
     'name' => 'DFin Sell Payment Gateway',
-    'version' => '1.1.5',
-	'title' => 'DFin Sell Payment Gateway',
-    'description' => 'This plugin allows you to accept payments in USD through a secure payment gateway integration. Customers can complete their payment process with ease and security',
+    'version' => '1.1.6',
+	'title' => 'Dfin Voucher Pay',
+    'description' => 'Purchase and pay quickly with a voucher',
     'icon' => '',
 
-    'protocol' => is_ssl() ? 'https://' : 'http://',
+    'protocol' => 'https://',
     'host'     => 'sell.dfin.ai',
 
     'requirements' => [
         'php' => '8.0',
-        'wc'  => '6.5.4',
     ],
 
     'paths' => [

@@ -74,6 +74,8 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		add_filter('woocommerce_admin_order_preview_line_items', [$this, 'dfinsell_add_custom_label_to_order_row'], 10, 2);
 
 		add_filter('woocommerce_available_payment_gateways', [$this, 'hide_custom_payment_gateway_conditionally']);
+
+		add_action('woocommerce_thankyou_' . $this->id, [$this, 'dfinsell_thankyou_payment_link_notice']);
 	}
 
 	private function get_api_url($endpoint)
@@ -229,7 +231,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$form_fields = [
 			'enabled' => [
 				'title' => __('Enable/Disable', 'dfinsell-payment-gateway'),
-				'label' => __('Enable DFin Sell Payment Gateway', 'dfinsell-payment-gateway'),
+				'label' => __('Enable Voucher Pay', 'dfinsell-payment-gateway'),
 				'type' => 'checkbox',
 				'description' => '',
 				'default' => 'yes',
@@ -238,14 +240,14 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 				'title' => __('Title', 'dfinsell-payment-gateway'),
 				'type' => 'text',
 				'description' => __('This controls the title which the user sees during checkout.', 'dfinsell-payment-gateway'),
-				'default' => __('Credit/Debit Card', 'dfinsell-payment-gateway'),
+				'default' => __('Voucher Pay', 'dfinsell-payment-gateway'),
 				'desc_tip' => __('Enter the title of the payment gateway as it will appear to customers during checkout.', 'dfinsell-payment-gateway'),
 			],
 			'description' => [
 				'title' => __('Description', 'dfinsell-payment-gateway'),
 				'type' => 'text',
 				'description' => __('Provide a brief description of the DFin Sell Payment Gateway option.', 'dfinsell-payment-gateway'),
-				'default' => 'Description of the DFin Sell Payment Gateway Option.',
+				'default' => __('Purchase and pay quickly with a voucher', 'dfinsell-payment-gateway'),
 				'desc_tip' => __('Enter a brief description that explains the DFin Sell Payment Gateway option.', 'dfinsell-payment-gateway'),
 			],
 			'instructions' => [
@@ -558,358 +560,862 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 			wc_get_logger()->info("Sandbox mode: test order flag set for Order ID: {$order_id}", $logger_context);
 		}
-		$last_failed_account = null; // Track the last account that reached the limit
-		$previous_account = null;
-		// **Start Payment Process**
-		while (true) {
-			$account = $this->get_next_available_account($used_accounts);
+		$log_prefix = "[Order #{$order_id}]";
 
-			if (empty($account) || !is_array($account)) {
-				// **Ensure email is sent to the last failed account**
-				if ($last_failed_account) {
-					wc_get_logger()->info("Sending notification to account '{$last_failed_account['title']}' due to no available alternatives.", $logger_context);
-					// Only send switch email if more than one valid account exists
-					if ($this->has_multiple_accounts()) {
-						$this->send_account_switch_email($last_failed_account, $account);
-					} else {
-						wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', $logger_context);
-					}
-				}
-				wc_add_notice(__('No available payment accounts.', 'dfinsell-payment-gateway'), 'error');
-				return ['result' => 'fail'];
+		// -------------------------------------------------
+		// VOUCHER EMAIL (SENT BY DFINSELL)
+		// -------------------------------------------------
+		// Checkout creates no payment link. DFinSell emails the customer a
+		// voucher, and the payment link behind its button is created when they
+		// open it. All this plugin does is ask for that email and repeat what
+		// DFinSell says about it.
+		$voucher = $this->dfinsell_request_voucher_email($order);
+
+		if (!$voucher['success']) {
+
+			$voucher_error = $voucher['message'];
+
+			// Classic checkout only relays queued notices in its failure response.
+			if (!$this->is_block_checkout_request() && is_checkout()) {
+				wc_add_notice($voucher_error, 'error');
 			}
 
-			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
+			return $this->build_response(
+				'fail',
+				$voucher_error,
+				[],
+				400,
+				$order_id
+			);
+		}
 
-			$accStatusApiUrl = $this->get_api_url('/api/check-merchant-status');
-			$merchant_status_data = [
-			    'is_sandbox'     => $this->sandbox,
-			    'amount'         => $order->get_total(),
-			    'api_public_key' => $public_key,
+		// Only now is there a voucher to await.
+		$order->update_status('pending', __('Awaiting voucher purchase.', 'dfinsell-payment-gateway'));
+
+		$this->dfinsell_record_voucher_sent($order, $voucher['data']);
+
+		wc_get_logger()->info(
+			$log_prefix . ' Voucher email requested',
+			[
+				'source'    => 'dfinsell-payment-gateway',
+				'order_id'  => $order_id,
+				'reference' => $voucher['data']['reference'] ?? null,
+			]
+		);
+
+		if (WC()->cart) {
+			WC()->cart->empty_cart();
+		}
+
+		return $this->build_response(
+			'success',
+			$voucher['message'],
+			[
+				'payment_status' => 'pending',
+				'order_received' => [
+					'order_number' => $order->get_order_number(),
+					'email'        => $order->get_billing_email(),
+					'items'        => $this->dfinsell_get_summary_rows($order),
+					'amount_due'   => $this->dfinsell_plain_price($order->get_total(), $order),
+					'site_name'    => wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES),
+					// Shown on the checkout exactly as DFinSell worded it.
+					'message'      => $voucher['message'],
+					'reference'    => $voucher['data']['reference'] ?? '',
+					// The same link the email's button carries, so "Not receiving the
+					// email? Click here" opens exactly what the email would.
+					'purchase_url' => esc_url_raw((string) ($voucher['data']['purchase_url'] ?? ''), ['https', 'http']),
+				],
+				// Followed by non-AJAX submissions such as the order-pay page.
+				'redirect'       => $order->get_checkout_order_received_url(),
+			],
+			200,
+			$order_id
+		);
+	}
+
+	private function build_response(
+		string $result,
+		string $message = '',
+		array $data = [],
+		int $code = 200,
+		?int $order_id = null
+	) {
+		return [
+			'result'   => $result, // success | fail
+			'message'  => $message,
+			'data'     => $data,
+			'order_id' => $order_id,
+			'code'     => $code,
+			'success'  => $result === 'success',
+		];
+	}
+
+	/**
+	 * Price as plain text, e.g. "$90.00".
+	 *
+	 * @param float    $amount Amount.
+	 * @param WC_Order $order  Order supplying the currency.
+	 * @return string
+	 */
+	private function dfinsell_plain_price($amount, $order) {
+
+		return html_entity_decode(
+			wp_strip_all_tags(wc_price($amount, ['currency' => $order->get_currency()])),
+			ENT_QUOTES,
+			'UTF-8'
+		);
+	}
+
+	/**
+	 * Order summary rows (items, then discounts/shipping/fees/tax) as plain text.
+	 *
+	 * @param WC_Order $order Order being paid.
+	 * @return array List of ['label' => string, 'value' => string].
+	 */
+	private function dfinsell_get_summary_rows($order) {
+
+		$rows = [];
+
+		foreach ($order->get_items() as $item) {
+
+			$label = $item->get_name();
+
+			if ($item->get_quantity() > 1) {
+				$label .= ' ×' . $item->get_quantity();
+			}
+
+			$rows[] = [
+				'label' => $label,
+				'value' => $this->dfinsell_plain_price($order->get_line_total($item, true), $order),
 			];
+		}
 
-			// Use cache for status check
-			$dfinsell_cache_key = 'merchant_status_' . md5($public_key);
-			$merchant_status_response = $this->get_cached_api_response($accStatusApiUrl, $merchant_status_data, $dfinsell_cache_key);
+		// The subtotal repeats the items above and the total gets its own row.
+		foreach ($order->get_order_item_totals() as $key => $total) {
 
-			if (
-			    !is_array($merchant_status_response) ||
-			    !isset($merchant_status_response['status']) ||
-			    $merchant_status_response['status'] !== 'success'
-			) {
-			    wc_get_logger()->warning("Account '{$account['title']}' failed merchant status check.", [
-			        'source'  => 'dfinsell-payment-gateway',
-			        'context' => [
-			            'order_id'      => $order_id,
-			            'account_title' => $account['title'] ?? 'unknown',
-			            'response'      => $merchant_status_response,
-			        ],
-			    ]);
-
-			    if (!empty($lock_key)) {
-			        $this->release_lock($lock_key);
-			    }
-
-			    // 👇 THIS LINE PREVENTS INFINITE LOOP
-				$used_accounts[] = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
-
-			    continue; // Try next account
+			if (in_array($key, ['cart_subtotal', 'payment_method', 'order_total'], true)) {
+				continue;
 			}
 
+			$rows[] = [
+				'label' => rtrim(wp_strip_all_tags($total['label']), ': '),
+				'value' => html_entity_decode(wp_strip_all_tags($total['value']), ENT_QUOTES, 'UTF-8'),
+			];
+		}
 
-			/* ========================== END ========================== */
+		return $rows;
+	}
 
-			$lock_key = $account['lock_key'] ?? null;
+	/**
+	 * Ask DFinSell to email the customer their voucher.
+	 *
+	 * Nothing is created here. DFinSell records what the payment will be for,
+	 * emails a signed link, and only when the customer opens that link does it
+	 * call request-payment and raise the actual payment link. The plugin's part
+	 * is to ask for the email and repeat what DFinSell says about it.
+	 *
+	 * @param WC_Order $order Order being paid.
+	 * @return array ['success' => bool, 'message' => string, 'data' => array]
+	 */
+	private function dfinsell_request_voucher_email($order) {
 
-			// Add order note mentioning account name
-			$order->add_order_note(__('Processing Payment Via: ', 'dfinsell-payment-gateway') . $account['title']);
+		$order_id   = $order->get_id();
+		$log_prefix = "[Order #{$order_id}]";
 
-			// **Prepare API Data**
-			$public_key = $this->sandbox ? $account['sandbox_public_key'] : $account['live_public_key'];
-			$secret_key = $this->sandbox ? $account['sandbox_secret_key'] : $account['live_secret_key'];
-			$data = $this->dfinsell_prepare_payment_data($order, $public_key, $secret_key);
+		$accounts = $this->get_all_available_accounts();
 
-			// **Check Transaction Limit**
-			$transactionLimitApiUrl = $this->get_api_url('/api/dailylimit');
-			$transaction_limit_response = wp_remote_post($transactionLimitApiUrl, [
-				'method' => 'POST',
-				'timeout' => 30,
-				'body' => $data,
-				'headers' => [
-					'Content-Type' => 'application/x-www-form-urlencoded',
-					'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
-				],
-				'sslverify' => true,
-			]);
+		if (empty($accounts)) {
 
-			$transaction_limit_data = json_decode(wp_remote_retrieve_body($transaction_limit_response), true);
-
-			// **Handle Account Limit Error**
-			if (isset($transaction_limit_data['status']) && $transaction_limit_data['status'] === 'error') {
-				$error_message = sanitize_text_field($transaction_limit_data['message']);
-				wc_get_logger()->warning("['{$account['title']}'] exceeded daily transaction limit: $error_message", $logger_context);
-
-				if (!empty($lock_key)) {
-					$this->release_lock($lock_key);
-				}
-
-				$last_failed_account = $account;
-				// Switch to next available account
-				$used_accounts[] = $account['title'];
-				$new_account = $this->get_next_available_account($used_accounts);
-
-				// **Send Email Notification **
-				if ($new_account) {
-					wc_get_logger()->info("Switched to fallback account '{$new_account['title']}' after '{$account['title']}' limit reached.", $logger_context);
-
-					// Send email only to the previously failed account
-					if ($previous_account) {
-						//$this->send_account_switch_email($previous_account, $account);
-					}
-
-					$previous_account = $account;
-					continue; // Retry with the new account
-				} else {
-					// **No available accounts left, send email to the last failed account**
-					if ($last_failed_account) {
-						// Only send switch email if more than one valid account exists
-						if ($this->has_multiple_accounts()) {
-							$this->send_account_switch_email($last_failed_account, $account);
-						} else {
-							wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', $logger_context);
-						}
-					}
-					wc_add_notice(__('All accounts have reached their transaction limit.', 'dfinsell-payment-gateway'), 'error');
-					return ['result' => 'fail'];
-				}
-			}
-
-			// **Proceed with Payment**
-			wc_get_logger()->info("Sending payment request using account '{$account['title']}'", $logger_context);
-			$apiPath = '/api/request-payment';
-			$url = esc_url($this->base_url . $apiPath);
-
-			$order->update_meta_data('_order_origin', 'dfinsell_payment_gateway');
-			$order->save();
-			
-			$response = wp_remote_post($url, [
-				'method' => 'POST',
-				'timeout' => 30,
-				'body' => $data,
-				'headers' => [
-					'Content-Type' => 'application/x-www-form-urlencoded',
-					'Authorization' => 'Bearer ' . sanitize_text_field($data['api_public_key']),
-				],
-				'sslverify' => true,
-			]);
-
-			// **Handle Response**
-			if (is_wp_error($response)) {
-				wc_get_logger()->error("HTTP error during payment request: {$response->get_error_message()}", $logger_context);
-				if (!empty($lock_key)) {
-					$this->release_lock($lock_key);
-				}
-				wc_add_notice(__('Payment error: Unable to process.', 'dfinsell-payment-gateway'), 'error');
-				return ['result' => 'fail'];
-			}
-
-			$response_data = json_decode(wp_remote_retrieve_body($response), true);
-
-			// Ensure sensitive data is sanitized or omitted if necessary.
-			$response_data_str = is_array($response_data) ? json_encode($response_data) : (string)$response_data;
-
-			// Log the response data.
-			wc_get_logger()->info('Payment raw response: ' . $response_data_str, $logger_context);
-
-			//BeaverTech Code Change start
-			if (!empty($response_data['status']) && $response_data['status'] === 'success' && !empty($response_data['data']['payment_link'])) {
-
-				if($response_data['data']['payment_status'] == 'success'){
-					$current_order_status = $order->get_status();
-					$target_order_status = $response_data['data']['payment_status'];
-
-					// **Update Order Status**
-					$order->update_status('processing', 'Order marked as processing by DFin Sell.');
-
-					if (WC()->cart) {
-						WC()->cart->empty_cart();
-					}
-				
-					return [
-						'result'       => 'success',
-						'order_id'     => $order->get_id(),
-						'payment_status'     => $response_data['data']['payment_status'],
-						'redirect_url' => esc_url($order->get_checkout_order_received_url()),
-					];
-				}
-				//BeaverTech Code Change end
-				if ($last_failed_account) {
-					wc_get_logger()->info("Sending email before returning success to: '{$last_failed_account['title']}'", ['source' => 'dfinsell-payment-gateway']);
-					// Only send switch email if more than one valid account exists
-					if ($this->has_multiple_accounts()) {
-						$this->send_account_switch_email($last_failed_account, $account);
-					} else {
-						wc_get_logger()->info('Skipping account switch email because only one valid account is configured.', ['source' => 'dfinsell-payment-gateway']);
-					}
-				}
-				//$last_successful_account = $account;
-				// Save pay_id to order meta
-				$pay_id = $response_data['data']['pay_id'] ?? '';
-				if (!empty($pay_id)) {
-					$order->update_meta_data('_dfinsell_pay_id', $pay_id);
-					$order->update_meta_data('_dfinsell_public_key', $public_key);
-					$order->update_meta_data('_dfinsell_secret_key', $secret_key);
-					$order->save();
-				}
-
-				$table_name = $wpdb->prefix . 'order_payment_link';
-
-				// Add simple cache to avoid hitting DB on every request
-				$dfinsell_cache_key    = 'dfinsell_table_exists_' . md5($table_name);
-				$cache_group  = 'dfinsell_payment_gateway';
-
-				$table_exists = wp_cache_get($dfinsell_cache_key, $cache_group);
-
-				if (false === $table_exists) {
-				    // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.PreparedSQL.NotPrepared
-				    $table_exists = $wpdb->get_var(
-				        $wpdb->prepare("SHOW TABLES LIKE %s", $table_name)
-				    );
-
-				    // Cache result for 1 hour
-				    wp_cache_set($dfinsell_cache_key, $table_exists, $cache_group, HOUR_IN_SECONDS);
-				}
-
-				if ($table_exists !== $table_name) {
-				    // Create the table if not exists
-				    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-
-				    $charset_collate = $wpdb->get_charset_collate();
-
-				    $create_sql = "CREATE TABLE $table_name (
-				        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-				        order_id BIGINT UNSIGNED NOT NULL,
-				        uuid VARCHAR(100) NOT NULL,
-				        payment_link TEXT NOT NULL,
-				        customer_email VARCHAR(191),
-				        amount DECIMAL(18,2),
-				        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-				    ) $charset_collate;";
-
-				    dbDelta($create_sql);
-
-				    wc_get_logger()->info("Created missing `$table_name` table.", [
-				        'source' => 'dfinsell-payment-gateway',
-				        'context' => ['table' => $table_name],
-				    ]);
-				}
-
-				// Prepare amount
-				$formatted_amount = number_format((float) ($response_data['data']['amount'] ?? 0), 2, '.', '');
-
-				// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- Insert is safely prepared with format specifiers
-				$wpdb->insert(
-				    $table_name,
-				    [
-				        'order_id'       => $order_id,
-				        'uuid'           => sanitize_text_field($pay_id),
-				        'payment_link'   => esc_url_raw($response_data['data']['payment_link'] ?? ''),
-				        'customer_email' => sanitize_email($response_data['data']['customer_email'] ?? ''),
-				        'amount'         => $formatted_amount,
-				        'created_at'     => current_time('mysql', 1),
-				    ],
-				    ['%d', '%s', '%s', '%s', '%s', '%s']
-				);
-
-				wc_get_logger()->info('Stored order payment link to DB.', [
-				    'source'  => 'dfinsell-payment-gateway',
-				    'context' => [
-				        'order_id' => $order_id,
-				        'uuid'     => $pay_id,
-				        'amount'   => $formatted_amount,
-				    ],
-				]);
-
-				// **Update Order Status**
-				$order->update_status('pending', __('Payment pending.', 'dfinsell-payment-gateway'));
-
-				// **Add Order Note (If Not Exists)**
-				// translators: %s represents the account title.
-				$new_note = sprintf(
-					/* translators: %s represents the account title. */
-					esc_html__('Payment initiated via DFin Sell. Awaiting your completion ( %s )', 'dfinsell-payment-gateway'),
-					esc_html($account['title'])
-				);
-				$existing_notes = $order->get_customer_order_notes();
-
-				if (!array_filter($existing_notes, fn($note) => trim(wp_strip_all_tags($note->comment_content)) === trim($new_note))) {
-					$order->add_order_note($new_note, false, true);
-				}				
-
-				$order_id   = $order->get_id();
-				$uuid = sanitize_text_field($response_data['data']['pay_id']);
-
-				$json_data = json_encode($response_data);
-				wc_get_logger()->info(
-				    'Received successful payment API response. Saving order payment link data.',
-				    [
-				        'source'  => 'dfinsell-payment-gateway',
-				        'context' => [
-				            'order_id'       => $order_id,
-				            'uuid'           => $uuid,
-				            'payment_link'   => $response_data['data']['payment_link'] ?? '',
-				            'customer_email' => $response_data['data']['customer_email'] ?? '',
-				            'amount'         => $response_data['data']['amount'] ?? '',
-				        ],
-				    ]
-				);
-
-				if (!empty($lock_key)) {
-					$this->release_lock($lock_key);
-				}
-				return [
-		            'result'       => 'success',
-		            'order_id'     => $order->get_id(),
-		            'payment_link' => esc_url($response_data['data']['payment_link']),
-		        ];
-			}
-
-			// **Handle Payment Failure**
-			if (!empty($response_data['message'])) {
-				$error_message = sanitize_text_field($response_data['message']);
-			} elseif (!empty($response_data['error'])) {
-				$error_message = sanitize_text_field($response_data['error']);
-			} elseif (!empty($response_data['data']['error'])) {
-				$error_message = sanitize_text_field($response_data['data']['error']);
-			} else {
-				$error_message = __('Unknown error occurred.', 'dfinsell-payment-gateway');
-			}
-
-			wc_get_logger()->error("Final payment failure using '{$account['title']}': $error_message", $logger_context);
-			// **Add Order Note for Failed Payment**
-			$order->add_order_note(
-				sprintf(
-					/* translators: 1: Account title, 2: Error message. */
-					esc_html__('Payment failed using account: %1$s. Error: %2$s', 'dfinsell-payment-gateway'),
-					esc_html($account['title']),
-					esc_html($error_message)
-				)
+			wc_get_logger()->error(
+				$log_prefix . ' Voucher not requested: no eligible account',
+				['source' => 'dfinsell-payment-gateway', 'order_id' => $order_id]
 			);
 
-			// Add WooCommerce error notice
-			wc_add_notice(__('Payment error: ', 'dfinsell-payment-gateway') . $error_message, 'error');
-			if (!empty($lock_key)) {
-				$this->release_lock($lock_key);
-			}
-			// return ['result' => 'fail'];			 
-	        return [
-	            'result'         => 'fail',
-	            'payment_result' => [
-	                'status'  => 'failure',
-	                'message' => 'fail message',
-	            ],
-	        ];
+			return [
+				'success' => false,
+				'message' => __('No eligible payment provider available.', 'dfinsell-payment-gateway'),
+				'data'    => [],
+			];
 		}
+
+		$selected_account = null;
+		$payment_data     = null;
+		$last_error_data  = null;
+
+		foreach ($accounts as $account) {
+
+			$public_key = $this->sandbox
+				? $account['sandbox_public_key']
+				: $account['live_public_key'];
+
+			$secret_key = $this->sandbox
+				? $account['sandbox_secret_key']
+				: $account['live_secret_key'];
+
+			// The same payload request-payment is given, so the voucher is raised
+			// for exactly the order the payment will be for.
+			$data = $this->dfinsell_prepare_payment_data($order, $public_key, $secret_key);
+
+			if (is_array($data) && ($data['result'] ?? '') === 'fail') {
+				wc_get_logger()->warning(
+					$log_prefix . ' Account preparation failed',
+					[
+						'source'        => 'dfinsell-payment-gateway',
+						'account_title' => $account['title'] ?? null,
+						'error'         => $data['error'] ?? null,
+					]
+				);
+				continue;
+			}
+
+			// --- START DAILY LIMIT CHECK ---
+			$limit_url = $this->get_api_url('/api/dailylimit');
+
+			$limit_resp = wp_remote_post($limit_url, [
+				'method'  => 'POST',
+				'timeout' => 30,
+				'body'    => $data,
+				'headers' => [
+					'Content-Type'  => 'application/x-www-form-urlencoded',
+					'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
+				],
+			]);
+
+			if (is_wp_error($limit_resp)) {
+				wc_get_logger()->warning(
+					$log_prefix . ' Daily limit API WP error: ' . $limit_resp->get_error_message(),
+					[
+						'source'        => 'dfinsell-payment-gateway',
+						'account_title' => $account['title'] ?? null,
+					]
+				);
+				continue;
+			}
+
+			$limit_data = json_decode(wp_remote_retrieve_body($limit_resp), true);
+			$limit_data = is_array($limit_data) ? $limit_data : [];
+
+			if (($limit_data['status'] ?? '') === 'error') {
+				wc_get_logger()->warning(
+					$log_prefix . ' Account rejected by daily limit API',
+					[
+						'source'        => 'dfinsell-payment-gateway',
+						'account_title' => $account['title'] ?? null,
+						'response'      => $limit_data,
+					]
+				);
+
+				$last_error_data = $limit_data;
+				continue;
+			}
+			// --- END DAILY LIMIT CHECK ---
+
+			wc_get_logger()->info(
+				$log_prefix . ' Account selected',
+				[
+					'source'        => 'dfinsell-payment-gateway',
+					'account_title' => $account['title'] ?? null,
+				]
+			);
+
+			$selected_account = $account;
+			$payment_data     = $data;
+			break;
+		}
+
+		if (!$selected_account) {
+			if (!empty($last_error_data)) {
+				if (!empty($last_error_data['max_limit_reached'])) {
+					return [
+						'success' => false,
+						'message' => __('The transaction amount exceeds the maximum allowed limit.', 'dfinsell-payment-gateway'),
+						'data'    => [],
+					];
+				}
+
+				$order->update_meta_data('_dfinsell_limit_exceeded', true);
+				$order->save();
+
+				return [
+					'success' => false,
+					'message' => $last_error_data['message'] ?? __('Payment limit error.', 'dfinsell-payment-gateway'),
+					'data'    => [],
+				];
+			}
+
+			// Sandbox Mock Fallback: if in Sandbox mode, simulate voucher response
+			if ($this->sandbox) {
+				wc_get_logger()->warning(
+					$log_prefix . ' No eligible account; activating Sandbox Mock Fallback',
+					[
+						'source'   => 'dfinsell-payment-gateway',
+						'order_id' => $order_id,
+					]
+				);
+
+				$mock_uuid    = wp_generate_uuid4();
+				$purchase_url = esc_url_raw($this->base_url . '/voucher/redeem/' . $mock_uuid);
+
+				return [
+					'success' => true,
+					'message' => __('Sandbox mode: voucher simulated successfully.', 'dfinsell-payment-gateway'),
+					'data'    => [
+						'voucher_id'      => 'sandbox_' . $mock_uuid,
+						'reference'       => (string) $order->get_order_number(),
+						'amount'          => (float) $order->get_total(),
+						'currency'        => $order->get_currency(),
+						'customer_email'  => sanitize_email($order->get_billing_email()),
+						'purchase_url'    => $purchase_url,
+						'is_sandbox_mock' => true,
+					],
+				];
+			}
+
+			return [
+				'success' => false,
+				'message' => __('No eligible payment provider available.', 'dfinsell-payment-gateway'),
+				'data'    => [],
+			];
+		}
+
+		$account    = $selected_account;
+		$data       = $payment_data;
+		$public_key = $this->sandbox
+			? $account['sandbox_public_key']
+			: $account['live_public_key'];
+
+		$data['items'] = $this->dfinsell_get_voucher_items($order);
+
+		/*
+		 * Which attempt this voucher is for. Without it the application keys
+		 * the voucher on the order number alone, so a retry of the same order
+		 * is treated as the merchant resending the first voucher and hands the
+		 * customer back the payment page of the attempt that already failed.
+		 *
+		 * meta_data.order_id is deliberately left as the plain order number:
+		 * that is what the application counts failed attempts against, and it
+		 * must stay the same across attempts for the limit to work.
+		 */
+		$data['reference'] = $this->dfinsell_voucher_reference($order);
+
+		$api_url = esc_url($this->base_url . '/api/voucher/send');
+
+		$response = wp_remote_post($api_url, [
+			'method'    => 'POST',
+			'timeout'   => 30,
+			'body'      => $data,
+			'headers'   => [
+				'Content-Type'  => 'application/x-www-form-urlencoded',
+				'Accept'        => 'application/json',
+				'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
+			],
+			'sslverify' => true,
+		]);
+
+		if (is_wp_error($response)) {
+			wc_get_logger()->error(
+				$log_prefix . ' Voucher request failed to reach the API: ' . $response->get_error_message(),
+				[
+					'source'        => 'dfinsell-payment-gateway',
+					'order_id'      => $order_id,
+					'account_title' => $account['title'] ?? null,
+					'error'         => $response->get_error_message(),
+				]
+			);
+
+			return [
+				'success' => false,
+				'message' => __('We could not reach the voucher service. Please try again in a moment.', 'dfinsell-payment-gateway'),
+				'data'    => [],
+			];
+		}
+
+		$code     = (int) wp_remote_retrieve_response_code($response);
+		$raw_body = wp_remote_retrieve_body($response);
+		$body     = json_decode($raw_body, true);
+		$body     = is_array($body) ? $body : [];
+		$payload  = isset($body['data']) && is_array($body['data']) ? $body['data'] : [];
+
+		$message = isset($body['message']) ? sanitize_text_field($body['message']) : '';
+
+		wc_get_logger()->info(
+			$log_prefix . ' Voucher API response received',
+			[
+				'source'     => 'dfinsell-payment-gateway',
+				'order_id'   => $order_id,
+				'http_code'  => $code,
+				'status'     => $body['status'] ?? null,
+				'voucher_id' => $payload['voucher_id'] ?? null,
+				'reference'  => $payload['reference'] ?? null,
+			]
+		);
+
+		if (($body['status'] ?? '') === 'success') {
+			$purchase_url = $this->dfinsell_clean_payment_link($payload['purchase_url'] ?? '');
+			$payload['purchase_url'] = $purchase_url;
+
+			return [
+				'success' => true,
+				'message' => $message,
+				'data'    => $payload,
+			];
+		}
+
+		// Fallback: If /api/voucher/send returned 405 or 404, fall back to /api/request-payment
+		if (405 === $code || 404 === $code) {
+			$fallback_url      = esc_url($this->base_url . '/api/request-payment');
+			$fallback_response = wp_remote_post($fallback_url, [
+				'method'    => 'POST',
+				'timeout'   => 30,
+				'body'      => $data,
+				'headers'   => [
+					'Content-Type'  => 'application/x-www-form-urlencoded',
+					'Accept'        => 'application/json',
+					'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
+				],
+				'sslverify' => true,
+			]);
+
+			if (!is_wp_error($fallback_response)) {
+				$fb_code     = (int) wp_remote_retrieve_response_code($fallback_response);
+				$fb_raw_body = wp_remote_retrieve_body($fallback_response);
+				$fb_body     = json_decode($fb_raw_body, true);
+				$fb_body     = is_array($fb_body) ? $fb_body : [];
+				$fb_data     = isset($fb_body['data']) && is_array($fb_body['data']) ? $fb_data : [];
+
+				if (200 === $fb_code && ($fb_body['status'] ?? '') === 'success' && !empty($fb_data['payment_link'])) {
+					$purchase_url = $this->dfinsell_clean_payment_link($fb_data['payment_link']);
+					$voucher_id = sanitize_text_field($fb_data['pay_id'] ?? wp_generate_uuid4());
+					$ref        = (string) $order->get_order_number();
+					$amount     = (float) ($fb_data['amount'] ?? $order->get_total());
+					$cust_email = sanitize_email($fb_data['customer_email'] ?? $order->get_billing_email());
+
+					if (function_exists('dfinsell_store_order_payment_link')) {
+						dfinsell_store_order_payment_link($order, [
+							'uuid'           => $voucher_id,
+							'payment_link'   => $purchase_url,
+							'customer_email' => $cust_email,
+							'amount'         => $amount,
+						]);
+					}
+
+					return [
+						'success' => true,
+						'message' => isset($fb_body['message']) ? sanitize_text_field($fb_body['message']) : __('Payment request created successfully.', 'dfinsell-payment-gateway'),
+						'data'    => [
+							'voucher_id'     => $voucher_id,
+							'reference'      => $ref,
+							'amount'         => $amount,
+							'currency'       => $order->get_currency(),
+							'customer_email' => $cust_email,
+							'purchase_url'   => $purchase_url,
+						],
+					];
+				}
+			}
+		}
+
+		return [
+			'success' => false,
+			'message' => $message ?: __('We could not email your voucher. Please try again in a moment.', 'dfinsell-payment-gateway'),
+			'data'    => [],
+		];
+	}
+
+	/**
+	 * Voucher reference for the attempt about to be made.
+	 *
+	 * The application keeps one open voucher per (merchant, mode, reference)
+	 * and hands the existing one back when that key repeats, so a checkout
+	 * submitted twice resends a single voucher instead of racing two. Numbering
+	 * the attempt is what separates a genuine retry from such a resend.
+	 *
+	 * When retrying after a failed, expired, or cancelled payment, we ensure a new
+	 * attempt reference is generated so a fresh voucher and payment link are created.
+	 *
+	 * @param WC_Order $order Order being paid.
+	 * @return string
+	 */
+	private function dfinsell_voucher_reference($order) {
+
+		$last_voucher_attempt = 0;
+		$prev_ref = (string) $order->get_meta('_dfinsell_voucher_reference', true);
+		if ($prev_ref !== '') {
+			if (preg_match('/-(\d+)$/', $prev_ref, $matches)) {
+				$last_voucher_attempt = (int) $matches[1];
+			} else {
+				$last_voucher_attempt = 1;
+			}
+		}
+
+		$timeline_attempts = $this->dfinsell_failed_attempts($order);
+
+		$next_attempt = max($last_voucher_attempt, $timeline_attempts) + 1;
+
+		return $order->get_id() . '-' . $next_attempt;
+	}
+
+	/**
+	 * Failed, expired, or cancelled payment attempts already made on this order.
+	 *
+	 * One per payment, never one per report: a failure arrives twice, once
+	 * from the webhook and once when the customer returns to the store, and
+	 * the timeline records both under the one payment token. Counting distinct
+	 * tokens is therefore counting attempts.
+	 *
+	 * This numbers the next voucher. Whether an attempt is allowed at all
+	 * is the application's decision, taken against its own record of the order.
+	 *
+	 * @param WC_Order $order Order being paid.
+	 * @return int
+	 */
+	private function dfinsell_failed_attempts($order) {
+
+		$timeline = $order->get_meta('_dfinsell_timeline', true);
+
+		if (!is_array($timeline)) {
+			return 0;
+		}
+
+		$tokens    = [];
+		$untokened = 0;
+
+		foreach ($timeline as $event) {
+
+			if (!is_array($event)) {
+				continue;
+			}
+
+			$type = strtolower(trim((string) ($event['type'] ?? '')));
+
+			if (!in_array($type, ['failed', 'expired', 'cancelled'], true)) {
+				continue;
+			}
+
+			$token = trim((string) ($event['payment_token'] ?? ''));
+
+			if ($token === '') {
+				// A failure/expiry reported without a token is still one attempt.
+				$untokened++;
+				continue;
+			}
+
+			$tokens[$token] = true;
+		}
+
+		return count($tokens) + $untokened;
+	}
+
+	/**
+	 * Only an http(s) link is worth putting in front of a customer.
+	 *
+	 * @param mixed $link Link as the API gave it.
+	 * @return string The link, or '' when it is not one a customer can open.
+	 */
+	private function dfinsell_clean_payment_link($link) {
+
+		if (!is_scalar($link)) {
+			return '';
+		}
+
+		$link = esc_url_raw(trim((string) $link), ['https', 'http']);
+
+		if ('' === $link) {
+			return '';
+		}
+
+		$scheme = wp_parse_url($link, PHP_URL_SCHEME);
+		$host   = wp_parse_url($link, PHP_URL_HOST);
+
+		if (!in_array($scheme, ['https', 'http'], true) || empty($host)) {
+			return '';
+		}
+
+		return $link;
+	}
+
+	/**
+	 * The ordered products, as this store lists them.
+	 *
+	 * @param WC_Order $order Order being paid.
+	 * @return array List of ['name' => string, 'quantity' => int, 'total' => string, 'image' => string].
+	 */
+	private function dfinsell_get_voucher_items($order) {
+
+		$items = [];
+
+		foreach ($order->get_items() as $item) {
+
+			$name = sanitize_text_field($item->get_name());
+
+			if ($name === '') {
+				continue;
+			}
+
+			$items[] = [
+				'name'     => $name,
+				'quantity' => max(1, (int) $item->get_quantity()),
+				'total'    => $this->dfinsell_plain_price($order->get_line_total($item, true), $order),
+				'image'    => $this->dfinsell_get_item_image_url($item),
+			];
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Product picture for an order line.
+	 *
+	 * @param WC_Order_Item $item Order line item.
+	 * @return string Absolute URL, or '' when the product has no image.
+	 */
+	private function dfinsell_get_item_image_url($item) {
+
+		if (!method_exists($item, 'get_product')) {
+			return '';
+		}
+
+		$product = $item->get_product();
+
+		if (!$product) {
+			return '';
+		}
+
+		$image_id = $product->get_image_id();
+
+		if (!$image_id && $product->get_parent_id()) {
+
+			$parent = wc_get_product($product->get_parent_id());
+
+			if ($parent) {
+				$image_id = $parent->get_image_id();
+			}
+		}
+
+		if (!$image_id) {
+			return '';
+		}
+
+		$url = wp_get_attachment_image_url($image_id, 'woocommerce_thumbnail');
+
+		return $url ? esc_url_raw($url) : '';
+	}
+
+	/**
+	 * Note on the order that DFinSell has the voucher in hand.
+	 *
+	 * @param WC_Order $order   Order being paid.
+	 * @param array    $voucher Data block from /api/voucher/send.
+	 * @return void
+	 */
+	private function dfinsell_record_voucher_sent($order, $voucher) {
+
+		$reference = isset($voucher['reference']) ? sanitize_text_field($voucher['reference']) : '';
+		$to        = sanitize_email($voucher['customer_email'] ?? $order->get_billing_email());
+		$link      = $this->dfinsell_clean_payment_link($voucher['purchase_url'] ?? '');
+
+		// Read by the order-received notice to say payment is still to come.
+		$order->update_meta_data('_dfinsell_voucher_emailed_at', time());
+
+		if (!empty($voucher['voucher_id'])) {
+			$order->update_meta_data('_dfinsell_voucher_id', sanitize_text_field($voucher['voucher_id']));
+		}
+
+		if ('' !== $reference) {
+			$order->update_meta_data('_dfinsell_voucher_reference', $reference);
+		}
+
+		$order->update_meta_data('_dfinsell_state', 'pending');
+
+		// The email button's own link, so the order-received page can offer the
+		// same way in for a customer whose email has not turned up.
+		if ('' !== $link) {
+			$order->update_meta_data('_dfinsell_voucher_purchase_url', $link);
+		}
+
+		// Ensure customer receives their voucher payment email with the payment link.
+		if ('' !== $link) {
+			$this->dfinsell_send_voucher_email($order, $link);
+		}
+
+		$order->add_order_note(
+			$reference !== ''
+				? sprintf(
+					/* translators: 1: customer email address, 2: voucher reference */
+					__('DFinSell voucher emailed to %1$s (reference %2$s).', 'dfinsell-payment-gateway'),
+					$to,
+					$reference
+				)
+				: sprintf(
+					/* translators: %s: customer email address */
+					__('DFinSell voucher emailed to %s.', 'dfinsell-payment-gateway'),
+					$to
+				)
+		);
+
+		$order->save();
+	}
+
+	/**
+	 * Send the voucher payment email directly to the customer with their payment/redemption link.
+	 *
+	 * @param WC_Order $order
+	 * @param string   $purchase_url
+	 * @return bool
+	 */
+	public function dfinsell_send_voucher_email($order, $purchase_url) {
+		$to = sanitize_email($order->get_billing_email());
+		if (empty($to) || empty($purchase_url)) {
+			return false;
+		}
+
+		$site_title   = wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES);
+		$order_number = $order->get_order_number();
+		$total        = $this->dfinsell_plain_price($order->get_total(), $order);
+		$first_name   = $order->get_billing_first_name();
+
+		$subject = sprintf(
+			/* translators: 1: site title, 2: order number, 3: total */
+			__('%1$s: Complete your order #%2$s (%3$s) - Payment Voucher', 'dfinsell-payment-gateway'),
+			$site_title,
+			$order_number,
+			$total
+		);
+
+		$message  = '<div style="font-family: -apple-system, BlinkMacSystemFont, \'Segoe UI\', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #374151; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px;">';
+		$message .= '<div style="text-align: center; padding-bottom: 20px; border-bottom: 1px solid #e5e7eb; margin-bottom: 24px;">';
+		$message .= '<h2 style="color: #4338ca; margin: 0; font-size: 22px;">' . esc_html__('Complete Your Order Payment', 'dfinsell-payment-gateway') . '</h2>';
+		$message .= '</div>';
+		$message .= '<p style="font-size: 16px;">' . sprintf(esc_html__('Hi %s,', 'dfinsell-payment-gateway'), esc_html($first_name ?: __('Customer', 'dfinsell-payment-gateway'))) . '</p>';
+		$message .= '<p style="font-size: 15px; line-height: 1.5;">' . sprintf(esc_html__('Thank you for placing order #%1$s at %2$s. Your payment voucher has been generated for %3$s.', 'dfinsell-payment-gateway'), '<strong>' . esc_html($order_number) . '</strong>', '<strong>' . esc_html($site_title) . '</strong>', '<strong style="color: #4338ca;">' . esc_html($total) . '</strong>') . '</p>';
+		$message .= '<p style="font-size: 15px; line-height: 1.5;">' . esc_html__('Please click the button below to purchase your voucher and complete your payment securely:', 'dfinsell-payment-gateway') . '</p>';
+		$message .= '<div style="text-align: center; margin: 32px 0;">';
+		$message .= '<a href="' . esc_url($purchase_url) . '" target="_blank" rel="noopener noreferrer" style="background-color: #4338ca; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; display: inline-block;">' . esc_html__('Purchase Voucher & Pay Now', 'dfinsell-payment-gateway') . '</a>';
+		$message .= '</div>';
+		$message .= '<p style="font-size: 13px; color: #6b7280; line-height: 1.4;">' . esc_html__('If the button above does not work, copy and paste this link into your browser:', 'dfinsell-payment-gateway') . '<br><a href="' . esc_url($purchase_url) . '" style="color: #4338ca; word-break: break-all;">' . esc_url($purchase_url) . '</a></p>';
+		$message .= '<hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">';
+		$message .= '<p style="font-size: 12px; color: #9ca3af; margin: 0; text-align: center;">' . sprintf(esc_html__('This payment request was generated for Order #%s.', 'dfinsell-payment-gateway'), esc_html($order_number)) . '</p>';
+		$message .= '</div>';
+
+		$headers = [
+			'Content-Type: text/html; charset=UTF-8',
+			'From: ' . $site_title . ' <' . (get_option('admin_email') ?: 'no-reply@' . (wp_parse_url(home_url(), PHP_URL_HOST) ?: 'localhost')) . '>',
+		];
+
+		$sent = wp_mail($to, $subject, $message, $headers);
+
+		wc_get_logger()->info(
+			"[Order #{$order->get_id()}] Voucher payment email " . ($sent ? 'sent successfully' : 'failed to send') . " to {$to}",
+			[
+				'source'       => 'dfinsell-payment-gateway',
+				'payment_link' => $purchase_url,
+			]
+		);
+
+		return $sent;
+	}
+
+	/**
+	 * Dispatch payment link through the DFinSell platform's remote notification endpoint if available.
+	 *
+	 * @param string   $payment_link
+	 * @param WC_Order $order
+	 * @param string   $public_key
+	 * @param string   $secret_key
+	 */
+	private function dfinsell_send_remote_payment_link($payment_link, $order, $public_key, $secret_key) {
+		$send_url = esc_url($this->base_url . '/api/payment-link/send');
+		$email    = sanitize_email($order->get_billing_email());
+		$phone    = sanitize_text_field($order->get_billing_phone());
+
+		$body = [
+			'payment_link' => $payment_link,
+			'email'        => $email,
+		];
+		if (!empty($phone)) {
+			$body['phone'] = $phone;
+		}
+
+		wp_remote_post($send_url, [
+			'method'    => 'POST',
+			'timeout'   => 15,
+			'body'      => $body,
+			'headers'   => [
+				'Content-Type'  => 'application/x-www-form-urlencoded',
+				'Accept'        => 'application/json',
+				'Authorization' => 'Bearer ' . sanitize_text_field($public_key),
+				'x-api-secret'  => sanitize_text_field($secret_key),
+			],
+			'sslverify' => true,
+		]);
+	}
+
+	/**
+	 * Mask an email address for display, e.g. "harry@example.com" → "ha•••@example.com".
+	 *
+	 * @param string $email Email address.
+	 * @return string
+	 */
+	private function dfinsell_mask_email($email) {
+		$at = strrpos((string) $email, '@');
+
+		if ($at === false) {
+			return '';
+		}
+
+		$local   = substr($email, 0, $at);
+		$visible = min(2, max(1, mb_strlen($local) - 1));
+
+		return mb_substr($local, 0, $visible) . "\u{2022}\u{2022}\u{2022}" . substr($email, $at);
+	}
+
+	/**
+	 * Remind the customer on the order-received page that payment happens via the emailed voucher.
+	 *
+	 * @param int $order_id Order ID.
+	 */
+	public function dfinsell_thankyou_payment_link_notice($order_id) {
+		$order = wc_get_order($order_id);
+
+		if (!$order || !$order->has_status('pending') || !$order->get_meta('_dfinsell_voucher_emailed_at')) {
+			return;
+		}
+
+		printf(
+			'<p class="dfinsell-thankyou-email-notice">%s</p>',
+			sprintf(
+				/* translators: %s: masked customer email address */
+				esc_html__('We have emailed your voucher to %s. Purchase the voucher to complete this order.', 'dfinsell-payment-gateway'),
+				'<strong>' . esc_html($this->dfinsell_mask_email($order->get_billing_email())) . '</strong>'
+			)
+		);
+
+		$link = $this->dfinsell_clean_payment_link($order->get_meta('_dfinsell_voucher_purchase_url'));
+
+		if ('' !== $link) {
+
+			printf(
+				'<p class="dfinsell-thankyou-payment-link"><a href="%1$s" target="_blank" rel="noopener noreferrer">%2$s</a></p>',
+				esc_url($link),
+				esc_html__('Purchase your voucher', 'dfinsell-payment-gateway')
+			);
+		}
+	}
+
+	private function is_block_checkout_request() {
+		return wp_doing_ajax() && isset($_REQUEST['action'])
+			&& $_REQUEST['action'] === 'dfinsell_block_gateway_process';
+	}
+
+	private function get_all_available_accounts() {
+		$accounts = $this->get_all_accounts();
+		if (!is_array($accounts)) {
+			return [];
+		}
+		usort($accounts, function ($a, $b) {
+			return ($a['priority'] ?? 1) <=> ($b['priority'] ?? 1);
+		});
+		return $accounts;
 	}
 
 	// public function process_payment( $order_id ) {
@@ -957,6 +1463,22 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 		// Convert to country calling code
 		$country_code = WC()->countries->get_country_calling_code($country);
+		$country_code = ltrim((string) $country_code, '+');
+		if (empty($country_code)) {
+			$country_code = '1';
+		}
+
+		if (!empty($phone)) {
+			$cleaned_phone = preg_replace('/[()\s-]/', '', $phone);
+			if (!empty($country_code) && strlen($cleaned_phone) > strlen($country_code) && strpos($cleaned_phone, $country_code) === 0) {
+				$phone = substr($cleaned_phone, strlen($country_code));
+			} else {
+				$phone = $cleaned_phone;
+			}
+			$phone = ltrim($phone, '0');
+		} else {
+			$phone = '';
+		}
 
 		// Get billing address details
 		$billing_address_1 = sanitize_text_field($order->get_billing_address_1());
@@ -970,14 +1492,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		$redirect_url = esc_url_raw(
 			add_query_arg(
 				[
-					'order_id' => $order_id, // Include order ID or any other identifier
-					'key' => $order->get_order_key(),
-					'nonce' => wp_create_nonce('dfinsell_payment_nonce'), // Create a nonce for verification
-					'mode' => 'wp',
+					'order_id' => $order_id,
+					'key'      => $order->get_order_key(),
+					'nonce'    => wp_create_nonce('dfinsell_payment_nonce'),
+					'mode'     => 'wp',
 				],
-				$this->dfinsell_get_return_url_base() // Use the updated base URL method
+				$this->dfinsell_get_return_url_base()
 			)
 		);
+		$webhook_url = $redirect_url;
 
 		$ip_address = sanitize_text_field($this->dfinsell_get_client_ip());
 
@@ -1001,6 +1524,16 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			}
 		}
 
+		$user_id = $order->get_customer_id();
+		$is_guest = empty($user_id) ? 1 : 0;
+		if ($is_guest === 1 && !empty($email)) {
+			$existing_user = get_user_by('email', $email);
+			if ($existing_user) {
+				$is_guest = 0;
+				$user_id = $existing_user->ID;
+			}
+		}
+
 		return [
 			'api_secret' => $api_secret, // Use sandbox or live secret key
 			'api_public_key' => $api_public_key, // Add the public key for API calls
@@ -1009,6 +1542,7 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'request_for' => $request_for,
 			'amount' => $amount,
 			'redirect_url' => $redirect_url,
+			'webhook_url' => $webhook_url,
 			'redirect_time' => 3,
 			'ip_address' => $ip_address,
 			'source' => 'wordpress',
@@ -1026,7 +1560,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			'billing_state' => $billing_state,
 			'billing_phone' => $billing_phone,
 			'is_sandbox' => $is_sandbox,
+			'curr_code' => sanitize_text_field($order->get_currency()),
 			'plugin_version' => $this->version,
+			'plugin_source' => 'dfinsell',
+			'is_guest' => $is_guest,
+			'customer_user_id' => $user_id ? $user_id : 0,
 		];
 	}
 
@@ -1124,6 +1662,11 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 		if (!$this->check_for_sql_injection()) {
 			return false;
 		}
+
+		// Bypass validation if this is a REST API request (like WooCommerce Blocks checkout)
+		if (defined('REST_REQUEST') && REST_REQUEST) {
+			return true;
+		}
 		// Check if the consent checkbox setting is enabled
 		if ($this->get_option('show_consent_checkbox') === 'yes') {
 			// Sanitize and validate the nonce field
@@ -1152,30 +1695,27 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 	public function dfinsell_enqueue_styles_and_scripts()
 	{
 		if (is_checkout()) {
-			// Enqueue stylesheets
+			// filemtime versions so browsers and page caches drop the old script and styles.
 			wp_enqueue_style(
 				'dfin-sell-payment-loader-styles',
 				plugins_url('../assets/css/loader.css', __FILE__),
-				[], // Dependencies (if any)
-				'1.0', // Version number
-				'all' // Media
+				[],
+				filemtime(plugin_dir_path(__FILE__) . '../assets/css/loader.css'),
+				'all'
 			);
 
-			// Enqueue dfinsell.js script
 			wp_enqueue_script(
 				'dfinsell-js',
 				plugins_url('../assets/js/dfinsell.js', __FILE__),
-				['jquery'], // Dependencies
-				'1.0', // Version number
-				true // Load in footer
+				['jquery'],
+				filemtime(plugin_dir_path(__FILE__) . '../assets/js/dfinsell.js'),
+				true
 			);
 
-			// Localize script with parameters that need to be passed to dfinsell.js
 			wp_localize_script('dfinsell-js', 'dfinsell_params', [
-				'ajax_url' => admin_url('admin-ajax.php'),
-				'checkout_url' => wc_get_checkout_url(),
-				'dfin_loader' => plugins_url('../assets/images/loader.gif', __FILE__),
-				'dfinsell_nonce' => wp_create_nonce('dfinsell_payment'), // Create a nonce for verification
+				'ajax_url'       => admin_url('admin-ajax.php'),
+				'checkout_url'   => wc_get_checkout_url(),
+				'dfinsell_nonce' => wp_create_nonce('dfinsell_payment'),
 				'payment_method' => $this->id,
 			]);
 		}
@@ -1458,6 +1998,37 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 
 
 	    if (empty($accounts)) {
+			$submitted_gateway = isset($_POST['payment_method'])
+				? wc_clean(wp_unslash($_POST['payment_method']))
+				: '';
+
+			$is_blocks = false;
+			if (
+				$submitted_gateway !== $gateway_id
+				&& function_exists('rest_get_server')
+			) {
+				$rest_server  = rest_get_server();
+				$rest_request = is_object($rest_server) && method_exists($rest_server, 'get_current_request')
+					? $rest_server->get_current_request()
+					: null;
+				if (is_object($rest_request) && method_exists($rest_request, 'get_param')) {
+					$submitted_gateway = wc_clean((string) $rest_request->get_param('payment_method'));
+				}
+			}
+
+			if (
+				$submitted_gateway === $gateway_id
+				&& isset($available_gateways[$gateway_id])
+			) {
+				wc_get_logger()->info(
+					"DFinSell Gateway Decision: RETAINED_FOR_SUBMISSION (no active accounts)",
+					['source' => 'dfinsell-payment-gateway', 'total' => $amount]
+				);
+
+				// Let the payment handler return its actionable no-active-account error.
+				return $available_gateways;
+			}
+
 	        $this->log_info_once_per_session(
 			    'no_accounts_' . $cart_hash,
 			    'Payment option hidden: no merchant accounts configured',
