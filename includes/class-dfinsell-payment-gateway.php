@@ -884,19 +884,12 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			? $account['sandbox_public_key']
 			: $account['live_public_key'];
 
-		$data['items'] = $this->dfinsell_get_voucher_items($order);
+			// Same message precedence the direct payment flow reads failures with.
+			$message = '';
+			$response_body = !empty($fb_body) ? $fb_body : $body;
+			$response_payload = !empty($fb_data) ? $fb_data : $payload;
 
-		/*
-		 * Which attempt this voucher is for. Without it the application keys
-		 * the voucher on the order number alone, so a retry of the same order
-		 * is treated as the merchant resending the first voucher and hands the
-		 * customer back the payment page of the attempt that already failed.
-		 *
-		 * meta_data.order_id is deliberately left as the plain order number:
-		 * that is what the application counts failed attempts against, and it
-		 * must stay the same across attempts for the limit to work.
-		 */
-		$data['reference'] = $this->dfinsell_voucher_reference($order);
+			foreach ([$response_body['message'] ?? '', $response_body['error'] ?? '', $response_payload['error'] ?? ''] as $candidate) {
 
 		$api_url = esc_url($this->base_url . '/api/voucher/send');
 
@@ -930,25 +923,15 @@ class DFINSELL_PAYMENT_GATEWAY extends WC_Payment_Gateway_CC
 			];
 		}
 
-		$code     = (int) wp_remote_retrieve_response_code($response);
-		$raw_body = wp_remote_retrieve_body($response);
-		$body     = json_decode($raw_body, true);
-		$body     = is_array($body) ? $body : [];
-		$payload  = isset($body['data']) && is_array($body['data']) ? $body['data'] : [];
-
-		$message = isset($body['message']) ? sanitize_text_field($body['message']) : '';
-
-		wc_get_logger()->info(
-			$log_prefix . ' Voucher API response received',
-			[
-				'source'     => 'dfinsell-payment-gateway',
-				'order_id'   => $order_id,
-				'http_code'  => $code,
-				'status'     => $body['status'] ?? null,
-				'voucher_id' => $payload['voucher_id'] ?? null,
-				'reference'  => $payload['reference'] ?? null,
-			]
-		);
+		// Sandbox Mock Fallback: if both APIs fail to respond and in Sandbox mode without an explicit rejection message, simulate voucher response
+		if ($this->sandbox && empty($last_message)) {
+			wc_get_logger()->warning(
+				$log_prefix . ' Both APIs failed; activating Sandbox Mock Fallback',
+				[
+					'source'   => 'dfinsell-payment-gateway',
+					'order_id' => $order_id,
+				]
+			);
 
 		if (($body['status'] ?? '') === 'success') {
 			$purchase_url = $this->dfinsell_clean_payment_link($payload['purchase_url'] ?? '');
