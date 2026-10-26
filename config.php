@@ -8,7 +8,7 @@ return [
     'id'   => 'dfinsell',
     'name' => 'DFin Sell Payment Gateway',
     'version' => '1.1.6',
-	'title' => 'Voucher Pay',
+	'title' => 'Dfin Voucher Pay',
     'description' => 'Purchase and pay quickly with a voucher',
     'icon' => '',
 
